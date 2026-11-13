@@ -151,7 +151,7 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "GitTeller/1.0.1");
+        c.setRequestProperty("User-Agent", "UNO-Control-Android/1.3");
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         try {
             int status = c.getResponseCode();

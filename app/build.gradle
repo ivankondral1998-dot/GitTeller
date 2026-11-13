@@ -4,11 +4,11 @@ android {
     namespace 'app.unocontrol'
     compileSdk 35
     defaultConfig {
-        applicationId 'app.gitteller.mobile'
+        applicationId 'app.unocontrol'
         minSdk 26
         targetSdk 35
         versionCode 15
-        versionName '1.0.1-audit-source'
+        versionName '1.1-gitteller'
     }
     buildTypes {
         release { minifyEnabled false }
@@ -22,6 +22,5 @@ android {
 
 dependencies {
     testImplementation "junit:junit:4.13.2"
-    // Android org.json in the local test JVM is a method-stub; use the actual JSON library for unit tests.
     testImplementation "org.json:json:20240303"
 }

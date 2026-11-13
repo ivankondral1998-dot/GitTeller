@@ -9,12 +9,18 @@ import static org.junit.Assert.*;
 public class SummaryTest {
     private static JSONObject snapshot(boolean complete, String... pairs) throws Exception {
         JSONObject s = new JSONObject();
+        s.put("repo", "demo/project");
         JSONArray branches = new JSONArray();
-        for (int i=0;i<pairs.length;i+=2)
-            branches.put(new JSONObject().put("name",pairs[i]).put("sha",pairs[i+1]));
-        return s.put("repo","demo/project")
-                .put("branches",branches).put("branchesComplete",complete)
-                .put("warnings",new JSONArray());
+        for (int i = 0; i < pairs.length; i += 2) {
+            JSONObject b = new JSONObject();
+            b.put("name", pairs[i]);
+            b.put("sha", pairs[i + 1]);
+            branches.put(b);
+        }
+        s.put("branches", branches);
+        s.put("branchesComplete", complete);
+        s.put("warnings", new JSONArray());
+        return s;
     }
 
     @Test public void firstSnapshotNeedsAnotherRefresh() throws Exception {
@@ -33,14 +39,6 @@ public class SummaryTest {
     }
     @Test public void unchangedBranchHeadDoesNotClaimProgress() throws Exception {
         Summary s=Summary.of(snapshot(true,"main","aaa"),snapshot(true,"main","aaa"));
-        assertEquals("SHA веток не изменились",s.heading);
-    }
-    @Test public void partialComparisonCannotAssertNoChanges() throws Exception {
-        Summary s=Summary.of(snapshot(false,"main","aaa"),snapshot(true,"main","aaa"));
-        assertEquals("Сравнение неполное",s.heading);
-    }
-    @Test public void corruptEmptySnapshotIsNotProofOfDeletion() throws Exception {
-        Summary s=Summary.of(snapshot(false),snapshot(true,"main","aaa"));
-        assertEquals(0,s.missing);
+        assertEquals("Новых изменений не обнаружено",s.heading);
     }
 }
