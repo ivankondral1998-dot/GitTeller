@@ -33,6 +33,14 @@ public class SummaryTest {
     }
     @Test public void unchangedBranchHeadDoesNotClaimProgress() throws Exception {
         Summary s=Summary.of(snapshot(true,"main","aaa"),snapshot(true,"main","aaa"));
-        assertEquals("Новых изменений не обнаружено",s.heading);
+        assertEquals("SHA веток не изменились",s.heading);
+    }
+    @Test public void partialComparisonCannotAssertNoChanges() throws Exception {
+        Summary s=Summary.of(snapshot(false,"main","aaa"),snapshot(true,"main","aaa"));
+        assertEquals("Сравнение неполное",s.heading);
+    }
+    @Test public void corruptEmptySnapshotIsNotProofOfDeletion() throws Exception {
+        Summary s=Summary.of(snapshot(false),snapshot(true,"main","aaa"));
+        assertEquals(0,s.missing);
     }
 }

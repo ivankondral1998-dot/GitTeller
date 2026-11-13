@@ -36,7 +36,8 @@ final class Summary {
         boolean complete = current.optBoolean("branchesComplete",false) &&
                 previous.optBoolean("branchesComplete",false);
         if (complete) for (String name:old.keySet()) if (!now.containsKey(name)) removed++;
-        String headline = (moved+added+removed)==0 ? "Новых изменений не обнаружено" : "В истории проекта есть изменения";
+        String headline = (moved+added+removed)==0 ?
+                (complete ? "SHA веток не изменились" : "Сравнение неполное") : "В истории проекта есть изменения";
         String desc = moved + " веток изменили указатель, " + added + " появилось впервые.";
         if (complete) desc += " Ещё " + removed + " веток не обнаружены в новом списке.";
         else desc += " Список мог загрузиться не полностью, исчезновение веток не оценивается.";
