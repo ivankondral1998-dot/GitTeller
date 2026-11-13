@@ -23,27 +23,45 @@ final class Summary {
                 "Проверки ещё не было. Нажмите «Обновить», чтобы узнать, что происходит в проекте.",
                 "Подключите репозиторий и нажмите «Обновить». Данные появятся после ответа GitHub.",
                 "Без синхронизации нельзя утверждать, что проект изменился или завершён.",0,0,0);
-        if (previous == null || !current.optString("repo").equalsIgnoreCase(previous.optString("repo")))
+        // A user-supplied backup is not authenticated GitHub evidence.
+        // Never compare a newly fetched live snapshot against a forged/imported baseline.
+        if (current.optBoolean("restoredFromBackup", false))
+            return new Summary("Данные из резервной копии",
+                    "Показан сохранённый файл, а не текущая проверка GitHub. Нажмите «Обновить» для получения свежих данных.",
+                    "По этому файлу нельзя установить, какие изменения действительно произошли в GitHub.",
+                    "Источник не проверен: импортированные сведения нельзя считать подтверждением готовности или прогресса.",0,0,0);
+        if (previous == null || previous.optBoolean("restoredFromBackup", false) ||
+                !current.optString("repo").equalsIgnoreCase(previous.optString("repo")))
             return new Summary("Первый снимок сохранён",
-                    "Это первая проверка. Что именно изменилось, можно сказать только после следующего обновления.",
-                    "Получены сведения о " + (current.optJSONArray("branches") == null ? 0 : current.optJSONArray("branches").length()) + " ветках. Сравнение изменений будет после следующего обновления.",
-                    "Коммиты и новые ветки подтверждают изменения истории, а не успешность тестов.",0,0,0);
+                    "Это первая достоверная проверка для сравнения. Обновите данные позже, чтобы увидеть изменения.",
+                    "Получены сведения о " + (current.optJSONArray("branches") == null ? 0 : current.optJSONArray("branches").length()) +
+                            " ветках." + (current.optBoolean("branchesComplete", false) ? "" : " Список веток неполный.") +
+                            " Сравнение изменений будет после следующего обновления.",
+                    "Коммиты и новые ветки не доказывают успешность тестов." +
+                            (current.optJSONArray("warnings") != null && current.optJSONArray("warnings").length() > 0 ?
+                                    " Часть данных не загрузилась: выводы ограничены." : ""),0,0,0);
 
         Map<String,String> old = map(previous.optJSONArray("branches"));
         Map<String,String> now = map(current.optJSONArray("branches"));
-        int moved=0, added=0, removed=0;
+        boolean previousComplete = previous.optBoolean("branchesComplete", false);
+        boolean currentComplete = current.optBoolean("branchesComplete", false);
+        int moved=0, added=0, removed=0, previouslyUnseen=0;
         for (Map.Entry<String,String> e:now.entrySet()) {
-            if (!old.containsKey(e.getKey())) added++;
-            else if (!old.get(e.getKey()).equals(e.getValue())) moved++;
+            if (!old.containsKey(e.getKey())) {
+                // Incomplete prior snapshot: absent does NOT mean newly created branch.
+                if (previousComplete) added++;
+                else previouslyUnseen++;
+            } else if (!old.get(e.getKey()).equals(e.getValue())) moved++;
         }
-        boolean complete = current.optBoolean("branchesComplete",false) &&
-                previous.optBoolean("branchesComplete",false);
+        boolean complete = currentComplete && previousComplete;
         if (complete) for (String name:old.keySet()) if (!now.containsKey(name)) removed++;
         int issueChanges = stateChanges(previous.optJSONArray("issues"), current.optJSONArray("issues"));
         int pullChanges = stateChanges(previous.optJSONArray("pulls"), current.optJSONArray("pulls"));
         String headline = (moved+added+removed)==0 ?
                 (complete ? "SHA веток не изменились" : "Сравнение неполное") : "В истории проекта есть изменения";
-        String desc = moved + " веток изменили указатель, " + added + " появилось впервые.";
+        String desc = moved + " веток изменили указатель, " + added + " появились в сравнении с полностью загруженным списком.";
+        if (previouslyUnseen>0) desc += " Ещё " + previouslyUnseen +
+                " веток впервые встретились в нашей выборке, но могли существовать раньше.";
         if (complete) desc += " Ещё " + removed + " веток не обнаружены в новом списке.";
         else desc += " Список мог загрузиться не полностью, исчезновение веток не оценивается.";
         if (issueChanges > 0) desc += " Статус изменился у " + issueChanges + " задач в доступной выборке.";

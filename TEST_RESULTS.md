@@ -1,91 +1,101 @@
-# TEST_RESULTS — GitTeller 1.0.2 — 2026-11-13
+# TEST_RESULTS — 1.0.4-dev
 
-Среда: JDK 17.0.20, Gradle 8.9, Android SDK platform 35, build-tools 35.0.0.
-ANDROID_HOME=/tmp/android-sdk. Физический Samsung A52 недоступен.
+Среда: Linux sandbox, JDK 17, Gradle 8.9, AGP 8.7.3, `ANDROID_HOME=/tmp/android-sdk`, platform android-35, build-tools 35.0.0. Эмулятор: AVD `gt14`, образ Android 14, `x86_64`, 1080x2400 dpi 420, `-no-window -gpu swiftshader_indirect -accel on -memory 1024`. Хост: MemTotal около 4 ГБ, swap нет. `/dev/kvm` есть.
 
-## Сборка
+Маркеры инструментальных тестов: `synthetic-pat-not-real-001` и `synthetic-pat-not-real-002`. Это не токены GitHub.
 
-Команда: `gradle --no-daemon :app:assembleDebug`
-Exit code: 0
-Результат: BUILD SUCCESSFUL in 11s
-APK: `app/build/outputs/apk/debug/app-debug.apk`
-SHA-256: `361383a97c28833beefa46de9970a58e6433ade95cabb99fd17815f456c0706b`
-Размер: 35349 байт
+## Gradle
 
-`aapt dump badging` (build-tools 35.0.0), не README:
+Команда, последний прогон модульных тестов:
 
-- package name `app.gitteller.mobile`
-- versionCode 16
-- versionName 1.0.2
-- compileSdk 35, minSdk 26, targetSdk 35
-- label GitTeller
-- uses-permission: только `android.permission.INTERNET`
-- debuggable: да (это debug APK)
-- icon: пусто
-- в classes.dex строка WebView не найдена
-- строки `ghp_`, `github_pat_`, `UNO-android-AI-Agent` в dex не найдены
+```text
+gradle --no-daemon :app:testDebugUnitTest --console=plain
+```
 
-## Gradle unit-test task
+- exit code 0
+- лог: `evidence/gradle-testDebugUnitTest-1.0.4.log`
+- XML: `app/build/test-results/testDebugUnitTest/`
+- SummaryTest 12, GithubStatusTest 6, SnapshotCodecTest 4, CommitExplainerTest 3, TokenVaultRulesTest 3
+- сумма 28, failures 0, errors 0, skipped 0
+- В логе до успешного task есть `Unexpected type tag 71` на сокете демона. На этот конкретный прогон task всё же записал XML и Gradle завершился 0
+- Предыдущий прогон той же задачи падал: `evidence/gradle-testDebugUnitTest-EARLIER-FAIL.log`, `BUILD FAILED`, Test Executor `Connection refused`. Тот FAIL не отменяется задним числом; актуальный результат — XML от 2026-11-13 21:27:51 UTC
 
-Команда: `gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug`
-Exit code: 1
-Задача `:app:testDebugUnitTest` FAILED.
-Причина: процесс `Gradle Test Executor 1` не смог подключиться к серверу Gradle
-(`Unexpected type tag 71` на loopback, затем `Connection refused`).
-Это сбой исполнителя тестов в этой среде, не падение assert.
-Полный лог: `evidence/gt_gradle.log`.
-Повторно именно эту Gradle-задачу после удаления эксперимента с classpath не гонял как «зелёную»:
-считать `:app:testDebugUnitTest` пройденной нельзя.
+Сборка:
 
-## Прямой запуск тех же class-файлов
+```text
+gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest --console=plain
+```
 
-Классы взяты из `compileDebugJavaWithJavac` и `compileDebugUnitTestJavaWithJavac` той же сборки.
-Команда: `java -cp <test>:<main>:junit-4.13.2:hamcrest-core-1.3:json-20240303 org.junit.runner.JUnitCore ...`
-Exit code: 0
-Результат: `OK (22 tests)`
-Лог: `evidence/junit_direct.log`
+- exit code 0, лог `evidence/gradle-assemble-1.0.4.log`
+- APK: `app/build/outputs/apk/debug/app-debug.apk`
+- SHA-256 `d38e62b16ca47c0f62686e9cbdb5d56fb5a83269fcbc9ac13c78965bc5090cea`
 
-Это не замена отчёта Gradle Test Executor. Это доказательство, что скомпилированные тесты
-проходят на JDK 17 с настоящей библиотекой org.json.
+## JUnitCore
 
-Покрыто тестами:
+Отдельный процесс, не Gradle Test Executor:
 
-- первый снимок, сдвиг/появление/исчезновение веток
-- неполный список не объявляет исчезновение
-- одинаковые SHA не объявляются прогрессом
-- неполное сравнение не говорит «изменений нет»
-- пустой снимок не доказывает удаление
-- смена repo не считается diff
-- смена статуса issue видна и не называется PASS
-- предупреждения ограничивают вывод
-- пустые issues не выдумывают работу
-- CommitExplainer: fix/docs/feat/test/пустое — не проверка
-- HTTP 401, 403, 403+remaining 0, 429, 404, 500
-- JSON-архив выкидывает token/body, отвергает плохой SHA, чужой repo и отсутствие веток
+```text
+java -cp <unit-test-classes>:<app-classes>:junit-4.13.2:hamcrest-core-1.3:json-20240303:android.jar org.junit.runner.JUnitCore ...
+```
 
-## Сеть (JVM, не телефон)
+- exit code 0, `OK (28 tests)`, лог `evidence/junitcore-1.0.4.log`
+- `TokenVaultRulesTest` проверяет нормализацию и отказ от `..`. Шифрование он не доказывает: на JVM нет AndroidKeyStore
 
-`GithubClient.load` без токена:
+## tests-local
 
-- `octocat/Hello-World`: repo совпал, веток 3 (complete=true), коммитов 3, issues 51, pulls 100, warnings 2, токена в JSON нет. Объяснение первого коммита содержит «не проверена».
-- `octocat/Spoon-Knife`: repo совпал, веток 3, коммитов 3, issues 6, pulls 100, warnings 2.
-- `octocat/definitely-missing-gitteller-xyz`: текст 404 «Старые данные сохранены».
-- следующий живой вызов сразу после этого: `Лимит запросов GitHub исчерпан (429/403). Повторите позже. Старые данные сохранены.` Реальный 429/403, не подмена.
+```text
+sh tests-local/run.sh
+```
 
-Приватный репозиторий не проверялся: тестовый PAT в эту среду не передавался и в чат его класть нельзя.
+- exit code 0
+- `PASS: 15 model checks` на заглушках `org.json`
+- `PARSE OK: 13` — только синтаксис
+- лог `evidence/tests-local-1.0.4.log`
 
-## Устройство
+## Android 14 emulator
 
-Физический Samsung A52 недоступен. **NOT_DEVICE_VERIFIED.**
+Установка обоих APK: `Success`.
 
-Эмулятор Android 14 (system-image `google_apis` x86_64, API 34) запускался без окна, экран 1080x2400, dpi 420. Факты:
+```text
+adb shell am instrument -w -e class app.unocontrol.TokenVaultDeviceTest app.gitteller.mobile.test/androidx.test.runner.AndroidJUnitRunner
+```
 
-- `ro.build.version.release=14`, `ro.build.version.sdk=34`.
-- `sys.boot_completed` в опросе 200 секунд оставался пустым. В логе эмулятора позже строка `Boot completed in 250078 ms`.
-- `adb install -r -t app-debug.apk` → `Success`. Пакет `app.gitteller.mobile` виден в `pm list packages`.
-- `dumpsys package` показывает launcher `app.gitteller.mobile/app.unocontrol.MainActivity`.
-- `am start -n app.gitteller.mobile/app.unocontrol.MainActivity` вернулся без ошибки «does not exist».
-- Скриншот `evidence/emulator-anr-dialog.png` снят `adb exec-out screencap` с этого процесса. На нём системный диалог «GitTeller isn't responding», не главный экран приложения. Это не макет и не доказательство вёрстки.
-- В `/data/anr` следов GitTeller нет: ANR-файлы относятся к телефонии, GMS, SystemUI. Гостевая система была перегружена (предупреждение QEMU `hanging thread CPU0`, загрузка ~250 с).
-- Процесс эмулятора после `adb root` умер. Повторный прогон UI не делался.
-- Синхронизация GitHub, смена проекта, 401 и импорт **из APK на Android не выполнялись**.
+- `OK (4 tests)`, Time 6.525, exit 0
+- тесты: round-trip без plaintext в `noBackup` и `shared_prefs`; два репозитория и локальное удаление; пустой save не стирает; порча последнего байта даёт сообщение с «поврежд» и без маркера
+
+Перезапуск, два отдельных запуска instrumentation:
+
+```text
+am instrument ... TokenVaultRestartTest#saveForRestart
+am force-stop app.gitteller.mobile
+# pidof пустой, в логе process_gone
+am instrument ... TokenVaultRestartTest#loadAfterRestart
+```
+
+- save: `OK (1 test)`, Time 0.263
+- load после остановки процесса: `OK (1 test)`, Time 0.132
+- Расшифровка после `force-stop` совпала с маркером. Затем тест удалил запись
+
+Полный текст сессии: `evidence/emulator-android14-instrument.txt`. `getprop ro.build.version.release` = 14.
+
+Внешний просмотр файла через `run-as` в этой сессии не состоялся: в логе `=== SCAN ===` напечатаны имена каталогов data dir, без `PLAINTEXT_ABSENT` / `PLAINTEXT_HIT`. Причина — сломанное экранирование `adb shell`. Статус внешнего grep: NOT_RUN. Утверждение «в файле нет маркера» опирается на assert внутри `saveForRestart` и `loadAfterRestart`, не на `adb`.
+
+UI:
+
+```text
+adb shell am start -n app.gitteller.mobile/app.unocontrol.MainActivity
+```
+
+- Activity Manager ответил `Starting: Intent { cmp=app.gitteller.mobile/app.unocontrol.MainActivity }`
+- `screencap` записал 0 байт, дальше `adb: device offline`
+- `dmesg`: `Out of memory: Killed process ... (qemu-system-x86)`, anon-rss около 2.8–3.8 ГБ. Фрагмент: `evidence/host-oom-kills.txt`
+- Кадра главного экрана нет. Это не PASS и не доказанный ANR приложения
+- `pm clear` не выполнялся
+
+Повторный подъём эмулятора ради снимка не делался: тот же OOM уже убил qemu трижды, хост 4 ГБ.
+
+## Не запускалось
+
+- Samsung A52: NOT_DEVICE_VERIFIED
+- Настоящий PAT и приватный репозиторий: NOT_RUN
+- Поворот, `pm clear`, визуальная проверка «токен не показан на главном экране»: NOT_RUN

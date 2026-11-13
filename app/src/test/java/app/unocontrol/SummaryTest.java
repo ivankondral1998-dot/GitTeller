@@ -63,6 +63,32 @@ public class SummaryTest {
         Summary s = Summary.of(now, snapshot(true, "main", "aaa"));
         assertTrue(s.attention.contains("Выводы ограничены"));
     }
+    @Test public void incompletePriorCannotProveBranchWasCreated() throws Exception {
+        Summary s=Summary.of(snapshot(true,"main","aaa","existing","bbb"),
+                snapshot(false,"main","aaa"));
+        assertEquals(0,s.added);
+        assertEquals(0,s.advanced);
+        assertEquals("Сравнение неполное",s.heading);
+        assertTrue(s.description.contains("могли существовать раньше"));
+        assertFalse(s.description.contains("1 появились в сравнении"));
+    }
+    @Test public void importedSnapshotsCannotClaimLiveProgress() throws Exception {
+        JSONObject backup=snapshot(true,"main","aaa");
+        backup.put("restoredFromBackup",true);
+        Summary imported=Summary.of(backup,snapshot(true,"main","bbb"));
+        assertEquals("Данные из резервной копии",imported.heading);
+        assertEquals(0,imported.advanced);
+        Summary afterRefresh=Summary.of(snapshot(true,"main","ccc"),backup);
+        assertEquals("Первый снимок сохранён",afterRefresh.heading);
+        assertEquals(0,afterRefresh.advanced);
+    }
+    @Test public void incompleteFirstFetchIsDeclaredIncomplete() throws Exception {
+        JSONObject first=snapshot(false,"main","aaa");
+        first.put("warnings",new JSONArray().put("ветки: предел страниц"));
+        Summary s=Summary.of(first,null);
+        assertTrue(s.description.contains("неполный"));
+        assertTrue(s.attention.contains("выводы ограничены"));
+    }
     @Test public void emptyIssueListDoesNotInventWork() throws Exception {
         JSONObject now = snapshot(true, "main", "aaa");
         now.put("issues", new JSONArray());

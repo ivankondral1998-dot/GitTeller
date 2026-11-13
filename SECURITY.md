@@ -1,12 +1,15 @@
-# SECURITY — GitTeller 1.0.2
+# SECURITY — 1.0.4-dev
 
-- Сеть: только HTTPS GET на `https://api.github.com/repos/...`. Редиректы выключены. Чужой хост отклоняется.
-- Методов POST/PATCH/DELETE в клиенте нет.
-- Токен только в поле `MainActivity.token`. В SharedPreferences не пишется. `onDestroy` обнуляет его. Смена репозитория обнуляет токен, пока пользователь не введёт новый.
-- Экспорт и импорт проходят через `SnapshotCodec.sanitizeSnapshot`. В снимок копируются только repo, даты, ветки (name+sha), commits (sha, message, date), issues/pulls (number, title, state), warnings. Поля token, authorization, body не копируются. Это проверено тестом `tokenFieldsAreDropped`.
-- `allowBackup=false`, `usesCleartextTraffic=false`.
-- Разрешение манифеста: только INTERNET.
-- Ошибки 401/403/404/429 не затирают сохранённый снимок: `sync()` пишет prefs только после успешного `load`.
-- User-Agent: `GitTeller/1.0.2`.
-- Приватный PAT в APK и в исходниках этого пакета отсутствует.
-- Keystore для токена не используется: токен живёт только в памяти процесса. Это ограничение, не «защищённое хранение».
+Что сделано:
+
+- Секрет не в SharedPreferences, не в резервной копии JSON, не в логах исключений специально, не в URL.
+- Ключ неэкспортируемый, в Android Keystore. Приложение хранит ciphertext.
+- Доступ к GitHub только HTTPS GET на `https://api.github.com/repos/...`. Редиректы выключены. Другой хост отвергается до запроса.
+- Разрешение манифеста: только `INTERNET`. `usesCleartextTraffic=false`. `allowBackup=false`.
+
+Что это не гарантирует:
+
+- Рут, отладка процесса и дамп памяти могут увидеть `String` токена, пока он нужен для заголовка `Authorization`.
+- Переустановка или сброс данных приложения может уничтожить ключ. Тогда нужен новый ввод. Автовосстановления токена нет.
+- Keystore не проверялся на Samsung A52.
+- Приватный доступ не проверялся живым PAT.

@@ -57,7 +57,9 @@ public final class MainActivity extends Activity {
     private SharedPreferences prefs;
     private JSONObject current, previous;
     private String repo = DEFAULT_REPO;
-    private String token = ""; // session only; NEVER saved
+    private TokenVault vault;
+    private int syncEpoch;
+    private volatile GithubClient inflight;
     private boolean loading;
     private LinearLayout content;
     private Button refresh;
@@ -68,6 +70,7 @@ public final class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
         getWindow().getDecorView().setSystemUiVisibility(0);
         prefs = getSharedPreferences("gitteller_v1", MODE_PRIVATE);
+        vault = new TokenVault(this);
         repo = prefs.getString("repo", DEFAULT_REPO);
         current = parse(prefs.getString(key(repo, "current"), ""));
         previous = parse(prefs.getString(key(repo, "previous"), ""));
@@ -176,7 +179,8 @@ public final class MainActivity extends Activity {
         addLine(wrap,"Состояние проекта",29,TEXT,true,0);
         String shortRepo=repo.length()>43?repo.substring(0,40)+"…":repo;
         addLine(wrap,shortRepo,13,MUTED,false,11);
-        space(wrap,25);
+        addLine(wrap,accessStatus(),13,MUTED,false,8);
+        space(wrap,18);
 
         Summary summary=Summary.of(current,previous);
         LinearLayout hero=panel(wrap);
@@ -268,6 +272,23 @@ public final class MainActivity extends Activity {
         pm.show();
     }
 
+    private String accessStatus() {
+        try {
+            if (vault != null && vault.hasToken(repo))
+                return "Доступ: сохранён на устройстве. Секрет не показывается.";
+            return "Доступ: токен не сохранён. Публичный проект читается без него.";
+        } catch (RuntimeException e) {
+            return "Доступ: хранилище Android недоступно. Введите токен заново.";
+        }
+    }
+
+    private void abandonSync() {
+        syncEpoch++;
+        GithubClient client = inflight;
+        if (client != null) client.cancel();
+        loading = false;
+    }
+
     private void setupDialog(){
         LinearLayout form=vertical();form.setPadding(dp(20),dp(8),dp(20),dp(2));
         addLine(form,"GitHub-адрес, например owner/repo",13,MUTED,false,0);
@@ -276,47 +297,92 @@ public final class MainActivity extends Activity {
         repoField.setSelectAllOnFocus(true);
         repoField.setTextColor(TEXT);repoField.setHintTextColor(MUTED);
         form.addView(repoField,lp(-1,-2));
-        addLine(form,"Токен для приватного репозитория (не сохраняется)",13,MUTED,false,18);
+        boolean saved = false;
+        try { saved = vault.hasToken(repo); } catch (RuntimeException ignored) {}
+        addLine(form, saved
+                ? "Токен сохранён на устройстве. Поле пустое и не показывает секрет."
+                : "Токен не сохранён. Для публичного проекта он не нужен.", 13, saved ? ACCENT : MUTED, false, 18);
         EditText tokenField=new EditText(this);
-        tokenField.setHint(token.isEmpty()?"Необязательно для публичного проекта":"Токен уже введён до закрытия приложения");
+        tokenField.setHint("Вставьте токен, чтобы сохранить или заменить");
+        tokenField.setText("");
         tokenField.setTextColor(TEXT);tokenField.setHintTextColor(MUTED);
         tokenField.setSingleLine(true);
         tokenField.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         form.addView(tokenField,lp(-1,-2));
-        new AlertDialog.Builder(this).setTitle("Подключение к GitHub")
+        new AlertDialog.Builder(this).setTitle("Репозиторий и доступ")
                 .setView(form)
-                .setNegativeButton("Отмена",(d,w)->{})
-                .setNeutralButton("Сбросить токен",(d,w)->{token="";toast("Токен удалён из памяти приложения");})
-                .setPositiveButton("Сохранить",(d,w)->{
+                .setNegativeButton("Отмена",(d,w)->tokenField.setText(""))
+                .setNeutralButton("Удалить токен",(d,w)->{
+                    tokenField.setText("");
+                    String target = repo;
+                    String typedRepo = repoField.getText().toString().trim();
+                    if (typedRepo.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") && !typedRepo.contains(".."))
+                        target = typedRepo;
+                    try {
+                        vault.delete(target);
+                        if (target.equalsIgnoreCase(repo)) {
+                            abandonSync();
+                            draw();
+                        }
+                        toast("Токен удалён с устройства");
+                    } catch (Exception e) {
+                        toast(e.getMessage()==null?"Не удалось удалить токен":e.getMessage());
+                    }
+                })
+                .setPositiveButton("Сохранить защищённо",(d,w)->{
                     String r=repoField.getText().toString().trim();
                     if(!r.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}")||r.contains("..")) {
                         toast("Нужен адрес вида owner/repo");return;
                     }
-                    String newToken=tokenField.getText().toString().trim();
+                    String typed=tokenField.getText().toString().trim();
+                    tokenField.setText("");
                     if(!repo.equalsIgnoreCase(r)){
-                        // Do not silently reuse a credential when changing the repository.
-                        token = "";
+                        abandonSync();
                         repo=r;
                         current=parse(prefs.getString(key(repo,"current"),""));
                         previous=parse(prefs.getString(key(repo,"previous"),""));
                         prefs.edit().putString("repo",repo).apply();
                     }
-                    if(!newToken.isEmpty())token=newToken;
-                    draw();toast("Настройки сохранены. Нажмите «Обновить».");
+                    if(typed.isEmpty()){
+                        draw();
+                        toast("Проект выбран. Пустое поле не стирает сохранённый доступ.");
+                        return;
+                    }
+                    try {
+                        vault.save(repo, typed);
+                        typed = "";
+                        draw();
+                        toast("Доступ сохранён средствами Android");
+                    } catch (Exception e) {
+                        toast(e.getMessage()==null?"Не удалось сохранить доступ":e.getMessage());
+                    }
                 }).show();
     }
 
     private void sync(){
         if(loading)return;
-        loading=true;draw();
+        final int epoch=syncEpoch;
         final String selected=repo;
-        final String access=token;
+        final String access;
+        try {
+            String loaded=vault.load(selected);
+            access=loaded==null?"":loaded;
+        } catch (Exception e) {
+            new AlertDialog.Builder(this).setTitle("Доступ не прочитан")
+                    .setMessage((e.getMessage()==null?"Хранилище Android недоступно.":e.getMessage())
+                            +"\n\nСохранённые сведения проекта не изменены.")
+                    .setPositiveButton("Закрыть",(d,w)->{}).show();
+            return;
+        }
+        loading=true;draw();
         worker.execute(()->{
+            GithubClient client=new GithubClient(access);
+            inflight=client;
             try{
-                JSONObject fresh=new GithubClient(access).load(selected).snapshot;
+                JSONObject fresh=client.load(selected).snapshot;
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
-                    if(!selected.equals(repo)) {loading=false;draw();return;}
+                    if(epoch!=syncEpoch || !selected.equals(repo)) {loading=false;draw();return;}
                     previous=current;
                     current=fresh;
                     prefs.edit().putString(key(repo,"previous"),previous==null?"":previous.toString())
@@ -328,11 +394,13 @@ public final class MainActivity extends Activity {
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
                     loading=false;draw();
-                    if(!selected.equals(repo))return;
+                    if(epoch!=syncEpoch || !selected.equals(repo))return;
                     new AlertDialog.Builder(this).setTitle("Сверка не выполнена")
                             .setMessage(message+"\n\nПредыдущие данные не изменены.")
                             .setPositiveButton("Закрыть",(d,w)->{}).show();
                 });
+            } finally {
+                if(inflight==client) inflight=null;
             }
         });
     }
@@ -517,15 +585,16 @@ public final class MainActivity extends Activity {
                             .putString("repo",restoredRepo).commit()){
                         toast("Не удалось сохранить архив");return;
                     }
-                    repo=restoredRepo;token="";current=finalFresh;previous=finalOld;draw();toast("Данные восстановлены из архива");
+                    repo=restoredRepo;current=finalFresh;previous=finalOld;draw();toast("Данные восстановлены из архива");
                 }).show();
     }
 
     private void showInfo(){
-        new AlertDialog.Builder(this).setTitle("GitTeller 1.0.2")
+        new AlertDialog.Builder(this).setTitle("GitTeller 1.0.4-dev")
                 .setMessage("Нативное Android-приложение без WebView.\n\n"+
-                        "Читает открытые данные GitHub бесплатно, для приватных нужен read-only токен. " +
-                        "Ключ остаётся в памяти и очищается при закрытии процесса.\n\n"+
+                        "Читает открытые данные GitHub бесплатно. Для приватного проекта токен только на чтение " +
+                        "хранится в Android Keystore и не пишется в резервную копию.\n\n"+
+                        "Это защита средствами Android, не обещание неуязвимости.\n\n"+
                         "Ничего не меняет в GitHub. Не проверяет фактическую готовность ПО.")
                 .setPositiveButton("Закрыть",(d,w)->{}).show();
     }
@@ -573,5 +642,5 @@ public final class MainActivity extends Activity {
         toast("SHA скопирован");
     }
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
-    @Override protected void onDestroy(){super.onDestroy();worker.shutdownNow();token="";}
+    @Override protected void onDestroy(){super.onDestroy();abandonSync();worker.shutdownNow();}
 }

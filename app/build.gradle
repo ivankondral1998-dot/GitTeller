@@ -7,8 +7,9 @@ android {
         applicationId 'app.gitteller.mobile'
         minSdk 26
         targetSdk 35
-        versionCode 16
-        versionName '1.0.2'
+        versionCode 18
+        versionName '1.0.4-dev'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildTypes {
         release { minifyEnabled false }
@@ -24,4 +25,6 @@ dependencies {
     testImplementation "junit:junit:4.13.2"
     // Android org.json in the local test JVM is a method-stub; use the actual JSON library for unit tests.
     testImplementation "org.json:json:20240303"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "androidx.test:runner:1.6.2"
 }

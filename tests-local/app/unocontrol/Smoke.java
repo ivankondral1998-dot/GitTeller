@@ -16,6 +16,12 @@ public class Smoke {
     check(Summary.of(snapshot(false,"main","2"),snapshot(true,"main","1","old","4")).missing==0,"incomplete must not infer deletion");
     check(Summary.of(snapshot(true,"main","1"),snapshot(true,"main","1")).heading.contains("не изменились"),"same SHA");
     check(Summary.of(snapshot(false,"main","1"),snapshot(true,"main","1")).heading.contains("неполное"),"incomplete no-change not claim");
+    Summary partialOld=Summary.of(snapshot(true,"main","1","existing","2"),snapshot(false,"main","1"));
+    check(partialOld.added==0 && partialOld.description.contains("могли существовать раньше"),"partial baseline not creation proof");
+    JSONObject imported=snapshot(true,"main","1").put("restoredFromBackup",true);
+    check(Summary.of(imported,snapshot(true,"main","2")).heading.contains("резервной"),"import is not GitHub evidence");
+    check(Summary.of(snapshot(true,"main","2"),imported).advanced==0,"no live difference against imported data");
+    check(Summary.of(snapshot(false,"main","1"),null).description.contains("неполный"),"first partial snapshot disclosed");
     check(CommitExplainer.explain("fix: something").contains("не проверена"),"fix no PASS");
     check(CommitExplainer.explain("docs: text").contains("документацию"),"docs recognized");
     check(CommitExplainer.explain("feat(safety): widget").contains("новой возможности"),"feat scope");

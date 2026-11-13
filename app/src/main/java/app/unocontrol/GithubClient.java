@@ -20,7 +20,13 @@ final class GithubClient {
         Result(JSONObject snapshot) { this.snapshot = snapshot; }
     }
     private final String token;
+    private volatile HttpURLConnection inflight;
     GithubClient(String token) { this.token = token == null ? "" : token.trim(); }
+
+    void cancel() {
+        HttpURLConnection c = inflight;
+        if (c != null) c.disconnect();
+    }
 
     Result load(String repo) throws Exception {
         if (!repo.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || repo.contains(".."))
@@ -151,8 +157,9 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "GitTeller/1.0.2");
+        c.setRequestProperty("User-Agent", "GitTeller/1.0.4");
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
+        inflight = c;
         try {
             int status = c.getResponseCode();
             if (status != 200) {
@@ -168,7 +175,10 @@ final class GithubClient {
                 }
             }
             return new Response(data.toString(StandardCharsets.UTF_8.name()), link);
-        } finally { c.disconnect(); }
+        } finally {
+            if (inflight == c) inflight = null;
+            c.disconnect();
+        }
     }
 
     static String errorForStatus(int status, String rateRemaining) {
@@ -187,7 +197,9 @@ final class GithubClient {
     static String safeMessage(Throwable e) {
         String s = e.getMessage();
         if (s == null) return "неизвестная ошибка";
-        // Never include a URL query or Authorization header in UI error messages.
+        s = s.replaceAll("(?i)bearer\\s+\\S+", "bearer [скрыто]");
+        s = s.replaceAll("ghp_[A-Za-z0-9]+", "[скрыто]");
+        s = s.replaceAll("github_pat_[A-Za-z0-9_]+", "[скрыто]");
         return s.length() > 200 ? s.substring(0, 200) : s;
     }
     private static JSONArray jsonArray(Response r) throws Exception { return new JSONArray(r.body); }

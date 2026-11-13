@@ -1,27 +1,30 @@
-# GitTeller 1.0.2
+# GitTeller 1.0.4-dev
 
-Нативное Android-приложение (Java, без WebView). Объясняет публичный или приватный GitHub простым языком и не пишет в репозиторий.
+Текущая сборка этого дерева: `versionName 1.0.4-dev`, `versionCode 18`, debug APK собран. Итог проверок — в `AUDIT_RESULTS.md`, `TEST_RESULTS.md`, `REMAINING.md`. Это не заявление о коммерческой готовности и не проверка Samsung A52.
 
-Это debug-сборка, не продукт для продажи. Ограничения: `REMAINING.md`. Проверки: `TEST_RESULTS.md`.
+Неизменённый вход: `checkpoint/GitTeller_v1.0.3_AUDIT_PATCH_SOURCE_UNCHANGED.zip`, SHA-256 `c98942799485422b1b4d3b018dbc75bddc239a5263b0dac340515fcb0f352954`.
 
-## Сборка
+Ниже сохранён текст про 1.0.3-audit. Он описывает тот checkpoint, не текущий APK.
 
-Нужны JDK 17, Android SDK platform 35, build-tools 35.0.0, Gradle 8.9, Android Gradle Plugin 8.7.3.
+# GitTeller 1.0.3-audit — исходники после независимого аудита
 
-```
-export ANDROID_HOME=/path/to/sdk
+Продолжение Android-кода Grok 1.0.2, не новый проект. Версия 1.0.3-audit существует **только как исходники**. APK 1.0.3-audit **не собран**. APK 1.0.2 остаётся исходным артефактом Grok, его SHA указан в `AUDIT_VERIFIED.md`.
+
+## Сборка на компьютере с Android SDK
+
+Требования из 1.0.2: JDK 17+, Gradle 8.9, Android SDK 35, build-tools 35.0.0, AGP 8.7.3.
+
+```bash
 gradle --no-daemon :app:testDebugUnitTest
 gradle --no-daemon :app:assembleDebug
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`.
+Сначала проверить тесты и затем собрать APK. Сохранить полные логи, SHA-256 и результат реальной установки на Android. В случае ошибки нельзя писать PASS.
 
-Если Gradle Test Executor в среде не может открыть loopback, это надо писать как сбой задачи, а не как зелёные тесты. Классы можно прогнать отдельно через `org.junit.runner.JUnitCore` — это другой факт, его так и подписывать.
+Локальная частичная проверка без Android SDK:
 
-## Поведение
+```bash
+sh tests-local/run.sh
+```
 
-- Публичный репозиторий без токена. Приватный — read-only PAT только в памяти процесса.
-- Главный экран: что изменилось, что требует внимания, кнопка обновления, «Подробнее».
-- Ветки, SHA, задачи и запросы — в меню.
-- Неполный список не считается удалением. Коммит не считается готовностью.
-- Экспорт JSON без токена. Импорт проверяет схему и помечает данные как восстановленные из файла.
+Читайте `AUDIT_VERIFIED.md` и `TESTS_EXECUTED.md`. Полный оригинальный пакет сохранён отдельно у владельца.
