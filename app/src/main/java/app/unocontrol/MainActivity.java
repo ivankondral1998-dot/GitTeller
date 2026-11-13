@@ -39,7 +39,7 @@ import java.util.concurrent.Executors;
 
 /** Real Android views. No HTML, CSS or WebView. */
 public final class MainActivity extends Activity {
-    private static final String DEFAULT_REPO = "ivankondral1998-dot/UNO-android-AI-Agent";
+    private static final String DEFAULT_REPO = "octocat/Hello-World";
     private static final int BG = Color.rgb(12,18,25);
     private static final int PANEL = Color.rgb(23,33,44);
     private static final int PANEL_2 = Color.rgb(30,43,56);
@@ -130,8 +130,8 @@ public final class MainActivity extends Activity {
         LinearLayout head=new LinearLayout(this);
         head.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout brand=vertical();
-        brand.addView(txt("UNO  /  CONTROL",17,TEXT,true));
-        addLine(brand,"Понимать проект, а не читать код",12,MUTED,false,5);
+        brand.addView(txt("GitTeller",17,TEXT,true));
+        addLine(brand,"GitHub простыми словами",12,MUTED,false,5);
         head.addView(brand,new LinearLayout.LayoutParams(0,-2,1f));
         TextView menu=txt("⋮",27,TEXT,false);
         menu.setGravity(Gravity.CENTER);menu.setContentDescription("Дополнительные разделы и настройки");
