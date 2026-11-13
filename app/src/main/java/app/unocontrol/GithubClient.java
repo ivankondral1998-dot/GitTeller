@@ -151,15 +151,12 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "UNO-Control-Android/1.3");
+        c.setRequestProperty("User-Agent", "GitTeller/1.0.2");
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         try {
             int status = c.getResponseCode();
             if (status != 200) {
-                if (status == 401) throw new IllegalStateException("Токен недействителен или истёк (401).");
-                if (status == 403) throw new IllegalStateException("Доступ запрещён или лимит исчерпан (403).");
-                if (status == 404) throw new IllegalStateException("Репозиторий не найден или закрыт (404).");
-                throw new IllegalStateException("GitHub вернул ошибку HTTP " + status + ".");
+                throw new IllegalStateException(errorForStatus(status, c.getHeaderField("X-RateLimit-Remaining")));
             }
             String link = c.getHeaderField("Link");
             ByteArrayOutputStream data = new ByteArrayOutputStream();
@@ -172,6 +169,15 @@ final class GithubClient {
             }
             return new Response(data.toString(StandardCharsets.UTF_8.name()), link);
         } finally { c.disconnect(); }
+    }
+
+    static String errorForStatus(int status, String rateRemaining) {
+        if (status == 401) return "Токен недействителен или истёк (401). Старые данные сохранены.";
+        if (status == 429 || (status == 403 && "0".equals(rateRemaining)))
+            return "Лимит запросов GitHub исчерпан (429/403). Повторите позже. Старые данные сохранены.";
+        if (status == 403) return "Доступ запрещён (403). Проверьте права токена. Старые данные сохранены.";
+        if (status == 404) return "Репозиторий не найден или закрыт (404). Старые данные сохранены.";
+        return "GitHub вернул ошибку HTTP " + status + ". Старые данные сохранены.";
     }
 
     static String encodePathPart(String s) {
