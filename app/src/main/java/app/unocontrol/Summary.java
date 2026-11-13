@@ -11,25 +11,27 @@ final class Summary {
     final String plain;
     final String description;
     final String attention;
-    final int advanced, added, missing;
+    final int advanced, added, missing, issueChanges, pullChanges;
 
-    private Summary(String heading, String plain, String description, String attention, int advanced, int added, int missing) {
+    private Summary(String heading, String plain, String description, String attention,
+                    int advanced, int added, int missing, int issueChanges, int pullChanges) {
         this.heading=heading;this.plain=plain;this.description=description;this.attention=attention;
         this.advanced=advanced;this.added=added;this.missing=missing;
+        this.issueChanges=issueChanges;this.pullChanges=pullChanges;
     }
 
     static Summary of(JSONObject current, JSONObject previous) {
         if (current == null) return new Summary("Пока нет свежей проверки",
                 "Проверки ещё не было. Нажмите «Обновить», чтобы узнать, что происходит в проекте.",
                 "Подключите репозиторий и нажмите «Обновить». Данные появятся после ответа GitHub.",
-                "Без синхронизации нельзя утверждать, что проект изменился или завершён.",0,0,0);
+                "Без синхронизации нельзя утверждать, что проект изменился или завершён.",0,0,0,0,0);
         // A user-supplied backup is not authenticated GitHub evidence.
         // Never compare a newly fetched live snapshot against a forged/imported baseline.
         if (current.optBoolean("restoredFromBackup", false))
             return new Summary("Данные из резервной копии",
                     "Показан сохранённый файл, а не текущая проверка GitHub. Нажмите «Обновить» для получения свежих данных.",
                     "По этому файлу нельзя установить, какие изменения действительно произошли в GitHub.",
-                    "Источник не проверен: импортированные сведения нельзя считать подтверждением готовности или прогресса.",0,0,0);
+                    "Источник не проверен: импортированные сведения нельзя считать подтверждением готовности или прогресса.",0,0,0,0,0);
         if (previous == null || previous.optBoolean("restoredFromBackup", false) ||
                 !current.optString("repo").equalsIgnoreCase(previous.optString("repo")))
             return new Summary("Первый снимок сохранён",
@@ -39,7 +41,7 @@ final class Summary {
                             " Сравнение изменений будет после следующего обновления.",
                     "Коммиты и новые ветки не доказывают успешность тестов." +
                             (current.optJSONArray("warnings") != null && current.optJSONArray("warnings").length() > 0 ?
-                                    " Часть данных не загрузилась: выводы ограничены." : ""),0,0,0);
+                                    " Часть данных не загрузилась: выводы ограничены." : ""),0,0,0,0,0);
 
         Map<String,String> old = map(previous.optJSONArray("branches"));
         Map<String,String> now = map(current.optJSONArray("branches"));
@@ -55,8 +57,16 @@ final class Summary {
         }
         boolean complete = currentComplete && previousComplete;
         if (complete) for (String name:old.keySet()) if (!now.containsKey(name)) removed++;
-        int issueChanges = stateChanges(previous.optJSONArray("issues"), current.optJSONArray("issues"));
-        int pullChanges = stateChanges(previous.optJSONArray("pulls"), current.optJSONArray("pulls"));
+        // Compare states only when BOTH complete result sets were fetched. Otherwise
+        // an absent record is unknown, not a closed or deleted task.
+        boolean issueScopeComplete = previous.optBoolean("issuesComplete", false)
+                && current.optBoolean("issuesComplete", false);
+        boolean pullScopeComplete = previous.optBoolean("pullsComplete", false)
+                && current.optBoolean("pullsComplete", false);
+        int issueChanges = issueScopeComplete
+                ? stateChanges(previous.optJSONArray("issues"), current.optJSONArray("issues")) : 0;
+        int pullChanges = pullScopeComplete
+                ? stateChanges(previous.optJSONArray("pulls"), current.optJSONArray("pulls")) : 0;
         String headline = (moved+added+removed)==0 ?
                 (complete ? "SHA веток не изменились" : "Сравнение неполное") : "В истории проекта есть изменения";
         String desc = moved + " веток изменили указатель, " + added + " появились в сравнении с полностью загруженным списком.";
@@ -66,6 +76,8 @@ final class Summary {
         else desc += " Список мог загрузиться не полностью, исчезновение веток не оценивается.";
         if (issueChanges > 0) desc += " Статус изменился у " + issueChanges + " задач в доступной выборке.";
         if (pullChanges > 0) desc += " Статус изменился у " + pullChanges + " запросов изменений.";
+        if (!issueScopeComplete || !pullScopeComplete)
+            desc += " Сравнение статусов задач или предложений ограничено неполными данными.";
         String plain;
         if ((moved+added+removed)==0 && complete) {
             plain = "По двум последним проверкам указатели веток не сдвинулись. Это не значит, что продукт готов или что задачи закрыты.";
@@ -81,9 +93,11 @@ final class Summary {
         if (issueChanges + pullChanges > 0 && moved + added + removed == 0) {
             attention = "Указатели веток те же, но статусы задач или запросов в выборке изменились. Это не доказательство, что программа работает. " + attention;
         }
+        if (!issueScopeComplete || !pullScopeComplete)
+            attention = "Статусы задач или предложений не удалось сравнить полностью. " + attention;
         if (current.optJSONArray("warnings") != null && current.optJSONArray("warnings").length() > 0)
             attention = "Часть данных не удалось загрузить. Выводы ограничены. " + attention;
-        return new Summary(headline, plain, desc, attention, moved, added, removed);
+        return new Summary(headline, plain, desc, attention, moved, added, removed, issueChanges, pullChanges);
     }
 
     static int stateChanges(JSONArray old, JSONArray now) {

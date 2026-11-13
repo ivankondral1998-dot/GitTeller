@@ -11,21 +11,40 @@ final class HumanReport {
         if (current == null) return "Подключите проект";
         if (current.optBoolean("restoredFromBackup", false)) return "Сведения из сохранённого файла";
         if (previous == null || previous.optBoolean("restoredFromBackup", false)) return "Первая проверка выполнена";
+        if (s.advanced + s.added + s.missing > 0) return "В истории проекта есть изменения";
+        if (!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false))
+            return "Часть данных GitHub недоступна";
         if (!current.optBoolean("branchesComplete", false) || !previous.optBoolean("branchesComplete", false))
             return "Не все данные удалось сравнить";
-        if (s.advanced + s.added + s.missing > 0) return "В истории проекта есть изменения";
+        if (!listsKnown(previous)) return "Статусы задач сравнить нельзя";
+        if (s.issueChanges + s.pullChanges > 0) return "Изменились статусы задач";
         return "Новых сдвигов веток не обнаружено";
     }
     static String homeDescription(JSONObject current, JSONObject previous, Summary s) {
         if (current == null) return "Укажите репозиторий GitHub и нажмите «Обновить».";
         if (current.optBoolean("restoredFromBackup", false)) return "Это сохранённая копия. Для проверки текущего состояния обновите данные с GitHub.";
         if (previous == null || previous.optBoolean("restoredFromBackup", false))
-            return "Данные получены. Сейчас сравнивать их не с чем: понадобится ещё одна проверка позже.";
+            return "Данные получены. Сейчас сравнивать их не с чем: понадобится ещё одна проверка позже."
+                    + ((!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false))
+                    ? " Сведения о задачах или предложениях загрузились не полностью." : "");
+        if (s.advanced + s.added + s.missing > 0)
+            return "По сравнению с прошлой проверкой изменились указатели некоторых веток. Что именно сделано и работает ли это, нужно проверять отдельно."
+                    + (listsKnown(current) && listsKnown(previous) ? "" : " Статусы задач при неполном списке не сравниваются.");
+        if (!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false))
+            return "Ветки можно сравнить отдельно, но список задач или предложений загружен не полностью. Нельзя делать вывод о полном состоянии проекта.";
         if (!current.optBoolean("branchesComplete", false) || !previous.optBoolean("branchesComplete", false))
             return "Часть сведений могла не загрузиться. Поэтому точный вывод об изменениях пока невозможен.";
+        if (!listsKnown(previous))
+            return "Указатели веток те же. Статусы задач сравнить нельзя: в прошлой проверке нет признака полноты списка.";
+        if (s.advanced + s.added + s.missing == 0 && s.issueChanges + s.pullChanges > 0)
+            return "Ветки остались прежними, но в GitHub изменились статусы задач или предложений. Это не доказывает готовность функций.";
         if (s.advanced + s.added + s.missing == 0)
             return "С прошлой проверки указатели веток остались прежними. Это не означает, что работа над проектом закончена.";
         return "По сравнению с прошлой проверкой изменились указатели некоторых веток. Что именно сделано и работает ли это, нужно проверять отдельно.";
+    }
+    static boolean listsKnown(JSONObject snap) {
+        return snap != null && snap.has("issuesComplete") && snap.optBoolean("issuesComplete", false)
+                && snap.has("pullsComplete") && snap.optBoolean("pullsComplete", false);
     }
     static String branchKind(String name) {
         if (name == null) return "Направление работы";

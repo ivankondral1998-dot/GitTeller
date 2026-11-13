@@ -1,17 +1,14 @@
-# Проверки 1.0.5
+# Проверки 1.0.6
 
-Среда: JDK 17, Gradle 8.9, AGP 8.7.3, compileSdk 35. Эмулятор `gt14`, Android 14, x86_64, 1080×2400, гостевая RAM 768. Хост 4 ГБ без swap. qemu убит OOM при anon-rss около 3.8 ГБ.
+## Что прошло
 
-## Команды
+- `sh tests-local/run.sh`: exit 0, `PASS: 32`, `PARSE OK: 17`. Это заглушка `org.json`, не Android.
+- `gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest`: exit 0. APK versionCode 21.
+- Прямой `org.junit.runner.JUnitCore` (не задача Gradle): OK (36 tests). В том числе `DetailFormatTest`.
 
-- `sh tests-local/run.sh` — exit 0. `PASS: 27 model checks`. `PARSE OK: 16`. Это не Android и не Keystore.
-- `gradle --no-daemon :app:testDebugUnitTest` — exit 0, `BUILD SUCCESSFUL`. XML: 31 тест, 0 failures, 0 errors (Summary 12, GithubStatus 6, SnapshotCodec 4, CommitExplainer 3, TokenVaultRules 3, HumanReport 3). В том же логе есть `Unexpected type tag 71`. Это шум сокета, не падение тестов: XML записан.
-- `gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest` — APK собраны. Первый общий запуск упал на компиляции `HumanReportTest` (необработанный JSONException). Тест исправлен, APK пересобирать не пришлось: основной код уже был в dex. Повторный unit-test прошёл.
-- Инструментальные тесты Keystore на 1.0.5: **NOT_RUN**. На 1.0.4 они проходили на таком же эмуляторе; этот APK заново не гонялся, потому что процесс умер после снимка главного экрана.
+## Что не прошло как Gradle-тест
 
-## Эмулятор
-
-- Установка debug APK: Success.
-- `am start` компонента `app.gitteller.mobile/app.unocontrol.MainActivity`: принят.
-- Снимок `evidence/emulator-home-1.0.5.png` (92964 байт) показывает главный экран GitTeller, не заставку и не ANR: «Подключите проект», кнопка «Обновить с GitHub», репозиторий `octocat/Hello-World`, без SHA и без списка веток.
-- Следующая загрузка эмулятора дошла до `am start`, но `uiautomator` вернул `null root node`, а серия `input tap` не изменила ни одного пикселя кадра. Меню и разделы поэтому не сняты. Считается только первый кадр главного экрана.
+- `gradle --no-daemon :app:testDebugUnitTest` на этих исходниках: **FAIL**, exit 1. Два прогона. Причина в логе: `Gradle Test Executor` / `Connection refused` и `Connection reset by peer`. XML в `test-results` остался от 31 старого теста и **не содержит** `DetailFormatTest`. Это не PASS.
+- Инструментальные тесты Keystore на 1.0.6: **NOT_RUN**.
+- Эмулятор Android 14, сборка 1.0.6: кадр главного экрана `evidence/emulator-home-1.0.6.png` (пустой `octocat/Hello-World`, одна кнопка, без SHA). Кадр меню `evidence/emulator-menu-1.0.6.png`: пять пунктов, без списка веток. Кадр `evidence/emulator-sections-1.0.6.png`: полноэкранный «Разделы проекта» со стрелкой назад и пятью карточками.
+- Системный Back после этого кадра экран не сменил. Светлая тема, ветки, история, задачи и точность по отдельности не сняты. Чёрные кадры в доказательство не входят.

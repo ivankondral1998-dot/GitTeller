@@ -34,6 +34,7 @@ public final class SectionActivity extends Activity {
     private JSONObject current, previous;
     private String repo, page;
     private TokenVault vault;
+    private int detailEpoch;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -154,8 +155,10 @@ public final class SectionActivity extends Activity {
             if(c!=null)action("Одна из последних записей в основной ветке",HumanReport.commitSummary(c.optString("message"))+". Это сообщение автора, не результат испытаний.",()->goItem("commit-detail",0));
         }
         JSONArray issues=current.optJSONArray("issues"),prs=current.optJSONArray("pulls");
-        note("Что осталось открытым в GitHub",HumanReport.countState(issues,"open")+" задач, "+HumanReport.countState(prs,"open")+
-                " предложений изменений. Отсутствие открытых записей не подтверждает готовность программы.");
+        note("Что осталось открытым в GitHub",
+                countForHumans(issues, "issuesComplete", "задач") + ", " +
+                countForHumans(prs, "pullsComplete", "предложений изменений") +
+                ". Отсутствие открытых записей не подтверждает готовность программы.");
         note("Что нужно проверить", HumanReport.NO_CHECK + ". GitTeller не запускает сборку, тесты и телефон. " + HumanReport.NOT_ENOUGH + ": в снимке нет отчётов испытаний.");
         if (s != null) note("На что смотреть дальше", s.attention);
         action("Посмотреть задачи","Обсуждения и предложения в GitHub",()->go("tasks"));
@@ -198,19 +201,30 @@ public final class SectionActivity extends Activity {
         note("Что написал автор",x.optString("message","Без описания"));
         note("Когда запись сохранена",x.optString("date","Дата недоступна"));
         note("Техническая версия",x.optString("sha","SHA недоступен"));
-        note("Что осталось неизвестным", HumanReport.NOT_ENOUGH + ". Список изменённых файлов и результат испытаний не загружены. " + HumanReport.NO_CHECK + ".");
+        note("Что осталось неизвестным", "Заголовок сам по себе ничего не доказывает. Ниже — отдельный запрос файлов и проверок, если GitHub его отдаст.");
+        loadExtra("commit", 0, x.optString("sha"));
+    }
+    private String countForHumans(JSONArray records, String completenessFlag, String category) {
+        int seen = HumanReport.countState(records, "open");
+        if (current == null || !current.optBoolean(completenessFlag, false))
+            return "список " + category + " неполон (в доступной части открыто: " + seen + ")";
+        return seen + " открытых " + category;
     }
     private void tasks(){
         if(current==null){note("Нет данных","Сначала обновите проект.");return;}
         JSONArray issues=current.optJSONArray("issues"),pulls=current.optJSONArray("pulls");
         note("Что означают эти записи", "Задачи — вопросы или работа, которую обсуждают. Запрос изменений — предложение внести код в проект. Закрытие не равно успешному испытанию.");
-        note("Задачи",HumanReport.countState(issues,"open")+" открыто; "+HumanReport.countState(issues,"closed")+" закрыто в загруженной выборке.");
+        note("Задачи", current.optBoolean("issuesComplete", false)
+                ? HumanReport.countState(issues,"open")+" открыто; "+HumanReport.countState(issues,"closed")+" закрыто."
+                : "Список неполный или не загрузился: нельзя утверждать, сколько всего задач. Открытые в доступной части: " + HumanReport.countState(issues,"open") + ".");
         if(issues!=null)for(int i=0;i<issues.length();i++){
             JSONObject x=issues.optJSONObject(i);if(x==null)continue;final int idx=i;
             action("Задача №"+x.optInt("number")+" · "+("open".equals(x.optString("state"))?"Открыта":"Закрыта"),
                     HumanReport.NOT_ENOUGH+": текст задачи не загружен. Закрытие не доказывает выполнение.",()->goItem("issue-detail",idx));
         }
-        note("Предложения изменений",HumanReport.countState(pulls,"open")+" открыто; "+HumanReport.countState(pulls,"closed")+" закрыто в загруженной выборке.");
+        note("Предложения изменений", current.optBoolean("pullsComplete", false)
+                ? HumanReport.countState(pulls,"open")+" открыто; "+HumanReport.countState(pulls,"closed")+" закрыто."
+                : "Список неполный или не загрузился: общее количество неизвестно. Открытые в доступной части: " + HumanReport.countState(pulls,"open") + ".");
         if(pulls!=null)for(int i=0;i<pulls.length();i++){
             JSONObject x=pulls.optJSONObject(i);if(x==null)continue;final int idx=i;
             action("Предложение №"+x.optInt("number")+" · "+("open".equals(x.optString("state"))?"Открыто":"Закрыто"),
@@ -222,9 +236,34 @@ public final class SectionActivity extends Activity {
         JSONObject x=at(pr?"pulls":"issues");if(x==null){note("Запись не найдена","Вернитесь к списку.");return;}
         note((pr?"Предложение изменений":"Задача")+" №"+x.optInt("number"),HumanReport.state(x.optString("state")));
         note("Исходный заголовок",x.optString("title","Без названия"));
-        note("Что это значит", pr
-                ? HumanReport.NOT_ENOUGH + ". Нет данных, объединено ли предложение, какие файлы изменены и прошли ли проверки. Закрытие само по себе не означает merge. " + HumanReport.NO_CHECK + "."
-                : HumanReport.NOT_ENOUGH + ". Текст задачи и метки не загружены. По заголовку и статусу нельзя установить, выполнена ли работа. " + HumanReport.NO_CHECK + ".");
+        note("Что известно из снимка", pr
+                ? "Закрытие не означает merge. Подробности запрашиваются отдельно и не заменяют проверку на устройстве."
+                : "По заголовку и статусу нельзя установить, выполнена ли работа. Текст запрашивается отдельно.");
+        loadExtra(pr ? "pull" : "issue", x.optInt("number"), null);
+    }
+    private void loadExtra(String kind, int number, String sha) {
+        final int epoch = ++detailEpoch;
+        LinearLayout slot = card();
+        TextView status = line(slot, HumanReport.NOT_ENOUGH + ". Запрос к GitHub ещё не завершён.", 15, false, muted);
+        final String selected = repo;
+        new Thread(() -> {
+            String text;
+            try {
+                String token = vault.load(selected);
+                GithubClient client = new GithubClient(token == null ? "" : token);
+                GithubClient.Extra extra = "commit".equals(kind) ? client.readCommit(selected, sha)
+                        : "pull".equals(kind) ? client.readPull(selected, number)
+                        : client.readIssue(selected, number);
+                text = extra.text;
+            } catch (Exception e) {
+                text = HumanReport.NOT_ENOUGH + ". " + GithubClient.safeMessage(e);
+            }
+            final String shown = text;
+            runOnUiThread(() -> {
+                if (isFinishing() || epoch != detailEpoch) return;
+                status.setText(shown);
+            });
+        }, "gitteller-detail").start();
     }
     private JSONObject at(String field){
         if(current==null)return null;JSONArray list=current.optJSONArray(field);if(list==null)return null;
@@ -235,6 +274,10 @@ public final class SectionActivity extends Activity {
         note("Источник",(current.optBoolean("restoredFromBackup",false)?"Импортированный JSON, не свежий запрос GitHub.":"GitHub API, только чтение.")+"\n\nРепозиторий: "+repo);
         note("Когда получены сведения",DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(new Date(current.optLong("capturedAt",0))));
         note("Полнота списка веток",current.optBoolean("branchesComplete",false)?"Ветки загружены полностью по данным запроса.":"Не подтверждена: часть веток может отсутствовать.");
+        note("Полнота задач", current.optBoolean("issuesComplete", false)
+                ? "Загружены все страницы списка задач." : "Список задач загружен не полностью или недоступен.");
+        note("Полнота предложений изменений", current.optBoolean("pullsComplete", false)
+                ? "Загружены все страницы запросов изменений." : "Запросы изменений загружены не полностью или недоступны.");
         note("Ограничение истории", "Загружаются последние записи только основной ветки. GitTeller не анализирует все коммиты других веток.");
         JSONArray warnings=current.optJSONArray("warnings");
         if(warnings==null||warnings.length()==0)note("Ошибки загрузки","Во время последнего получения снимка ошибок не зарегистрировано. Это не означает, что вся разработка проверена.");
@@ -291,7 +334,7 @@ public final class SectionActivity extends Activity {
     }
     private void requestData(String action){setResult(RESULT_OK,new Intent().putExtra("action",action));finish();}
     private void about(){
-        note("GitTeller 1.0.5", "Объясняет историю GitHub человеку без разработки. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.6", "Объясняет историю GitHub человеку без разработки. Это не коммерческий релиз и не проверка готовности программы.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Приватные токены сохраняются в Android Keystore и не включаются в JSON-архив.");
         note("Ограничения", "Не проверяет фактическую работу кода на телефоне. Без отдельного источника подтверждения готовность проекта остаётся неизвестной.");
     }

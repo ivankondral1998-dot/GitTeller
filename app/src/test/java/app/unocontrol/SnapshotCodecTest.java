@@ -16,6 +16,8 @@ public class SnapshotCodecTest {
         s.put("capturedAt", 10);
         s.put("defaultBranch", "main");
         s.put("branchesComplete", true);
+        s.put("issuesComplete", true);
+        s.put("pullsComplete", false);
         JSONArray branches = new JSONArray();
         branches.put(new JSONObject().put("name", "main").put("sha", SHA).put("token", "nope"));
         s.put("branches", branches);
@@ -32,6 +34,8 @@ public class SnapshotCodecTest {
         assertFalse(clean.toString().contains("secret note"));
         assertEquals(SHA, clean.getJSONArray("branches").getJSONObject(0).getString("sha"));
         assertEquals("open", clean.getJSONArray("issues").getJSONObject(0).getString("state"));
+        assertTrue(clean.getBoolean("issuesComplete"));
+        assertFalse(clean.getBoolean("pullsComplete"));
     }
 
     @Test public void badShaRejected() throws Exception {

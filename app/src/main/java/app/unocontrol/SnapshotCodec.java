@@ -29,6 +29,9 @@ final class SnapshotCodec {
         out.put("capturedAt", raw.optLong("capturedAt", 0));
         out.put("defaultBranch", raw.optString("defaultBranch"));
         out.put("branchesComplete", raw.optBoolean("branchesComplete", false));
+        // Missing fields in older archives mean unknown coverage, not an empty completed list.
+        out.put("issuesComplete", raw.optBoolean("issuesComplete", false));
+        out.put("pullsComplete", raw.optBoolean("pullsComplete", false));
         out.put("restoredFromBackup", raw.optBoolean("restoredFromBackup", false));
         JSONArray branches = new JSONArray();
         JSONArray source = raw.optJSONArray("branches");

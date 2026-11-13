@@ -1,13 +1,11 @@
-# GitTeller 1.0.5
+# GitTeller 1.0.6
 
-Нативное Android-приложение. Объясняет снимок GitHub по-русски и не выдаёт коммит за готовую функцию. Это не коммерческий релиз.
+Нативное Android-приложение. Не коммерческий релиз.
 
-Сборка: JDK 17, Gradle 8.9, SDK 35.
+Если на устройстве уже стоит debug-сборка 1.0.5 с той же подписью, 1.0.6 ставится поверх, без удаления данных. Если система откажется обновлять, не очищайте приложение: на телефоне может быть токен.
 
 ```bash
-gradle --no-daemon :app:testDebugUnitTest
 gradle --no-daemon :app:assembleDebug
 ```
 
-Текущие результаты: `AUDIT_RESULTS.md`, `TEST_RESULTS.md`, `REMAINING.md`.
-Старые `AUDIT_VERIFIED.md` и `TESTS_EXECUTED.md`, если остались в дереве, относятся к предыдущим версиям.
+`:app:testDebugUnitTest` в этой среде падает на Test Executor. См. `TEST_RESULTS.md`. Не подменяйте это прямым JUnitCore.

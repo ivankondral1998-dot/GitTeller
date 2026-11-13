@@ -49,11 +49,27 @@ final class GithubClient {
         try { commits = jsonArray(get(root + "/commits?sha=" + encodePathPart(branch) + "&per_page=12")); }
         catch (Exception e) { commits = new JSONArray(); warnings.add("История коммитов не загружена: " + safeMessage(e)); }
         JSONArray issues;
-        try { issues = pages(root + "/issues?state=all&per_page=100", 4, warnings, "задачи"); }
-        catch (Exception e) { issues = new JSONArray(); warnings.add("Задачи недоступны: " + safeMessage(e)); }
+        boolean issuesComplete;
+        try {
+            int warningsBefore = warnings.size();
+            issues = pages(root + "/issues?state=all&per_page=100", 4, warnings, "задачи");
+            issuesComplete = warnings.size() == warningsBefore;
+        } catch (Exception e) {
+            issues = new JSONArray();
+            issuesComplete = false;
+            warnings.add("Задачи недоступны: " + safeMessage(e));
+        }
         JSONArray pulls;
-        try { pulls = pages(root + "/pulls?state=all&per_page=100", 4, warnings, "запросы изменений"); }
-        catch (Exception e) { pulls = new JSONArray(); warnings.add("Запросы изменений недоступны: " + safeMessage(e)); }
+        boolean pullsComplete;
+        try {
+            int warningsBefore = warnings.size();
+            pulls = pages(root + "/pulls?state=all&per_page=100", 4, warnings, "запросы изменений");
+            pullsComplete = warnings.size() == warningsBefore;
+        } catch (Exception e) {
+            pulls = new JSONArray();
+            pullsComplete = false;
+            warnings.add("Запросы изменений недоступны: " + safeMessage(e));
+        }
 
         JSONObject out = new JSONObject();
         out.put("repo", actual).put("defaultBranch", branch)
@@ -62,7 +78,9 @@ final class GithubClient {
                 .put("commits", slimCommits(commits))
                 .put("issues", slimIssues(issues))
                 .put("pulls", slimIssues(pulls))
-                .put("branchesComplete", branchComplete);
+                .put("branchesComplete", branchComplete)
+                .put("issuesComplete", issuesComplete)
+                .put("pullsComplete", pullsComplete);
         JSONArray warn = new JSONArray();
         for (String w : warnings) warn.put(w);
         out.put("warnings", warn);
@@ -157,7 +175,7 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "GitTeller/1.0.5");
+        c.setRequestProperty("User-Agent", "GitTeller/1.0.6");
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         inflight = c;
         try {
@@ -179,6 +197,143 @@ final class GithubClient {
             if (inflight == c) inflight = null;
             c.disconnect();
         }
+    }
+
+    static final class Extra {
+        final String text;
+        Extra(String text) { this.text = text; }
+    }
+
+    Extra readIssue(String repo, int number) throws Exception {
+        JSONObject issue = jsonObject(get(root(repo) + "/issues/" + number));
+        return formatIssue(issue);
+    }
+
+    Extra readPull(String repo, int number) throws Exception {
+        String base = root(repo) + "/pulls/" + number;
+        JSONObject pull = jsonObject(get(base));
+        JSONArray files = new JSONArray();
+        boolean filesCut = false;
+        String filesNote = null;
+        try {
+            Response page = get(base + "/files?per_page=30");
+            files = jsonArray(page);
+            filesCut = nextLink(page.link) != null;
+        } catch (Exception e) {
+            filesNote = HumanReport.NOT_ENOUGH + ": список файлов не прочитан (" + safeMessage(e) + ").";
+        }
+        String checks = HumanReport.NOT_ENOUGH + ": проверки не загружены.";
+        String sha = pull.optJSONObject("head") == null ? "" : pull.optJSONObject("head").optString("sha");
+        if (sha.matches("[0-9a-fA-F]{40}")) {
+            try { checks = formatChecks(jsonObject(get(root(repo) + "/commits/" + sha + "/check-runs?per_page=20"))); }
+            catch (Exception e) { checks = HumanReport.NOT_ENOUGH + ": проверки не прочитаны (" + safeMessage(e) + ")."; }
+        }
+        return formatPull(pull, files, filesCut, filesNote, checks);
+    }
+
+    Extra readCommit(String repo, String sha) throws Exception {
+        if (sha == null || !sha.matches("[0-9a-fA-F]{40}"))
+            throw new IllegalArgumentException("Нет полного SHA для запроса файлов.");
+        JSONObject commit = jsonObject(get(root(repo) + "/commits/" + sha));
+        String checks;
+        try { checks = formatChecks(jsonObject(get(root(repo) + "/commits/" + sha + "/check-runs?per_page=20"))); }
+        catch (Exception e) { checks = HumanReport.NOT_ENOUGH + ": проверки не прочитаны (" + safeMessage(e) + ")."; }
+        return formatCommit(commit, checks);
+    }
+
+    private static String root(String repo) {
+        if (repo == null || !repo.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || repo.contains(".."))
+            throw new IllegalArgumentException("Репозиторий укажите в формате владелец/проект.");
+        return "https://api.github.com/repos/" + repo;
+    }
+
+    static Extra formatIssue(JSONObject issue) {
+        StringBuilder b = new StringBuilder();
+        String body = issue == null ? "" : issue.optString("body").trim();
+        b.append(body.isEmpty() ? "Описания в GitHub нет." : clip(body)).append("\n");
+        b.append(labels(issue)).append("\n");
+        b.append(HumanReport.NO_CHECK).append(". Текст записи не доказывает, что работа выполнена.");
+        return new Extra(b.toString());
+    }
+
+    static Extra formatPull(JSONObject pull, JSONArray files, boolean filesCut, String filesNote, String checks) {
+        StringBuilder b = new StringBuilder();
+        boolean merged = pull != null && pull.optBoolean("merged", false);
+        String mergedAt = pull == null ? "" : pull.optString("merged_at");
+        if (merged) b.append("GitHub отмечает, что предложение слито");
+        else b.append("GitHub не сообщает, что предложение слито");
+        if (mergedAt != null && !mergedAt.isEmpty() && !"null".equals(mergedAt)) b.append(" (").append(mergedAt).append(")");
+        b.append(". Закрытие без этого признака не означает merge.\n");
+        String body = pull == null ? "" : pull.optString("body").trim();
+        b.append(body.isEmpty() ? "Описания нет." : clip(body)).append("\n");
+        if (filesNote != null) b.append(filesNote).append("\n");
+        else b.append(fileNames(files, filesCut)).append("\n");
+        b.append(checks == null ? HumanReport.NOT_ENOUGH + ": проверки не загружены." : checks).append("\n");
+        b.append(HumanReport.NO_CHECK).append(". Даже успешная отметка GitHub не заменяет проверку на устройстве.");
+        return new Extra(b.toString());
+    }
+
+    static Extra formatCommit(JSONObject commit, String checks) {
+        StringBuilder b = new StringBuilder();
+        JSONArray files = commit == null ? null : commit.optJSONArray("files");
+        b.append(fileNames(files, false)).append("\n");
+        b.append(checks == null ? HumanReport.NOT_ENOUGH + ": проверки не загружены." : checks).append("\n");
+        b.append(HumanReport.NO_CHECK).append(". Список файлов не объясняет, работает ли программа.");
+        return new Extra(b.toString());
+    }
+
+    static String formatChecks(JSONObject runs) {
+        JSONArray list = runs == null ? null : runs.optJSONArray("check_runs");
+        int total = runs == null ? 0 : runs.optInt("total_count", list == null ? 0 : list.length());
+        if (list == null || list.length() == 0) return "Проверок GitHub в ответе нет. " + HumanReport.NO_CHECK + ".";
+        int ok = 0, bad = 0, other = 0;
+        for (int i = 0; i < list.length(); i++) {
+            JSONObject row = list.optJSONObject(i);
+            String conclusion = row == null ? "" : row.optString("conclusion");
+            if ("success".equals(conclusion) || "neutral".equals(conclusion) || "skipped".equals(conclusion)) ok++;
+            else if ("failure".equals(conclusion) || "cancelled".equals(conclusion) || "timed_out".equals(conclusion) || "action_required".equals(conclusion)) bad++;
+            else other++;
+        }
+        String text = "В загруженной части проверок: " + ok + " без замечаний, " + bad + " с ошибкой, " + other + " без итога.";
+        if (total > list.length()) text += " Список обрезан.";
+        text += " Это отметки GitHub, не проверка на телефоне.";
+        return text;
+    }
+
+    private static String labels(JSONObject issue) {
+        JSONArray labels = issue == null ? null : issue.optJSONArray("labels");
+        if (labels == null || labels.length() == 0) return "Меток нет.";
+        StringBuilder b = new StringBuilder("Метки: ");
+        for (int i = 0; i < Math.min(labels.length(), 8); i++) {
+            JSONObject row = labels.optJSONObject(i);
+            String name = row == null ? labels.optString(i) : row.optString("name");
+            if (i > 0) b.append(", ");
+            b.append(name.isEmpty() ? "без имени" : clip(name, 40));
+        }
+        return b.toString();
+    }
+
+    private static String fileNames(JSONArray files, boolean cut) {
+        if (files == null) return HumanReport.NOT_ENOUGH + ": файлы не загружены.";
+        if (files.length() == 0) return "В ответе GitHub нет изменённых файлов.";
+        StringBuilder b = new StringBuilder("Файлы в ответе: ");
+        int n = Math.min(files.length(), 12);
+        for (int i = 0; i < n; i++) {
+            JSONObject row = files.optJSONObject(i);
+            String name = row == null ? "" : row.optString("filename");
+            String status = row == null ? "" : row.optString("status");
+            if (i > 0) b.append("; ");
+            b.append(name.isEmpty() ? "без имени" : clip(name, 80));
+            if (!status.isEmpty()) b.append(" (").append(status).append(")");
+        }
+        if (files.length() > n || cut) b.append("; список неполный");
+        return b.toString();
+    }
+
+    private static String clip(String value) { return clip(value, 900); }
+    private static String clip(String value, int max) {
+        String clean = value.replace('\n', ' ').trim();
+        return clean.length() <= max ? clean : clean.substring(0, max) + "…";
     }
 
     static String errorForStatus(int status, String rateRemaining) {

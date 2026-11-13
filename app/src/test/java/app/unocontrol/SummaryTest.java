@@ -14,6 +14,7 @@ public class SummaryTest {
             branches.put(new JSONObject().put("name",pairs[i]).put("sha",pairs[i+1]));
         return s.put("repo","demo/project")
                 .put("branches",branches).put("branchesComplete",complete)
+                .put("issuesComplete",true).put("pullsComplete",true)
                 .put("warnings",new JSONArray());
     }
 
@@ -54,8 +55,30 @@ public class SummaryTest {
         Summary s = Summary.of(now, old);
         assertEquals("SHA веток не изменились", s.heading);
         assertTrue(s.description.contains("1 задач"));
+        assertEquals(1,s.issueChanges);
+        assertTrue(HumanReport.homeTitle(now,old,s).contains("статусы задач"));
         assertTrue(s.plain.contains("не доказательство") || s.attention.contains("не доказательство"));
         assertFalse(s.plain.contains("PASS"));
+    }
+    @Test public void partialIssueListMustNotAssertStateTransition() throws Exception {
+        JSONObject now=snapshot(true,"main","aaa").put("issuesComplete",false);
+        JSONObject old=snapshot(true,"main","aaa");
+        now.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","closed")));
+        old.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","open")));
+        Summary s=Summary.of(now,old);
+        assertEquals(0,s.issueChanges);
+        assertTrue(s.attention.contains("не удалось сравнить полностью"));
+        assertTrue(HumanReport.homeTitle(now,old,s).contains("недоступна"));
+        assertFalse(HumanReport.homeTitle(now,old,s).contains("сдвигов"));
+    }
+    @Test public void oldSnapshotWithoutCoverageFlagMustNotAssertStateTransition() throws Exception {
+        JSONObject now=snapshot(true,"main","aaa");
+        JSONObject old=snapshot(true,"main","aaa");
+        old.remove("issuesComplete");
+        now.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","closed")));
+        old.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","open")));
+        Summary s=Summary.of(now,old);
+        assertEquals(0,s.issueChanges);
     }
     @Test public void warningsLimitTheClaim() throws Exception {
         JSONObject now = snapshot(true, "main", "aaa");

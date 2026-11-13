@@ -6,7 +6,8 @@ public class Smoke {
   static JSONObject snapshot(boolean complete,String... pairs){
     JSONObject s=new JSONObject();JSONArray a=new JSONArray();
     for(int i=0;i<pairs.length;i+=2)a.put(new JSONObject().put("name",pairs[i]).put("sha",pairs[i+1]));
-    return s.put("repo","demo/test").put("branches",a).put("branchesComplete",complete).put("warnings",new JSONArray());
+    return s.put("repo","demo/test").put("branches",a).put("branchesComplete",complete)
+        .put("issuesComplete",true).put("pullsComplete",true).put("warnings",new JSONArray());
   }
   public static void main(String[] args){
     check(Summary.of(null,null).heading.contains("нет свежей"),"no data");
@@ -40,6 +41,17 @@ public class Smoke {
     check(HumanReport.branchTopic("main").contains("Основная"),"main branch clear");
     check(HumanReport.state("closed").contains("не проверен"),"closed is not proof of a test");
     check(HumanReport.countState(new JSONArray().put(new JSONObject().put("state","open")),"open")==1,"count open tasks");
+    JSONObject closedTask=snapshot(true,"main","1");
+    JSONObject openTask=snapshot(true,"main","1");
+    closedTask.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","closed")));
+    openTask.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","open")));
+    Summary taskDiff=Summary.of(closedTask,openTask);
+    check(taskDiff.issueChanges==1,"same branches can have changed issue status");
+    check(HumanReport.homeTitle(closedTask,openTask,taskDiff).contains("статусы задач"),"home discloses changed issues");
+    check(HumanReport.homeDescription(closedTask,openTask,taskDiff).contains("не доказывает"),"status change not a passing test");
+    closedTask.put("issuesComplete",false);
+    check(Summary.of(closedTask,openTask).issueChanges==0,"partial issue responses are not proof of status transition");
+    check(HumanReport.homeTitle(closedTask,openTask,Summary.of(closedTask,openTask)).contains("недоступна"),"incomplete issues shown on home");
     System.out.println("PASS: "+passed+" model checks (test doubles for org.json; no Android runtime)");
   }
 }
