@@ -52,6 +52,7 @@ public final class MainActivity extends Activity {
     private int STROKE = Color.rgb(47,63,80);
     private static final int REQUEST_IMPORT = 1;
     private static final int REQUEST_EXPORT = 2;
+    private static final int REQUEST_SECTION = 3;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private SharedPreferences prefs;
@@ -176,66 +177,40 @@ public final class MainActivity extends Activity {
         wrap.addView(head,lp(-1,-2));
         space(wrap,34);
 
-        addLine(wrap,"Состояние проекта",29,TEXT,true,0);
+        addLine(wrap,"Что происходит с проектом",26,TEXT,true,0);
         String shortRepo=repo.length()>43?repo.substring(0,40)+"…":repo;
         addLine(wrap,shortRepo,13,MUTED,false,11);
-        addLine(wrap,accessStatus(),13,MUTED,false,8);
-        space(wrap,18);
+        space(wrap,22);
 
         Summary summary=Summary.of(current,previous);
-        LinearLayout hero=panel(wrap);
-        TextView state=txt(loading?"● ЗАГРУЗКА":"● "+(current==null?"НЕ ПРОВЕРЕНО":
-                current.optBoolean("restoredFromBackup",false)?"СНИМОК ИЗ ФАЙЛА":"ДАННЫЕ GITHUB"),12,
-                loading?WARN:current==null?MUTED:ACCENT,true);
-        hero.addView(state,lp(-1,-2));
-        addLine(hero,summary.heading,20,TEXT,true,16);
-        addLine(hero,summary.plain,16,TEXT,false,10);
-        addLine(hero,summary.description,13,MUTED,false,10);
-        if(current!=null) {
+        boolean stale=false;
+        if(current!=null){
             long seen=current.optLong("capturedAt",0);
-            addLine(hero,"Последняя сверка: "+formatTime(seen),12,MUTED,false,18);
-            if (current.optBoolean("restoredFromBackup",false))
-                addLine(hero,"Данные восстановлены из файла, не сверены заново с GitHub.",12,WARN,false,10);
-            if (seen<=0 || seen>System.currentTimeMillis()+60_000L || System.currentTimeMillis()-seen>6L*60*60*1000)
-                addLine(hero,"⚠ Сохранённые сведения могут быть устаревшими. Обновите данные.",12,WARN,false,10);
+            stale=current.optBoolean("restoredFromBackup",false)
+                    || seen<=0 || seen>System.currentTimeMillis()+60_000L
+                    || System.currentTimeMillis()-seen>6L*60*60*1000;
         }
-        space(wrap,6);
+        LinearLayout hero=panel(wrap);
+        String title = loading ? "Идёт чтение GitHub" : HumanReport.homeTitle(current,previous,summary);
+        String body = loading ? "Подождите. Старые сведения проекта пока не меняются."
+                : HumanReport.homeDescription(current,previous,summary);
+        addLine(hero,title,22,TEXT,true,0);
+        addLine(hero,body,16,TEXT,false,12);
 
+        space(wrap,16);
+        boolean needRefresh = loading || current==null || stale;
         refresh=new Button(this);
-        refresh.setText(loading?"Обновление…":"↻   Обновить с GitHub");
+        refresh.setText(loading?"Обновление…" : needRefresh?"Обновить с GitHub":"Разобрать простыми словами");
         refresh.setAllCaps(false);
-        refresh.setTextSize(15);
+        refresh.setTextSize(16);
         refresh.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        refresh.setTextColor(BG);
-        refresh.setBackground(shape(ACCENT,15,0));
+        refresh.setTextColor(needRefresh?BG:TEXT);
+        refresh.setBackground(shape(needRefresh?ACCENT:PANEL_2,15,needRefresh?0:STROKE));
         refresh.setEnabled(!loading);
-        wrap.addView(refresh,lp(-1,54));
-        refresh.setOnClickListener(v->sync());
+        wrap.addView(refresh,lp(-1,56));
+        refresh.setOnClickListener(v->{ if(needRefresh) sync(); else openPage("overview"); });
         space(wrap,14);
-        Button details=new Button(this);
-        details.setText("Подробнее о проекте");
-        details.setAllCaps(false);
-        details.setTextSize(15);
-        details.setTextColor(TEXT);
-        details.setBackground(shape(PANEL_2,15,STROKE));
-        wrap.addView(details,lp(-1,52));
-        details.setOnClickListener(v->showReport());
-        if (current != null) {
-            JSONArray commits = current.optJSONArray("commits");
-            if (commits != null && commits.length() > 0 && commits.optJSONObject(0) != null) {
-                space(wrap, 8);
-                LinearLayout claim = panel(wrap);
-                addLine(claim, "Последнее заявление разработчика", 12, ACCENT, true, 0);
-                addLine(claim, CommitExplainer.explain(commits.optJSONObject(0).optString("message")), 14, TEXT, false, 8);
-                addLine(claim, "Это пересказ заголовка коммита, не проверка работы программы.", 12, MUTED, false, 8);
-            }
-        }
-        space(wrap,18);
-
-        addLine(wrap,"Требует внимания",16,TEXT,true,0);
-        addLine(wrap,summary.attention,14,MUTED,false,11);
-        space(wrap,10);
-        TextView footer=txt("Чтение GitHub · без изменений в репозитории",12,MUTED,false);
+        TextView footer=txt("Чтение GitHub. Это не проверка готовности программы.",12,MUTED,false);
         footer.setGravity(Gravity.CENTER);
         wrap.addView(footer,lp(-1,-2));
     }
@@ -245,31 +220,43 @@ public final class MainActivity extends Activity {
         return DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(new Date(millis));
     }
 
+    private void openPage(String page) {
+        Intent intent = new Intent(this, SectionActivity.class);
+        intent.putExtra("page", page);
+        startActivityForResult(intent, REQUEST_SECTION);
+    }
+
     private void showMenu(View anchor) {
-        PopupMenu pm=new PopupMenu(this,anchor);
-        pm.getMenu().add(0,1,0,"Репозиторий и доступ");
-        pm.getMenu().add(0,2,1,"Ветки проекта");
-        pm.getMenu().add(0,3,2,"Последние коммиты");
-        pm.getMenu().add(0,4,3,"Задачи и запросы изменений");
-        pm.getMenu().add(0,5,4,"Ограничения сверки");
-        pm.getMenu().add(0,6,5,"Импорт JSON-архива");
-        pm.getMenu().add(0,7,6,"О приложении");
-        pm.getMenu().add(0,8,7,"Экспорт данных JSON");
-        pm.getMenu().add(0,9,8,"Подробный отчёт");
-        pm.setOnMenuItemClickListener(item->{
-            switch(item.getItemId()) {
-                case 1: setupDialog();return true;
-                case 2: listDialog("Ветки проекта", "branches", true);return true;
-                case 3: listDialog("Последние коммиты", "commits", false);return true;
-                case 4: detailsDialog();return true;
-                case 5: warningsDialog();return true;
-                case 6: importLegacy();return true;
-                case 7: showInfo();return true;
-                case 8: exportBackup();return true;
-                case 9: showReport();return true;
-            }return false;
+        PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add(0,1,0,"Разделы проекта");
+        menu.getMenu().add(0,5,1,"Обновить с GitHub");
+        menu.getMenu().add(0,2,2,"Подключение и доступ");
+        menu.getMenu().add(0,3,3,"Данные и резервные копии");
+        menu.getMenu().add(0,4,4,"О приложении");
+        menu.setOnMenuItemClickListener(item -> {
+            switch (item.getItemId()) {
+                case 1: openPage("index"); return true;
+                case 5: sync(); return true;
+                case 2: openPage("access"); return true;
+                case 3: openPage("data"); return true;
+                case 4: openPage("about"); return true;
+            }
+            return false;
         });
-        pm.show();
+        menu.show();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (prefs == null) return;
+        String selected = prefs.getString("repo", DEFAULT_REPO);
+        if (!selected.equals(repo)) {
+            abandonSync();
+            repo = selected;
+            current = parse(prefs.getString(key(repo,"current"),""));
+            previous = parse(prefs.getString(key(repo,"previous"),""));
+            draw();
+        }
     }
 
     private String accessStatus() {
@@ -287,76 +274,6 @@ public final class MainActivity extends Activity {
         GithubClient client = inflight;
         if (client != null) client.cancel();
         loading = false;
-    }
-
-    private void setupDialog(){
-        LinearLayout form=vertical();form.setPadding(dp(20),dp(8),dp(20),dp(2));
-        addLine(form,"GitHub-адрес, например owner/repo",13,MUTED,false,0);
-        EditText repoField=new EditText(this);
-        repoField.setSingleLine(true);repoField.setText(repo);
-        repoField.setSelectAllOnFocus(true);
-        repoField.setTextColor(TEXT);repoField.setHintTextColor(MUTED);
-        form.addView(repoField,lp(-1,-2));
-        boolean saved = false;
-        try { saved = vault.hasToken(repo); } catch (RuntimeException ignored) {}
-        addLine(form, saved
-                ? "Токен сохранён на устройстве. Поле пустое и не показывает секрет."
-                : "Токен не сохранён. Для публичного проекта он не нужен.", 13, saved ? ACCENT : MUTED, false, 18);
-        EditText tokenField=new EditText(this);
-        tokenField.setHint("Вставьте токен, чтобы сохранить или заменить");
-        tokenField.setText("");
-        tokenField.setTextColor(TEXT);tokenField.setHintTextColor(MUTED);
-        tokenField.setSingleLine(true);
-        tokenField.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        form.addView(tokenField,lp(-1,-2));
-        new AlertDialog.Builder(this).setTitle("Репозиторий и доступ")
-                .setView(form)
-                .setNegativeButton("Отмена",(d,w)->tokenField.setText(""))
-                .setNeutralButton("Удалить токен",(d,w)->{
-                    tokenField.setText("");
-                    String target = repo;
-                    String typedRepo = repoField.getText().toString().trim();
-                    if (typedRepo.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") && !typedRepo.contains(".."))
-                        target = typedRepo;
-                    try {
-                        vault.delete(target);
-                        if (target.equalsIgnoreCase(repo)) {
-                            abandonSync();
-                            draw();
-                        }
-                        toast("Токен удалён с устройства");
-                    } catch (Exception e) {
-                        toast(e.getMessage()==null?"Не удалось удалить токен":e.getMessage());
-                    }
-                })
-                .setPositiveButton("Сохранить защищённо",(d,w)->{
-                    String r=repoField.getText().toString().trim();
-                    if(!r.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}")||r.contains("..")) {
-                        toast("Нужен адрес вида owner/repo");return;
-                    }
-                    String typed=tokenField.getText().toString().trim();
-                    tokenField.setText("");
-                    if(!repo.equalsIgnoreCase(r)){
-                        abandonSync();
-                        repo=r;
-                        current=parse(prefs.getString(key(repo,"current"),""));
-                        previous=parse(prefs.getString(key(repo,"previous"),""));
-                        prefs.edit().putString("repo",repo).apply();
-                    }
-                    if(typed.isEmpty()){
-                        draw();
-                        toast("Проект выбран. Пустое поле не стирает сохранённый доступ.");
-                        return;
-                    }
-                    try {
-                        vault.save(repo, typed);
-                        typed = "";
-                        draw();
-                        toast("Доступ сохранён средствами Android");
-                    } catch (Exception e) {
-                        toast(e.getMessage()==null?"Не удалось сохранить доступ":e.getMessage());
-                    }
-                }).show();
     }
 
     private void sync(){
@@ -403,136 +320,6 @@ public final class MainActivity extends Activity {
                 if(inflight==client) inflight=null;
             }
         });
-    }
-
-    private void listDialog(String title,String name,boolean branches){
-        if(current==null){toast("Сначала обновите данные GitHub");return;}
-        JSONArray data=current.optJSONArray(name);
-        if(data==null || data.length()==0){toast("Данных в разделе пока нет");return;}
-        int n=Math.min(data.length(),120);
-        String[] items=new String[n];
-        for(int i=0;i<n;i++) {
-            JSONObject x=data.optJSONObject(i);
-            if(x==null){items[i]="Недоступная запись";continue;}
-            String namePart=branches?x.optString("name"):x.optString("message");
-            String hash=x.optString("sha","");
-            if(namePart.length()>145)namePart=namePart.substring(0,142)+"…";
-            items[i]=namePart+"\n"+(hash.length()>10?hash.substring(0,10):hash);
-        }
-        new AlertDialog.Builder(this).setTitle(title+(data.length()>120?" · первые 120":""))
-                .setItems(items,(d,which)->{
-                    JSONObject x=data.optJSONObject(which);
-                    if(x==null)return;
-                    String sha=x.optString("sha","");
-                    String label=branches?x.optString("name"):x.optString("message");
-                    new AlertDialog.Builder(this).setTitle(label)
-                        .setMessage((branches ? "Ветка GitHub.\n\n" : CommitExplainer.explain(x.optString("message")) + "\n\n") +
-                                "Контрольный SHA:\n"+sha)
-                        .setPositiveButton("Копировать SHA",(dd,w)->copy(sha))
-                        .setNegativeButton("Назад",(dd,w)->listDialog(title,name,branches)).show();
-                })
-                .setNegativeButton("Закрыть",(d,w)->{}).show();
-    }
-    private void detailsDialog(){
-        if(current==null){toast("Сначала обновите данные GitHub");return;}
-        JSONArray issues=current.optJSONArray("issues"),pulls=current.optJSONArray("pulls");
-        StringBuilder b=new StringBuilder();
-        b.append("Задачи: ").append(issues==null?"нет данных":issues.length()).append(" записей.\n");
-        b.append("Запросы изменений: ").append(pulls==null?"нет данных":pulls.length()).append(" записей.\n\n");
-        b.append("Закрытые задачи и объединённые изменения не означают, что тесты пройдены.\n");
-        if(issues!=null)for(int i=0;i<Math.min(issues.length(),8);i++){
-            JSONObject x=issues.optJSONObject(i);
-            if(x!=null)b.append("\n#").append(x.optInt("number")).append(" ")
-                    .append(x.optString("title")).append(" [").append(x.optString("state")).append("]");
-        }
-        new AlertDialog.Builder(this).setTitle("Задачи и изменения").setMessage(b.toString())
-                .setPositiveButton("Закрыть",(d,w)->{}).show();
-    }
-    private void warningsDialog(){
-        if(current==null){toast("Новых данных нет");return;}
-        JSONArray warnings=current.optJSONArray("warnings");
-        StringBuilder msg=new StringBuilder("GitHub API · только чтение.\n");
-        msg.append("Ветки: ").append(current.optBoolean("branchesComplete")?"список загружен целиком":"список может быть неполным");
-        if(warnings==null || warnings.length()==0)msg.append("\n\nОшибок загрузки не записано.");
-        else for(int i=0;i<warnings.length();i++)msg.append("\n\n• ").append(warnings.optString(i));
-        msg.append("\n\nСинхронизация не проверяет тесты, сборки или качество кода.");
-        new AlertDialog.Builder(this).setTitle("Точность данных").setMessage(msg.toString())
-                .setPositiveButton("Закрыть",(d,w)->{}).show();
-    }
-    private void showReport(){
-        Summary sum=Summary.of(current,previous);
-        StringBuilder report=new StringBuilder(sum.heading).append("\n\n")
-                .append(sum.description).append("\n\n")
-                .append("На что обратить внимание: ").append(sum.attention).append("\n");
-        if(current!=null){
-            report.append("\nИсточник: ")
-                    .append(current.optBoolean("restoredFromBackup",false)?"импортированный JSON, сеть не проверена":"GitHub API")
-                    .append(", ").append(repo)
-                    .append("\nСверка: ").append(formatTime(current.optLong("capturedAt")));
-            JSONArray commits=current.optJSONArray("commits");
-            if(commits!=null&&commits.length()>0){
-                report.append("\n\nПоследние заявления разработчиков:");
-                for(int i=0;i<Math.min(6,commits.length());i++){
-                    JSONObject c=commits.optJSONObject(i);
-                    if(c!=null)report.append("\n• ").append(CommitExplainer.explain(c.optString("message")));
-                }
-            }
-            JSONArray branches=current.optJSONArray("branches");
-            if(branches!=null)report.append("\n\nПолучено веток: ").append(branches.length());
-            if(!current.optBoolean("branchesComplete",false))report.append(" (список неполный)");
-            if(previous!=null){
-                appendStateChanges(report,"задач",previous.optJSONArray("issues"),current.optJSONArray("issues"));
-                appendStateChanges(report,"запросов изменений",previous.optJSONArray("pulls"),current.optJSONArray("pulls"));
-                java.util.Map<String,String> before=branchHeads(previous.optJSONArray("branches"));
-                java.util.Map<String,String> after=branchHeads(branches);
-                report.append("\n\nИзменения SHA относительно прошлого снимка:");
-                int shown=0;
-                for(java.util.Map.Entry<String,String> entry:after.entrySet()){
-                    String old=before.get(entry.getKey());
-                    if(old==null || !old.equals(entry.getValue())){
-                        report.append("\n• ").append(entry.getKey())
-                                .append(old==null?" (новая ветка)":" (SHA изменён)");
-                        if(++shown>=20){report.append("\n… остальные изменения скрыты");break;}
-                    }
-                }
-                boolean complete=current.optBoolean("branchesComplete",false) && previous.optBoolean("branchesComplete",false);
-                if(complete)for(String name:before.keySet())if(!after.containsKey(name)&&shown<20){
-                    report.append("\n• ").append(name).append(" (больше не обнаружена)");shown++;
-                }
-                if(!complete)report.append("\nВнимание: не все списки полны, исчезновение веток не оценивается.");
-                if(shown==0)report.append("\nИзменений не обнаружено в доступной выборке.");
-            }
-        }
-        report.append("\n\nЗаявление разработчика и наличие коммита не доказывают, что функция работает.");
-        new AlertDialog.Builder(this).setTitle("Подробный отчёт")
-                .setMessage(report.toString()).setPositiveButton("Закрыть",(d,w)->{}).show();
-    }
-
-    private static void appendStateChanges(StringBuilder report,String what,JSONArray old,JSONArray now){
-        if(old==null || now==null)return;
-        java.util.Map<Integer,String> states=new java.util.HashMap<>();
-        for(int i=0;i<old.length();i++){
-            JSONObject v=old.optJSONObject(i);
-            if(v!=null)states.put(v.optInt("number"),v.optString("state"));
-        }
-        int changed=0;
-        for(int i=0;i<now.length();i++){
-            JSONObject v=now.optJSONObject(i);
-            if(v!=null){String prior=states.get(v.optInt("number"));
-                if(prior!=null&&!prior.equals(v.optString("state")))changed++;}
-        }
-        if(changed>0)report.append("\nСтатус изменён у ").append(changed).append(" ").append(what)
-                .append(" (из доступной выборки; не доказательство работы ПО).");
-    }
-
-    private static java.util.Map<String,String> branchHeads(JSONArray list){
-        java.util.Map<String,String> m=new java.util.TreeMap<>();
-        if(list==null)return m;
-        for(int i=0;i<list.length();i++){
-            JSONObject b=list.optJSONObject(i);
-            if(b!=null)m.put(b.optString("name"),b.optString("sha"));
-        }
-        return m;
     }
 
     private void exportBackup(){
@@ -589,15 +376,6 @@ public final class MainActivity extends Activity {
                 }).show();
     }
 
-    private void showInfo(){
-        new AlertDialog.Builder(this).setTitle("GitTeller 1.0.4-dev")
-                .setMessage("Нативное Android-приложение без WebView.\n\n"+
-                        "Читает открытые данные GitHub бесплатно. Для приватного проекта токен только на чтение " +
-                        "хранится в Android Keystore и не пишется в резервную копию.\n\n"+
-                        "Это защита средствами Android, не обещание неуязвимости.\n\n"+
-                        "Ничего не меняет в GitHub. Не проверяет фактическую готовность ПО.")
-                .setPositiveButton("Закрыть",(d,w)->{}).show();
-    }
     private void importLegacy(){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -607,6 +385,24 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==REQUEST_SECTION) {
+            if(resultCode==RESULT_OK && data!=null) {
+                String action=data.getStringExtra("action");
+                if("import".equals(action)) {importLegacy();return;}
+                if("export".equals(action)) {exportBackup();return;}
+                if("changed".equals(action)) {
+                    abandonSync();
+                    String selected=prefs.getString("repo",DEFAULT_REPO);
+                    if(!selected.equals(repo)) {
+                        repo=selected;
+                        current=parse(prefs.getString(key(repo,"current"),""));
+                        previous=parse(prefs.getString(key(repo,"previous"),""));
+                    }
+                    draw();return;
+                }
+            }
+            return;
+        }
         if(resultCode!=RESULT_OK || data==null || data.getData()==null)return;
         if(requestCode==REQUEST_EXPORT){writeBackup(data.getData());return;}
         if(requestCode!=REQUEST_IMPORT)return;
@@ -636,10 +432,6 @@ public final class MainActivity extends Activity {
                     .setMessage(GithubClient.safeMessage(e))
                     .setPositiveButton("Закрыть",(d,w)->{}).show();
         }
-    }
-    private void copy(String s){
-        ((ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("SHA",s));
-        toast("SHA скопирован");
     }
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
     @Override protected void onDestroy(){super.onDestroy();abandonSync();worker.shutdownNow();}

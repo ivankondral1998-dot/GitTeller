@@ -1,74 +1,40 @@
-# AUDIT_RESULTS — GitTeller 1.0.4-dev
+# GitTeller 1.0.5 — результат
 
-Дата среды: 2026-11-13. Это отчёт сборки, не сертификат коммерческой готовности.
+Не коммерческий релиз. Samsung Galaxy A52: **NOT_DEVICE_VERIFIED**.
 
-## BASE
+## База
 
-- Входной архив не менялся: `checkpoint/GitTeller_v1.0.3_AUDIT_PATCH_SOURCE_UNCHANGED.zip`
-- SHA-256: `c98942799485422b1b4d3b018dbc75bddc239a5263b0dac340515fcb0f352954`
-- UNO, ветка `main` и GitHub Actions не трогались.
+- Входной пакет `GitTeller_1.0.5_UX_NATIVE_SOURCE_FOR_GROK.zip`, SHA-256 `5cacaa7e9bf61f5cb0199678f4c7d95ed8ae9dd6a932d0576b4c93a3f12dc498`. Это исходники без APK.
+- Неизменённый checkpoint `checkpoint/1.0.4_INDEPENDENT_AUDIT_UNCHANGED.zip`, SHA-256 `2da2b238f10e2dd5b6f2541b4d29d732327a4469a69979fbd3e35be634d58a82`.
+- UNO, `main` и GitHub Actions не изменялись. Скриншоты владельца и JSON с метаданными приватного репозитория в поставку не включены.
 
-## RESULT
+## Что изменилось после проверки патча
 
-- `applicationId` `app.gitteller.mobile`
-- launcher `app.gitteller.mobile/app.unocontrol.MainActivity`
-- `versionCode` 18, `versionName` 1.0.4-dev
-- compileSdk/targetSdk 35, minSdk 26
-- debug APK SHA-256: `d38e62b16ca47c0f62686e9cbdb5d56fb5a83269fcbc9ac13c78965bc5090cea`
-- androidTest APK SHA-256: `0ae611b00de54d84c0c93ea2ec77865cd83de1dc2ea7f2877e1b5c2e8c9ae4ca`
-- `aapt dump badging`: только `android.permission.INTERNET`, `allowBackup=false` в манифесте, debuggable, иконки нет
-- В `classes.dex` основного APK нет строк `ghp_`, `github_pat_`, `synthetic-pat-not-real`
-- WebView в исходниках нет (слово встречается только в комментарии и в тексте «без WebView»)
+Патч 1.0.5 уже уводил списки в `SectionActivity`. В нём оставались дефекты, их исправил этот проход:
 
-Отличия от 1.0.3-audit, `diff -rq` по дереву исходников:
+- Главный экран: один статус и одна кнопка. Нет стены веток, SHA и второго призыва.
+- Удалены неиспользуемые `AlertDialog` со списками SHA. Короткие диалоги остались только для ошибки сети, подтверждения удаления токена и импорта.
+- Догадки по чужим именам веток (`train`, `memory`, `gradient` и т.п.) убраны. Неизвестная тема пишется как «Тема по названию не определена». Исходное имя и SHA — только на экране подробностей.
+- Если текст задачи, файлы коммита или проверки не загружены, на экране прямо написано «Недостаточно данных» и «Проверка работоспособности отсутствует». Закрытие не называется merge.
+- Пустое поле токена не затирает запись и не сообщает «подключение сохранено».
 
-- `app/src/main/java/app/unocontrol/TokenVault.java` — новый
-- `app/src/test/java/app/unocontrol/TokenVaultRulesTest.java` — новый, JVM, без Keystore
-- `app/src/androidTest/java/app/unocontrol/TokenVaultDeviceTest.java` — новый
-- `app/src/androidTest/java/app/unocontrol/TokenVaultRestartTest.java` — новый
-- `MainActivity.java` — токен больше не поле Activity; диалог доступа; отмена in-flight
-- `GithubClient.java` — `cancel()`, User-Agent `GitTeller/1.0.4`, `safeMessage` режет bearer / `ghp_` / `github_pat_`
-- `app/build.gradle` — version 18 / 1.0.4-dev, `AndroidJUnitRunner`, androidTest dependencies
+Детальные GET описаний, diff и check-runs **не** добавлены.
 
-## KEYSTORE
+## Сборка
 
-- `AndroidKeyStore`, alias `gitteller.pat.aes.v1`
-- `AES/GCM/NoPadding`, ключ 256, `setRandomizedEncryptionRequired(true)`, tag 128 бит
-- IV 12 байт берётся у `Cipher` при каждом `save`. Повторное использование IV кодом не задаётся
-- AAD: байты строки `gitteller-pat-v1\n` + нормализованный `owner/repo` (нижний регистр)
-- Файл: `noBackupFilesDir/token-vault-v1/<sha256(repo)>.bin`
-- Формат: magic `GTV1` + IV + ciphertext/tag. Запись через `.tmp`, `fsync`, `rename`
-- Пустой ввод бросает `VaultException` «Пустое поле не заменяет сохранённый доступ.» и не вызывает `Cipher`
-- `delete` удаляет только файл этого репозитория
-- Смена репозитория не копирует чужой токен и не переносит снимок другого проекта
-- `KeyPermanentlyInvalidatedException` и `AEADBadTagException` дают короткие русские сообщения. Plaintext fallback нет
-- `SharedPreferences gitteller_v1` хранит снимки, не PAT
-- Экспорт `GITTELLER_V1` идёт через `SnapshotCodec.sanitizeSnapshot`. Ключей token/body/authorization в схеме нет
-- Поле ввода парольное, при открытии пустое. После сохранения текст поля очищается. Java `String` из памяти этим не стирается; такая гарантия не заявляется
-- Биометрия и StrongBox не включались
-- Честный текст в «О приложении»: защита средствами Android, не неуязвимость
+- `1.0.5`, versionCode 20, `app.gitteller.mobile`.
+- Debug APK SHA-256 `9390f6ddd2a4e680a6068c446428b0dbd06266cd6cca7b29914976f8862cfd8f`.
+- Только `INTERNET`, `allowBackup=false`, без WebView.
+- В `classes2.dex` есть строки нового экрана. Строки `Контрольный SHA` и `Обучение модели` отсутствуют. Подстрока `github_pat_` есть только как шаблон скрытия в `safeMessage`, не как токен.
 
-Секреты в этот отчёт не включались. Маркеры тестов — синтетические, не PAT.
+## Критерии
 
-## STATUS
-
-| Проверка | Статус |
+| Критерий | Статус |
 |---|---|
-| Сборка debug + androidTest | PASS |
-| `:app:testDebugUnitTest` последняя попытка, 28 тестов, 0 failures в XML | PASS. В том же логе есть нефатальный `Unexpected type tag 71`. Более ранний прогон (`evidence/gradle-testDebugUnitTest-EARLIER-FAIL.log`) — FAIL, Test Executor |
-| Прямой `JUnitCore` | PASS, 28. Это не замена Gradle, но Gradle в этот раз тоже записал XML |
-| `tests-local/run.sh` | PASS 15 model checks; PARSE OK 13. Это не Android |
-| Keystore round-trip, раздельные репозитории, пустое сохранение, порча файла | PASS на эмуляторе Android 14 x86_64 |
-| Перезапуск процесса: save, `force-stop`, load | PASS на том же эмуляторе |
-| Внешний `run-as` grep по файлам | NOT_RUN. Команда оболочки не выполнила grep; в логе только имена каталогов. Проверка «маркера нет в файле» сделана внутри инструментального теста |
-| Снимок главного экрана | NOT_RUN. `am start` принят, файл снимка 0 байт: хост убил qemu (OOM) |
-| `pm clear` / потеря ключа на устройстве | NOT_RUN по той же причине |
-| Поворот экрана на устройстве | NOT_RUN |
-| Смена репозитория во время сети, на устройстве | NOT_RUN. В коде есть `syncEpoch` и `disconnect`, это не прогон |
-| Приватный репозиторий с настоящим PAT | NOT_RUN. Токен владельца не запрашивался |
-| Samsung A52 | NOT_DEVICE_VERIFIED |
-| Коммерческая готовность | не заявляется |
-
-## NEXT
-
-Один недоказанный критерий: на живом Android (не убитом OOM эмуляторе) открыть главный экран после сохранения синтетического токена, снять кадр именно UI GitTeller, затем `pm clear` и убедиться, что процесс не падает, а потерянный ключ просит ввести токен заново.
+| Сборка debug APK | PASS |
+| `:app:testDebugUnitTest` 31/0 | PASS, в логе шум `type tag 71` |
+| Главный экран: один статус и одна кнопка | PASS на эмуляторе Android 14, пустой снимок, тёмная тема. Файл `evidence/emulator-home-1.0.5.png` |
+| Полные экраны разделов, Back, светлая тема | NOT_RUN. Хост убил qemu по OOM сразу после первого кадра |
+| A52, повторная сверка, 401, офлайн, перезапуск токена | NOT_RUN на этой сборке |
+| Приватный репозиторий | NOT_RUN. Токен не запрашивался |
+| Семантический разбор diff/CI | FAIL как обещание. Данные не загружаются, UI это говорит |

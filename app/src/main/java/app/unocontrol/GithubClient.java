@@ -157,7 +157,7 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "GitTeller/1.0.4");
+        c.setRequestProperty("User-Agent", "GitTeller/1.0.5");
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         inflight = c;
         try {

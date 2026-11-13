@@ -27,6 +27,19 @@ public class Smoke {
     check(CommitExplainer.explain("feat(safety): widget").contains("новой возможности"),"feat scope");
     check(CommitExplainer.explain("test: build").contains("не проверена"),"test not proof");
     check(CommitExplainer.explain("").contains("без описания"),"no description");
+    check(HumanReport.homeTitle(null,null,Summary.of(null,null)).contains("Подключите"),"empty home is understandable");
+    JSONObject old=snapshot(true,"main","1"),now=snapshot(true,"main","1");
+    check(HumanReport.homeTitle(now,old,Summary.of(now,old)).contains("сдвигов"),"home avoids SHA headline");
+    check(HumanReport.homeDescription(now,old,Summary.of(now,old)).contains("не означает"),"no-change does not mean completed");
+    check(HumanReport.commitSummary("docs(agents): restore work log").contains("документы"),"docs maps to cautious plain label");
+    check(HumanReport.commitSummary("fix: broken query").contains("сообщил"),"fix is developer claim");
+    check(HumanReport.commitSummary("feat(ui): summary").contains("сообщил"),"feature is developer claim");
+    check(HumanReport.branchKind("research/uno-train").equals("Исследования"),"branch category");
+    check(HumanReport.branchTopic("research/uno-train").contains("не определена"),"topic is not inferred from a project name");
+    check(!HumanReport.branchTopic("research/uno-train").contains("Обучение"),"no project-specific guess");
+    check(HumanReport.branchTopic("main").contains("Основная"),"main branch clear");
+    check(HumanReport.state("closed").contains("не проверен"),"closed is not proof of a test");
+    check(HumanReport.countState(new JSONArray().put(new JSONObject().put("state","open")),"open")==1,"count open tasks");
     System.out.println("PASS: "+passed+" model checks (test doubles for org.json; no Android runtime)");
   }
 }

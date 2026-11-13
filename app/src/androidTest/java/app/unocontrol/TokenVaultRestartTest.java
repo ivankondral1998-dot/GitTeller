@@ -14,56 +14,70 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.util.Locale;
+import java.util.UUID;
 
 /**
- * Two separate instrumentation processes. Run saveForRestart, force-stop the app,
- * then loadAfterRestart. A single in-process call is not a restart proof.
+ * Two distinct instrumentation processes. Test-only repo identity is persisted
+ * between them. Do not clear all real user tokens as part of test setup.
  */
 @RunWith(AndroidJUnit4.class)
 public class TokenVaultRestartTest {
     static final String MARKER = "synthetic-pat-not-real-001";
-    static final String REPO = "octocat/hello-world";
+    private static final String META = "gitteller-instrument-restart-repo.txt";
+    private static final String OWNER_PREFIX = "gitteller-restart-";
 
     @Test public void saveForRestart() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         TokenVault vault = new TokenVault(context);
-        File dir = new File(context.getNoBackupFilesDir(), "token-vault-v1");
-        File[] old = dir.listFiles();
-        if (old != null) for (File f : old) if (!f.delete()) throw new AssertionError(f.getName());
-        vault.save("Octocat/Hello-World", MARKER);
-        assertTrue(vault.hasToken(REPO));
-        assertEquals(MARKER, vault.load(REPO));
-        File blob = onlyBlob(dir);
+        File identity = new File(context.getNoBackupFilesDir(), META);
+        // A stale test run must fail explicitly, not silently overwrite someone else's data.
+        assertFalse("Previous restart test not completed; inspect before retrying.", identity.exists());
+        String repo = OWNER_PREFIX + UUID.randomUUID().toString().replace("-", "") + "/checkpoint";
+        assertFalse("Fixture unexpectedly collides with existing token.", vault.hasToken(repo));
+        vault.save(repo, MARKER);
+        assertEquals(MARKER, vault.load(repo));
+        File blob = blobFor(context, repo);
         byte[] raw = Files.readAllBytes(blob.toPath());
         assertTrue(raw.length > 16);
         assertEquals('G', raw[0]);
         assertEquals('T', raw[1]);
         assertEquals('V', raw[2]);
         assertEquals('1', raw[3]);
-        assertFalse(new String(raw).contains(MARKER));
+        assertFalse(new String(raw, StandardCharsets.UTF_8).contains(MARKER));
+        Files.write(identity.toPath(), repo.getBytes(StandardCharsets.UTF_8));
     }
 
     @Test public void loadAfterRestart() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         TokenVault vault = new TokenVault(context);
-        File dir = new File(context.getNoBackupFilesDir(), "token-vault-v1");
-        File blob = onlyBlob(dir);
-        byte[] raw = Files.readAllBytes(blob.toPath());
-        assertFalse(new String(raw).contains(MARKER));
-        assertEquals(MARKER, vault.load("octocat/Hello-World"));
-        assertTrue(vault.hasToken(REPO));
-        vault.delete(REPO);
-        assertNull(vault.load(REPO));
-        assertFalse(vault.hasToken(REPO));
+        File identity = new File(context.getNoBackupFilesDir(), META);
+        assertTrue("Run saveForRestart in a previous instrumentation process.", identity.isFile());
+        String repo = new String(Files.readAllBytes(identity.toPath()), StandardCharsets.UTF_8);
+        assertTrue("Invalid fixture owner.", repo.startsWith(OWNER_PREFIX));
+        assertTrue("Invalid fixture name.", repo.endsWith("/checkpoint"));
+        try {
+            File blob = blobFor(context, repo);
+            byte[] raw = Files.readAllBytes(blob.toPath());
+            assertFalse(new String(raw, StandardCharsets.UTF_8).contains(MARKER));
+            assertEquals(MARKER, vault.load(repo));
+            assertTrue(vault.hasToken(repo));
+        } finally {
+            vault.delete(repo);
+            assertTrue("Could not remove test-only metadata.", identity.delete());
+        }
+        assertNull(vault.load(repo));
+        assertFalse(vault.hasToken(repo));
     }
 
-    private static File onlyBlob(File dir) {
-        File blob = null;
-        File[] files = dir.listFiles();
-        assertTrue(files != null);
-        for (File f : files) if (f.getName().endsWith(".bin")) blob = f;
-        assertTrue(blob != null && blob.isFile());
-        return blob;
+    private static File blobFor(Context context, String repo) throws Exception {
+        byte[] digest = MessageDigest.getInstance("SHA-256")
+                .digest(TokenVault.normalizeRepo(repo).getBytes(StandardCharsets.UTF_8));
+        StringBuilder name = new StringBuilder();
+        for (byte b : digest) name.append(String.format(Locale.ROOT, "%02x", b));
+        return new File(new File(context.getNoBackupFilesDir(), "token-vault-v1"), name + ".bin");
     }
 }

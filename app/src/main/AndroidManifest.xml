@@ -6,6 +6,7 @@
                  android:theme="@style/GitTellerTheme"
                  android:usesCleartextTraffic="false"
                  android:supportsRtl="true">
+        <activity android:name=".SectionActivity" android:exported="false"/>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
