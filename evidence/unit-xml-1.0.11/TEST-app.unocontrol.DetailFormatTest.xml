@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.unocontrol.DetailFormatTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-14T17:02:42" hostname="hds-3obnohf9txrl" time="0.02">
+  <properties/>
+  <testcase name="closedPullWithoutMergedFlagIsNotMerged" classname="app.unocontrol.DetailFormatTest" time="0.015"/>
+  <testcase name="issueTextIsNotAPassingTest" classname="app.unocontrol.DetailFormatTest" time="0.0"/>
+  <testcase name="neutralAndSkippedAreNotCalledSuccessful" classname="app.unocontrol.DetailFormatTest" time="0.0"/>
+  <testcase name="failedCheckIsNotHidden" classname="app.unocontrol.DetailFormatTest" time="0.0"/>
+  <testcase name="incompleteCommitFileListIsLabeled" classname="app.unocontrol.DetailFormatTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

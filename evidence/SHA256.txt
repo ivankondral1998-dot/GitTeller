@@ -1,0 +1,6 @@
+0ae611b00de54d84c0c93ea2ec77865cd83de1dc2ea7f2877e1b5c2e8c9ae4ca  /workspace/gitteller/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+0ae611b00de54d84c0c93ea2ec77865cd83de1dc2ea7f2877e1b5c2e8c9ae4ca  evidence/apk/GitTeller-1.0.4-dev-androidTest.apk
+c98942799485422b1b4d3b018dbc75bddc239a5263b0dac340515fcb0f352954  /workspace/gitteller/checkpoint/GitTeller_v1.0.3_AUDIT_PATCH_SOURCE_UNCHANGED.zip
+c98942799485422b1b4d3b018dbc75bddc239a5263b0dac340515fcb0f352954  checkpoint/GitTeller_v1.0.3_AUDIT_PATCH_SOURCE_UNCHANGED.zip
+d38e62b16ca47c0f62686e9cbdb5d56fb5a83269fcbc9ac13c78965bc5090cea  /workspace/gitteller/app/build/outputs/apk/debug/app-debug.apk
+d38e62b16ca47c0f62686e9cbdb5d56fb5a83269fcbc9ac13c78965bc5090cea  evidence/apk/GitTeller-1.0.4-dev-debug.apk

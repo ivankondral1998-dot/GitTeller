@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.unocontrol.TokenVaultRulesTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-14T20:19:11" hostname="hds-6qxepf369j9c" time="0.005">
+  <properties/>
+  <testcase name="repoIdIsCaseInsensitive" classname="app.unocontrol.TokenVaultRulesTest" time="0.0"/>
+  <testcase name="pathTraversalRejected" classname="app.unocontrol.TokenVaultRulesTest" time="0.005"/>
+  <testcase name="emptyRejected" classname="app.unocontrol.TokenVaultRulesTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

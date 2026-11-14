@@ -170,15 +170,121 @@ public final class MainActivity extends Activity {
         return card;
     }
 
-    private void question(LinearLayout parent, String title, String body, Runnable open) {
+    private boolean developerMode() {
+        return UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF, UiMode.NOVICE)));
+    }
+
+    private void modePicker(LinearLayout parent) {
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setContentDescription("Переключатель режима GitTeller");
+        String selected = developerMode() ? UiMode.DEVELOPER : UiMode.NOVICE;
+        String[] modes = {UiMode.NOVICE, UiMode.DEVELOPER};
+        String[] captions = {"Режим чайника", "Режим разработчика"};
+        for (int i = 0; i < modes.length; i++) {
+            final String mode = modes[i];
+            final boolean active = selected.equals(mode);
+            TextView option = txt(captions[i], 13, active ? BG : TEXT, active);
+            option.setGravity(Gravity.CENTER);
+            option.setBackground(shape(active ? ACCENT : PANEL, 12, active ? 0 : STROKE));
+            option.setContentDescription(captions[i] + (active ? ", выбран" : ", выбрать"));
+            option.setClickable(true);
+            option.setFocusable(true);
+            option.setOnClickListener(v -> {
+                if (mode.equals(selected)) return;
+                if (!prefs.edit().putString(UiMode.PREF, mode).commit()) {
+                    toast("Не удалось сохранить выбранный режим");
+                    return;
+                }
+                draw();
+            });
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
+            if (i == 0) params.rightMargin = dp(8);
+            controls.addView(option, params);
+        }
+        parent.addView(controls, lp(-1,-2));
+    }
+
+    private void question(LinearLayout parent, String title, String body, Runnable open, String reason) {
         LinearLayout card = panel(parent);
-        card.setClickable(true);
-        card.setFocusable(true);
-        card.setContentDescription(title + ". " + body);
-        card.setOnClickListener(v -> open.run());
         addLine(card, title, 15, ACCENT, true, 0);
         addLine(card, body, 16, TEXT, false, 6);
-        addLine(card, "Подробнее", 13, MUTED, false, 10);
+        TextView more = txt("Подробнее ›", 14, MUTED, true);
+        more.setContentDescription("Подробнее: " + title);
+        more.setPadding(0, dp(10), 0, dp(10));
+        more.setClickable(true);
+        more.setFocusable(true);
+        more.setOnClickListener(v -> open.run());
+        space(card, 12);
+        card.addView(more, lp(-1,-2));
+        if (reason != null) {
+            TextView why = txt("Почему так?", 14, ACCENT, false);
+            why.setClickable(true);
+            why.setFocusable(true);
+            why.setContentDescription("Объяснить основание вывода: " + title);
+            why.setPadding(0, dp(9), 0, dp(9));
+            TextView explanation = txt(reason, 14, MUTED, false);
+            explanation.setVisibility(View.GONE);
+            why.setOnClickListener(v -> {
+                boolean show = explanation.getVisibility() != View.VISIBLE;
+                explanation.setVisibility(show ? View.VISIBLE : View.GONE);
+                why.setText(show ? "Скрыть объяснение" : "Почему так?");
+            });
+            space(card, 10);
+            card.addView(why, lp(-1,-2));
+            space(card, 8);
+            card.addView(explanation, lp(-1,-2));
+        }
+    }
+
+    private void developerCard(LinearLayout parent, String title, String body, Runnable open) {
+        question(parent, title, body, open, null);
+    }
+
+    private static int count(JSONObject snapshot, String field) {
+        if (snapshot == null) return 0;
+        JSONArray list = snapshot.optJSONArray(field);
+        return list == null ? 0 : list.length();
+    }
+
+    private String collectionCoverage(String field) {
+        if (current == null) return "Снимок отсутствует";
+        if (SnapshotCodec.isImported(current)) return "Импортированный снимок: не живые данные";
+        if (current.optBoolean(field + "Stale", false)) return "Показаны старые данные: новое чтение не удалось";
+        return current.optBoolean(field + "Complete", false)
+                ? "Список получен полностью в пределах запроса"
+                : "Частичный или недоступный список";
+    }
+
+    private void developerDashboard(LinearLayout parent) {
+        if (current == null) {
+            LinearLayout panel = panel(parent);
+            addLine(panel, "Нет сохранённого снимка", 16, TEXT, true, 0);
+            addLine(panel, "Нажмите «Обновить», чтобы прочитать GitHub.", 14, MUTED, false, 7);
+            return;
+        }
+        LinearLayout evidence = panel(parent);
+        addLine(evidence, "Снимок GitHub", 16, TEXT, true, 0);
+        addLine(evidence, "Источник: " + (SnapshotCodec.isImported(current) ? "IMPORTED (не живые данные)"
+                : current.optString("origin", "не определён")), 14, MUTED, false, 8);
+        addLine(evidence, "Дата сохранения: " + formatTime(current.optLong("capturedAt", 0)), 14, MUTED, false, 6);
+        addLine(evidence, "История коммитов — выборочная. Тесты не считаются успешными без отдельного ответа GitHub.", 13, MUTED, false, 9);
+        developerCard(parent, "Ветки: " + count(current, "branches"),
+                collectionCoverage("branches"),
+                () -> openPage("branches"));
+        developerCard(parent, "Изменения: " + feed.length(),
+                "Лента сравнений сохранённых снимков. Не результат испытаний кода.",
+                () -> openPage("changes"));
+        developerCard(parent, "Задачи: " + count(current, "issues"),
+                collectionCoverage("issues"),
+                () -> openPage("tasks"));
+        developerCard(parent, "Pull Requests: " + count(current, "pulls"),
+                collectionCoverage("pulls"),
+                () -> openPage("pulls"));
+        developerCard(parent, "Проверки и диагностика", "Охват запросов, ограничения API и неизвестные результаты тестов",
+                () -> openPage("accuracy"));
+        developerCard(parent, "Коммиты", "Последняя доступная история; не все ветки и не вся история",
+                () -> openPage("commits"));
     }
 
     private void draw() {
@@ -198,7 +304,7 @@ public final class MainActivity extends Activity {
         head.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout brand=vertical();
         brand.addView(txt("GitTeller",17,TEXT,true));
-        addLine(brand,"GitHub простыми словами",12,MUTED,false,5);
+        addLine(brand,developerMode() ? "Анализ GitHub" : "GitHub простыми словами",12,MUTED,false,5);
         head.addView(brand,new LinearLayout.LayoutParams(0,-2,1f));
         TextView menu=txt("⋮",27,TEXT,false);
         menu.setGravity(Gravity.CENTER);menu.setContentDescription("Дополнительные разделы и настройки");
@@ -206,8 +312,10 @@ public final class MainActivity extends Activity {
         head.addView(menu,lp(44,44));
         menu.setOnClickListener(v -> showMenu(menu));
         wrap.addView(head,lp(-1,-2));
+        space(wrap,16);
+        modePicker(wrap);
         space(wrap,18);
-        addLine(wrap,"Что происходит с проектом",22,TEXT,true,0);
+        addLine(wrap,developerMode() ? "Панель разработчика" : "Что происходит с проектом",22,TEXT,true,0);
         String shortRepo=repo.length()>48?repo.substring(0,45)+"…":repo;
         addLine(wrap,"Проект: "+shortRepo,18,TEXT,true,6);
         space(wrap,8);
@@ -246,10 +354,26 @@ public final class MainActivity extends Activity {
             addLine(hero,"Идёт чтение GitHub",20,TEXT,true,0);
             addLine(hero,"Подождите. Старые сведения проекта пока не меняются.",16,TEXT,false,10);
         } else {
-            question(wrap,"Что изменилось", HumanReport.ownerChanged(current,previous,summary), ()->openPage("changes"));
-            question(wrap,"Где работа", HumanReport.ownerWhere(current,previous), ()->openPage("branches"));
-            question(wrap,"Какие проблемы", HumanReport.ownerProblems(current), ()->openPage("problems"));
-            question(wrap,"Кто выполнял", HumanReport.ownerWho(current), ()->openPage("commits"));
+            if (developerMode()) {
+                developerDashboard(wrap);
+            } else {
+                boolean has = current != null;
+                boolean comparable = has && previous != null && !SnapshotCodec.isImported(current)
+                        && !SnapshotCodec.isImported(previous)
+                        && current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
+                boolean complete = comparable && current.optBoolean("branchesComplete",false)
+                        && previous.optBoolean("branchesComplete",false)
+                        && current.optBoolean("issuesComplete",false) && previous.optBoolean("issuesComplete",false)
+                        && current.optBoolean("pullsComplete",false) && previous.optBoolean("pullsComplete",false);
+                question(wrap,"Что изменилось", HumanReport.ownerChanged(current,previous,summary),
+                        ()->openPage("changes"), UiMode.reason("changed",has,comparable,complete));
+                question(wrap,"Где работа", HumanReport.ownerWhere(current,previous),
+                        ()->openPage("branches"), UiMode.reason("where",has,comparable,complete));
+                question(wrap,"Какие проблемы", HumanReport.ownerProblems(current),
+                        ()->openPage("problems"), UiMode.reason("problems",has,comparable,complete));
+                question(wrap,"Кто выполнял", HumanReport.ownerWho(current),
+                        ()->openPage("commits"), UiMode.reason("who",has,comparable,complete));
+            }
             if (lastError != null) {
                 LinearLayout warn=panel(wrap);
                 addLine(warn,"Последняя попытка не удалась. "+lastError,14,WARN,false,0);

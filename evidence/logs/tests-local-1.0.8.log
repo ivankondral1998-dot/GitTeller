@@ -1,0 +1,3 @@
+PASS: 46 model checks (test doubles for org.json; no Android runtime)
+PASS: 8 GithubAuditSmoke checks (model doubles, no network/Android)
+PARSE OK: 20 Java compilation units (syntax only, not Android compilation)

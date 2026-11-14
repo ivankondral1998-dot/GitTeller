@@ -1,4 +1,27 @@
+# Проверки 1.0.12-dev
+
+`applicationId` `app.gitteller.mobile`, `versionCode` 27, `versionName` 1.0.12-dev. Подпись debug та же, что у 1.0.6–1.0.11: SHA-256 `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`. Только `INTERNET`. `allowBackup=false`. `usesCleartextTraffic=false`.
+
+Diff 1.0.12 просмотрен отдельно. Меняются только режим экрана, `UiMode`, подпись версии и локальный тест. `GithubClient`, `TokenVault`, сравнение снимков и сеть не менялись.
+
+## Gradle
+
+Прогон 1: **exit 1**. `testDebugUnitTest` умер на `Gradle Test Executor` (`Unexpected type tag 71`, connection refused). XML не обновился. Лог: `evidence/logs/gradle-1.0.12-try1.log`.
+
+Прогон 2: **exit 0**, `BUILD SUCCESSFUL`. **102 теста, 0 failures, 0 errors**, включая `UiModeTest`. XML: `evidence/unit-xml-1.0.12/`. Лог: `evidence/logs/gradle-1.0.12-try2.log`. В логе снова есть отброшенный `type tag 71`.
+
+## tests-local
+
+`sh tests-local/run.sh`: **exit 0**. `UiModeSmoke` 9 PASS, затем 46 + 8 + 14 + зонд 8 PASS, `PARSE OK 26`. Лог: `evidence/logs/tests-local-1.0.12.log`.
+
+## Не проверено
+
+Эмулятор 1.0.12: **NOT_RUN**. Samsung A52: **NOT_DEVICE_VERIFIED**. Приватный репозиторий, Keystore на телефоне, force-stop, переключение темы и Back на устройстве: **NOT_RUN**.
+
+Ниже — запись 1.0.10, она не является прогоном 1.0.12.
+
 # Проверки 1.0.10-dev
+
 
 Каталог: `/workspace/gitteller`. Подпись APK совпадает с debug-сертификатом 1.0.6–1.0.9 (`SHA-256` `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`). `applicationId` `app.gitteller.mobile`, `versionCode` 25, `versionName` 1.0.10-dev. `minSdk` 26, `targetSdk` 35. Только `INTERNET`. `allowBackup=false`. `usesCleartextTraffic=false`. Сборка debuggable.
 

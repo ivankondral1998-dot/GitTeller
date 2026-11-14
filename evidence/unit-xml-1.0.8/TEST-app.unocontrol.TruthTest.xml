@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.unocontrol.TruthTest" tests="23" skipped="0" failures="0" errors="0" timestamp="2026-11-14T03:29:08" hostname="hds-v6py5437n2yx" time="0.027">
+  <properties/>
+  <testcase name="freshIssuesAreNotReplacedByOldOnes" classname="app.unocontrol.TruthTest" time="0.002"/>
+  <testcase name="realMergeIsNotADeviceTest" classname="app.unocontrol.TruthTest" time="0.011"/>
+  <testcase name="issueChangeSurvivesEqualBranchPointers" classname="app.unocontrol.TruthTest" time="0.001"/>
+  <testcase name="skippedAndNeutralAreNotSuccess" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="statusFallbackIsUsedWhenChecksAreEmpty" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="otherRepositoryDoesNotReceiveKeptTasks" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="attentionNamesAnOpenTaskAndDoesNotInventOne" classname="app.unocontrol.TruthTest" time="0.001"/>
+  <testcase name="researchBranchMoveIsVisibleWhenMainIsStill" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="coverageDoesNotCallPartialHistoryComplete" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="branchPrefixIsAnAssumption" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="closedPullIsNotMerged" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="closedUnmergedPullLabelDoesNotSayMerged" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="titleOnlyDocsDoesNotNameFiles" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="cutFileListIsDisclosed" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="missingCiSourcesAreNotAPass" classname="app.unocontrol.TruthTest" time="0.001"/>
+  <testcase name="permission403IsNotCalledABadToken" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="fixPrefixIsNotAPassingRepair" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="missingStatusesAreNotSuccess" classname="app.unocontrol.TruthTest" time="0.001"/>
+  <testcase name="actionsSkippedIsNotSuccess" classname="app.unocontrol.TruthTest" time="0.001"/>
+  <testcase name="failedIssueRefreshKeepsPreviousTasks" classname="app.unocontrol.TruthTest" time="0.001"/>
+  <testcase name="firstSnapshotIsNotAComparison" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <testcase name="docsWithRealFilesMayNameThoseFilesOnly" classname="app.unocontrol.TruthTest" time="0.001"/>
+  <testcase name="timeoutIsNotRawEnglish" classname="app.unocontrol.TruthTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

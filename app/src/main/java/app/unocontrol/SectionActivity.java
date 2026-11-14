@@ -165,7 +165,9 @@ public final class SectionActivity extends Activity {
     }
     private void index(){
         line(body,"Разделы",22,true,ink);gap(body,8);
-        line(body,"Сначала четыре коротких ответа. Остальное — подробности. Кнопка «Назад» и системная Back возвращают назад.",14,false,muted);
+        line(body, UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF,UiMode.NOVICE)))
+                ? "Технические разделы используют те же снимки и ограничения, что и режим чайника. Системный Back возвращает назад."
+                : "Простые объяснения без скрытия неизвестного. Технические подробности доступны по запросу. Системный Back возвращает назад.",14,false,muted);
         gap(body,14);
         action("Обзор","Что изменилось, где работа, какие проблемы, кто выполнял",()->go("overview"));
         action("Изменения","Каждое событие: что, где, откуда известно",()->go("changes"));
@@ -467,11 +469,15 @@ public final class SectionActivity extends Activity {
     }
     private void technical(String value){
         LinearLayout card=card();
-        line(card,"Технические детали скрыты",13,true,muted);gap(card,8);
-        line(card,"Указатель и сырые поля не показаны, пока вы сами их не откроете.",14,false,muted);gap(card,10);
+        boolean developer=UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF, UiMode.NOVICE)));
+        line(card,developer ? "Технические сведения" : "Технические детали скрыты",13,true,muted);gap(card,8);
+        if (!developer) {
+            line(card,"Указатель и сырые поля не показаны, пока вы сами их не откроете.",14,false,muted);
+            gap(card,10);
+        }
         TextView hidden=line(card,value,13,false,muted);
-        hidden.setVisibility(View.GONE);
-        button(card,"Показать технические сведения",()->{
+        hidden.setVisibility(developer ? View.VISIBLE : View.GONE);
+        if (!developer) button(card,"Показать технические сведения",()->{
             hidden.setVisibility(View.VISIBLE);
         });
         button(card,"Скопировать технические сведения",()->{
@@ -588,7 +594,8 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.11-dev", "Объясняет, что произошло в проекте. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.12-dev", "Два режима представления одних данных GitHub. Это не коммерческий релиз и не проверка готовности программы.");
+        note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются на главном экране. Выбор сохраняется на устройстве. Права GitHub не меняются.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
         note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");

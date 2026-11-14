@@ -1,0 +1,2 @@
+PASS: 15 model checks (test doubles for org.json; no Android runtime)
+PARSE OK: 13 Java compilation units (syntax only, not Android compilation)

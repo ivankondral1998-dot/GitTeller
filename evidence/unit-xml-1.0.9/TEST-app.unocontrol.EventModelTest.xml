@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.unocontrol.EventModelTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-11-14T10:51:46" hostname="hds-zqfyhdxir79d" time="0.037">
+  <properties/>
+  <testcase name="compareWordingDoesNotCallBehindProgress" classname="app.unocontrol.EventModelTest" time="0.001"/>
+  <testcase name="titleChangeIsNotCompletion" classname="app.unocontrol.EventModelTest" time="0.001"/>
+  <testcase name="newIssueCountsWhileBranchPointersStay" classname="app.unocontrol.EventModelTest" time="0.002"/>
+  <testcase name="interruptedRenameLeavesRecoverableCiphertext" classname="app.unocontrol.EventModelTest" time="0.011"/>
+  <testcase name="compareHttpFailureStaysInsufficient" classname="app.unocontrol.EventModelTest" time="0.002"/>
+  <testcase name="mergeCountsWhenStateStaysClosed" classname="app.unocontrol.EventModelTest" time="0.001"/>
+  <testcase name="firstSnapshotDoesNotInventABaseline" classname="app.unocontrol.EventModelTest" time="0.0"/>
+  <testcase name="reopenIsItsOwnTransition" classname="app.unocontrol.EventModelTest" time="0.002"/>
+  <testcase name="legacyEtagWithoutSinglePageProofIsIgnored" classname="app.unocontrol.EventModelTest" time="0.001"/>
+  <testcase name="failedTokenInstallKeepsPreviousCiphertext" classname="app.unocontrol.EventModelTest" time="0.007"/>
+  <testcase name="incompleteListDoesNotInventCreationOrDeletion" classname="app.unocontrol.EventModelTest" time="0.003"/>
+  <testcase name="backupKeepsMergeAndDropsSecrets" classname="app.unocontrol.EventModelTest" time="0.001"/>
+  <testcase name="updatedAtWithoutBodyIsAnEditNotAFix" classname="app.unocontrol.EventModelTest" time="0.0"/>
+  <testcase name="repeatedBranchMoveStaysInTheFeed" classname="app.unocontrol.EventModelTest" time="0.0"/>
+  <testcase name="pageOneEtagIsDroppedWhenAnotherPageExists" classname="app.unocontrol.EventModelTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

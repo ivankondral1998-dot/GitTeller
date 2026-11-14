@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.unocontrol.HumanReportTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-14T20:19:11" hostname="hds-6qxepf369j9c" time="0.018">
+  <properties/>
+  <testcase name="ownerAnswersStayTiedToEvidence" classname="app.unocontrol.HumanReportTest" time="0.016"/>
+  <testcase name="unknownBranchIsNotAProjectGuess" classname="app.unocontrol.HumanReportTest" time="0.001"/>
+  <testcase name="closedIsNotMergedAndChecksAreAbsent" classname="app.unocontrol.HumanReportTest" time="0.001"/>
+  <testcase name="commitsAreScopedToTheDefaultBranch" classname="app.unocontrol.HumanReportTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

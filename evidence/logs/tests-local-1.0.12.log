@@ -1,0 +1,15 @@
+UiModeSmoke: 9 PASS
+PASS: 46 model checks (test doubles for org.json; no Android runtime)
+PASS: 8 GithubAuditSmoke checks (model doubles, no network/Android)
+PASS: 14 independent audit regressions (host only, synthetic data)
+PASS: known moved pointer counted even in partial branch samples
+PASS: known moved pointer appears in feed on partial list
+PASS: newly seen branch against full old list recognized
+PASS: home does not hide observed new branch
+PASS: pointer rollback is a detected change
+PASS: pointer rollback not called new history records
+PASS: full sample still emits moved event
+PASS: branch absent in two complete lists appears in feed without a deletion claim
+CHECKS PASS=8 FAIL=0
+PARSE OK: 26 Java compilation units (syntax only, not Android compilation)
+LOCAL:0

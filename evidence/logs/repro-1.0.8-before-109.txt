@@ -1,0 +1,7 @@
+known partial issueChanges=0 events=0
+RED known change hidden on partial list
+legacy etag accepted="page1"
+RED ambiguous first-page ETag trusted
+after crash window dest exists=false bak exists=true bak0=1
+RED previous ciphertext not visible as dest
+RED_COUNT 3
