@@ -207,38 +207,16 @@ public final class SectionActivity extends Activity {
         JSONObject x=at("branches");if(x==null){note("Запись не найдена","Вернитесь к списку.");return;}
         String name=x.optString("name"),sha=x.optString("sha");
         note("Что произошло", "Открыто направление «"+name+"». "+HumanReport.branchAssumption(name));
-        note("Что известно", branchDelta(name, sha));
+        note("Что известно", branchDelta(name));
         note("Что остаётся неизвестным", "По названию и указателю нельзя узнать, прошли ли проверки и можно ли этим пользоваться. История ниже — только последние записи, не вся работа.");
         note("Источник", sourceLine());
         technical("Направление\n"+name+"\nУказатель\n"+sha);
-        String prior = priorSha(name);
-        if(prior != null && !prior.equals(sha)) loadCompare(prior, sha);
+        String prior = HumanReport.previousBranchSha(name, current, previous);
+        if(prior != null && !prior.isEmpty() && !sha.isEmpty() && !prior.equals(sha)) loadCompare(prior, sha);
         loadBranchStory(name);
     }
-    private String branchDelta(String name, String sha){
-        if(previous==null || previous.optBoolean("restoredFromBackup", false))
-            return "Сравнивать не с чем: нет предыдущей проверки. Нельзя сказать, что направление новое или что оно стоит на месте.";
-        if(!current.optBoolean("branchesComplete", false) || !previous.optBoolean("branchesComplete", false))
-            return "Один из списков направлений неполный. Если указатель совпал с прошлой проверкой, это видно. Исчезновение или появление направления утверждать нельзя.";
-        String prior=null;
-        JSONArray old=previous.optJSONArray("branches");
-        if(old!=null) for(int i=0;i<old.length();i++){
-            JSONObject b=old.optJSONObject(i);
-            if(b!=null && name.equals(b.optString("name"))) prior=b.optString("sha");
-        }
-        if(prior==null) return "В прошлой полной проверке этого направления не было. Это ещё не доказательство, что его только что создали: название могло измениться.";
-        if(!prior.equals(sha)) return "Указатель этого направления изменился. Это ещё не прогресс: ниже будет сравнение GitHub, если оно доступно. Работоспособность не проверена.";
-        return "Указатель с прошлой полной проверки не изменился. Это не значит, что работа закончена.";
-    }
-    private String priorSha(String name) {
-        if(previous==null) return null;
-        JSONArray old=previous.optJSONArray("branches");
-        if(old==null) return null;
-        for(int i=0;i<old.length();i++){
-            JSONObject b=old.optJSONObject(i);
-            if(b!=null && name.equals(b.optString("name"))) return b.optString("sha");
-        }
-        return null;
+    private String branchDelta(String name) {
+        return HumanReport.branchPointerLine(name, current, previous);
     }
     private void loadCompare(String base, String head) {
         final int epoch = ++compareEpoch;
@@ -481,8 +459,8 @@ public final class SectionActivity extends Activity {
     }
     private String sourceLine(){
         if(current==null) return "Источник ещё не получен.";
-        String kind=current.optBoolean("restoredFromBackup", false)?"Импортированный файл, не свежий запрос GitHub."
-                :"PARTIAL".equals(current.optString("origin"))?"Частичный ответ GitHub, не полная проверка."
+        String kind=SnapshotCodec.isImported(current)?"Импортированный файл, не свежий запрос GitHub."
+                :GithubClient.isPartialSnapshot(current)?"Частичный ответ GitHub, не полная проверка."
                 :"CACHED".equals(current.optString("origin"))?"GitHub подтвердил прежние списки. История при этом не проверена целиком."
                 :"GitHub, только чтение.";
         return kind+" Проект: "+repo+". Загрузка: "+HumanReport.humanDate(current.optLong("capturedAt",0))+".";
@@ -610,7 +588,7 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.10-dev", "Объясняет, что произошло в проекте. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.11-dev", "Объясняет, что произошло в проекте. Это не коммерческий релиз и не проверка готовности программы.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
         note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");

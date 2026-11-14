@@ -1,9 +1,0 @@
-PASS: known moved pointer counted even in partial branch samples
-FAIL: known moved pointer appears in feed on partial list
-PASS: newly seen branch against full old list recognized
-FAIL: home does not hide observed new branch
-PASS: pointer rollback is a detected change
-FAIL: pointer rollback not called new history records
-PASS: full sample still emits moved event
-FAIL: branch absent in two complete lists appears in feed without a deletion claim
-CHECKS PASS=4 FAIL=4

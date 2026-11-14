@@ -7,6 +7,11 @@ import org.json.JSONObject;
 final class SnapshotCodec {
     private SnapshotCodec() {}
 
+    static boolean isImported(JSONObject snapshot) {
+        return snapshot != null && (snapshot.optBoolean("restoredFromBackup", false)
+                || "IMPORTED".equals(snapshot.optString("origin")));
+    }
+
     static void validateSnapshot(JSONObject snapshot, String expectedRepo) {
         if (snapshot == null) return;
         if (!expectedRepo.equalsIgnoreCase(snapshot.optString("repo")))
@@ -32,15 +37,16 @@ final class SnapshotCodec {
         // Missing fields in older archives mean unknown coverage, not an empty completed list.
         out.put("issuesComplete", raw.optBoolean("issuesComplete", false));
         out.put("pullsComplete", raw.optBoolean("pullsComplete", false));
-        out.put("restoredFromBackup", raw.optBoolean("restoredFromBackup", false));
+        out.put("restoredFromBackup", isImported(raw));
         String origin = raw.optString("origin");
         if ("LIVE".equals(origin) || "CACHED".equals(origin) || "PARTIAL".equals(origin) || "IMPORTED".equals(origin))
             out.put("origin", origin);
-        if (raw.optBoolean("restoredFromBackup", false)) out.put("origin", "IMPORTED");
+        if (isImported(raw)) out.put("origin", "IMPORTED");
         copyTime(raw, out, "branchesFetchedAt");
         copyTime(raw, out, "issuesFetchedAt");
         copyTime(raw, out, "pullsFetchedAt");
         copyTime(raw, out, "commitsFetchedAt");
+        if (raw.has("commitsFetched")) out.put("commitsFetched", raw.optBoolean("commitsFetched", false));
         out.put("branchesStale", raw.optBoolean("branchesStale", false));
         out.put("issuesStale", raw.optBoolean("issuesStale", false));
         out.put("pullsStale", raw.optBoolean("pullsStale", false));

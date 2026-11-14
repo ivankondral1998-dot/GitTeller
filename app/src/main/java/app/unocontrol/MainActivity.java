@@ -256,7 +256,7 @@ public final class MainActivity extends Activity {
             }
             if (current != null && (current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
                     || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
-                    || current.optBoolean("restoredFromBackup", false))) {
+                    || SnapshotCodec.isImported(current))) {
                 LinearLayout stale=panel(wrap);
                 addLine(stale,"Часть сведений с прошлой удачной загрузки.",14,WARN,false,0);
             }

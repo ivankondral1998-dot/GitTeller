@@ -1,14 +1,14 @@
-# GitTeller 1.0.10-dev
+# GitTeller 1.0.11-dev
 
 Нативное Android-приложение. Не коммерческий релиз и не приёмка на устройстве.
 
-`applicationId` `app.gitteller.mobile`, `versionCode` 25, `versionName` 1.0.10-dev. Подпись debug совпадает с 1.0.6–1.0.9, поэтому обновление идёт поверх, без удаления. Если система откажется, не очищайте приложение: на телефоне может быть токен.
+`applicationId` — `app.gitteller.mobile`, `versionCode` — 26, `versionName` — `1.0.11-dev`. Готовый APK подписан локальным debug-ключом. Для обновления поверх ранее выданного APK требуется исходный ключ. См. [UPDATE.md](UPDATE.md).
 
 Главный экран отвечает на четыре вопроса: что изменилось, где работа, какие проблемы, кто выполнял. Сдвиг указателя ветки не называется прогрессом и не называется списком файлов, пока сравнение не открыто. Обычная задача не называется ошибкой. Автор GitHub не называется работающим сейчас агентом.
 
 ```bash
-ANDROID_HOME=/tmp/android-sdk /opt/gradle-8.9/bin/gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
+gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
 sh tests-local/run.sh
 ```
 
-Первый Gradle Test Executor в этой среде часто падает с `Unexpected type tag 71`. Успешен только прогон с `BUILD SUCCESSFUL`. См. `TEST_RESULTS.md`. Прямой JUnitCore не подменяет Gradle. Samsung A52 этой сборкой не проверялся.
+Для сборки нужны JDK 17 или 21, Gradle 8.9 и Android SDK 35 с Build Tools 34.0.0. Укажите свой SDK в `ANDROID_HOME` или `local.properties`. Результаты проверки 1.0.11-dev находятся в отдельном архиве проверок.

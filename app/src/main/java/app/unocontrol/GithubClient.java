@@ -221,11 +221,7 @@ final class GithubClient {
         out.put("issuesCached", issuesCached);
         out.put("pullsCached", pullsCached);
         preserveSources(out, previous);
-        boolean partial = !out.optBoolean("branchesComplete", false) || !out.optBoolean("issuesComplete", false)
-                || !out.optBoolean("pullsComplete", false) || out.optBoolean("branchesStale", false)
-                || out.optBoolean("issuesStale", false) || out.optBoolean("pullsStale", false)
-                || out.optBoolean("commitsStale", false);
-        out.put("origin", partial ? "PARTIAL" : "LIVE");
+        out.put("origin", isPartialSnapshot(out) ? "PARTIAL" : "LIVE");
         JSONArray warn = new JSONArray();
         for (String w : warnings) warn.put(w);
         JSONArray extra = out.optJSONArray("warnings");
@@ -234,11 +230,24 @@ final class GithubClient {
         return new Result(out);
     }
 
+    /** A successful request for recent commits does not imply full history coverage. */
+    static boolean isPartialSnapshot(JSONObject snapshot) {
+        return "PARTIAL".equals(snapshot.optString("origin"))
+                || !snapshot.optBoolean("branchesComplete", false)
+                || !snapshot.optBoolean("issuesComplete", false)
+                || !snapshot.optBoolean("pullsComplete", false)
+                || !snapshot.optBoolean("commitsFetched", false)
+                || snapshot.optBoolean("branchesStale", false)
+                || snapshot.optBoolean("issuesStale", false)
+                || snapshot.optBoolean("pullsStale", false)
+                || snapshot.optBoolean("commitsStale", false);
+    }
+
     /** Keeps the last good list when this refresh did not fetch that source. */
     static void preserveSources(JSONObject fresh, JSONObject previous) throws Exception {
         if (fresh == null || previous == null) return;
         if (!fresh.optString("repo").equalsIgnoreCase(previous.optString("repo"))) return;
-        if (previous.optBoolean("restoredFromBackup", false)) return;
+        if (SnapshotCodec.isImported(previous)) return;
         keep(fresh, previous, "branches", "branchesFetched", "branchesComplete", "branchesStale", "ветки");
         keep(fresh, previous, "commits", "commitsFetched", "commitsComplete", "commitsStale", "история");
         keep(fresh, previous, "issues", "issuesFetched", "issuesComplete", "issuesStale", "задачи");
@@ -280,7 +289,7 @@ final class GithubClient {
 
     /** ETag is trustworthy only for one complete page. A later page can change while page 1 stays the same. */
     private static String etagIfSafe(JSONObject previous, String array, String completeKey, String etagKey) {
-        if (previous == null || previous.optBoolean("restoredFromBackup", false)) return null;
+        if (previous == null || SnapshotCodec.isImported(previous)) return null;
         if (!previous.optBoolean(completeKey, false)) return null;
         // Older snapshots may have cached the ETag of page one of a multi-page list.
         // The explicit single-page marker is mandatory before conditional requests.
@@ -512,7 +521,7 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "GitTeller/1.0.10-dev");
+        c.setRequestProperty("User-Agent", "GitTeller/1.0.11-dev");
         if (etag != null && !etag.isEmpty()) c.setRequestProperty("If-None-Match", etag);
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         inflight = c;

@@ -44,7 +44,7 @@ final class ChangeSet {
     static JSONArray between(JSONObject previous, JSONObject current) throws Exception {
         JSONArray out = new JSONArray();
         if (previous == null || current == null) return out;
-        if (current.optBoolean("restoredFromBackup", false) || previous.optBoolean("restoredFromBackup", false))
+        if (SnapshotCodec.isImported(current) || SnapshotCodec.isImported(previous))
             return out;
         if (!current.optString("repo").equalsIgnoreCase(previous.optString("repo"))) return out;
         String repo = current.optString("repo");

@@ -9,8 +9,8 @@ final class HumanReport {
     private HumanReport() {}
     static String homeTitle(JSONObject current, JSONObject previous, Summary s) {
         if (current == null) return "Подключите проект";
-        if (current.optBoolean("restoredFromBackup", false)) return "Сведения из сохранённого файла";
-        if (previous == null || previous.optBoolean("restoredFromBackup", false)) return "Первая проверка выполнена";
+        if (SnapshotCodec.isImported(current)) return "Сведения из сохранённого файла";
+        if (previous == null || SnapshotCodec.isImported(previous)) return "Первая проверка выполнена";
         if (s.advanced + s.added + s.missing > 0) return "В истории проекта есть изменения";
         if (s.issueChanges + s.pullChanges > 0) return "Изменились записи задач или предложений";
         if (!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false))
@@ -22,8 +22,8 @@ final class HumanReport {
     }
     static String homeDescription(JSONObject current, JSONObject previous, Summary s) {
         if (current == null) return "Укажите репозиторий GitHub и нажмите «Обновить».";
-        if (current.optBoolean("restoredFromBackup", false)) return "Это сохранённая копия. Для проверки текущего состояния обновите данные с GitHub.";
-        if (previous == null || previous.optBoolean("restoredFromBackup", false))
+        if (SnapshotCodec.isImported(current)) return "Это сохранённая копия. Для проверки текущего состояния обновите данные с GitHub.";
+        if (previous == null || SnapshotCodec.isImported(previous))
             return "Данные получены. Сейчас сравнивать их не с чем: понадобится ещё одна проверка позже."
                     + ((!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false))
                     ? " Сведения о задачах или предложениях загрузились не полностью." : "");
@@ -55,9 +55,9 @@ final class HumanReport {
     /** Human home line. Must not say the project is idle when there is no baseline. */
     static String whatChanged(JSONObject current, JSONObject previous, Summary s) {
         if (current == null) return "Проект ещё не прочитан.";
-        if (current.optBoolean("restoredFromBackup", false))
+        if (SnapshotCodec.isImported(current))
             return "Показан сохранённый файл, а не свежая проверка.";
-        if (previous == null || previous.optBoolean("restoredFromBackup", false)
+        if (previous == null || SnapshotCodec.isImported(previous)
                 || !current.optString("repo").equalsIgnoreCase(previous.optString("repo")))
             return "Это первая проверка. Базы для сравнения нет, поэтому нельзя сказать, что проект стоит на месте или что в нём нет нового.";
         boolean branchesKnown = current.optBoolean("branchesComplete", false) && previous.optBoolean("branchesComplete", false);
@@ -131,7 +131,7 @@ final class HumanReport {
                     || low.contains("отменён"))
                 return "Повторить загрузку";
         }
-        if (current == null || current.optBoolean("restoredFromBackup", false)) return "Повторить загрузку";
+        if (current == null || SnapshotCodec.isImported(current)) return "Повторить загрузку";
         if (previous == null) return "Открыть направления";
         if (s.advanced + s.added + s.missing > 0 || s.issueChanges + s.pullChanges > 0) return "Открыть изменения";
         if (current.optBoolean("issuesComplete", false) && countState(current.optJSONArray("issues"), "open") > 0)
@@ -249,15 +249,9 @@ final class HumanReport {
     static String syncStatus(JSONObject current) {
         if (current == null) return "Синхронизации ещё не было.";
         String when = humanDate(current.optLong("capturedAt", 0));
-        if (current.optBoolean("restoredFromBackup", false))
+        if (SnapshotCodec.isImported(current))
             return "Это импорт, не свежая проверка GitHub. Дата файла: " + when + ".";
-        boolean partial = !current.optBoolean("branchesComplete", false)
-                || !current.optBoolean("issuesComplete", false)
-                || !current.optBoolean("pullsComplete", false)
-                || current.optBoolean("branchesStale", false)
-                || current.optBoolean("issuesStale", false)
-                || current.optBoolean("pullsStale", false)
-                || current.optBoolean("commitsStale", false);
+        boolean partial = GithubClient.isPartialSnapshot(current);
         if (partial) return "Проверка частичная, не полная. Ответ GitHub: " + when + ".";
         if (current.optBoolean("branchesCached", false) || current.optBoolean("issuesCached", false)
                 || current.optBoolean("pullsCached", false))
@@ -315,16 +309,10 @@ final class HumanReport {
     /** One status line for the owner: loaded, partial, comparable, or not. */
     static String ownerStatus(JSONObject current, JSONObject previous, Summary s) {
         if (current == null) return "Данные ещё не загружены.";
-        if (current.optBoolean("restoredFromBackup", false))
+        if (SnapshotCodec.isImported(current))
             return "Показан сохранённый файл, не свежая загрузка. Дата файла: " + humanDate(current.optLong("capturedAt", 0)) + ".";
-        boolean partial = !current.optBoolean("branchesComplete", false)
-                || !current.optBoolean("issuesComplete", false)
-                || !current.optBoolean("pullsComplete", false)
-                || current.optBoolean("branchesStale", false)
-                || current.optBoolean("issuesStale", false)
-                || current.optBoolean("pullsStale", false);
-        boolean noBase = previous == null || previous.optBoolean("restoredFromBackup", false)
-                || !current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
+        boolean partial = GithubClient.isPartialSnapshot(current);
+        boolean noBase = !comparableSnapshots(current, previous);
         String when = " Загрузка: " + humanDate(current.optLong("capturedAt", 0)) + ".";
         String base = noBase ? " Сравнивать не с чем."
                 : " База сравнения: " + humanDate(previous.optLong("capturedAt", 0)) + ".";
@@ -342,7 +330,7 @@ final class HumanReport {
     static String ownerChanged(JSONObject current, JSONObject previous, Summary s) {
         String fallback = whatChanged(current, previous, s);
         if (current == null || previous == null) return fallback;
-        if (current.optBoolean("restoredFromBackup", false) || previous.optBoolean("restoredFromBackup", false))
+        if (SnapshotCodec.isImported(current) || SnapshotCodec.isImported(previous))
             return fallback;
         try {
             JSONArray events = ChangeSet.between(previous, current);
@@ -368,9 +356,13 @@ final class HumanReport {
 
     static String ownerWhere(JSONObject current, JSONObject previous) {
         if (current == null) return "Проект ещё не выбран.";
+        if (SnapshotCodec.isImported(current))
+            return "Показан импортированный файл. Чтобы определить, где изменилась работа, обновите данные с GitHub.";
+        if (!comparableSnapshots(current, previous))
+            return "Нет достоверной предыдущей проверки для сравнения направлений." + latestCommitLine(current);
         StringBuilder names = new StringBuilder();
         JSONArray now = current.optJSONArray("branches");
-        JSONArray old = previous == null ? null : previous.optJSONArray("branches");
+        JSONArray old = previous.optJSONArray("branches");
         java.util.Map<String, String> prior = new java.util.HashMap<>();
         if (old != null) for (int i = 0; i < old.length(); i++) {
             JSONObject b = old.optJSONObject(i);
@@ -382,7 +374,7 @@ final class HumanReport {
             String name = b.optString("name");
             String sha = b.optString("sha");
             String was = prior.get(name);
-            if (was != null && !was.equals(sha)) {
+            if (was != null && !was.isEmpty() && !sha.isEmpty() && !was.equals(sha)) {
                 if (names.length() > 0) names.append(", ");
                 names.append(name);
             }
@@ -437,16 +429,27 @@ final class HumanReport {
         return "task";
     }
 
+    private static boolean comparableSnapshots(JSONObject current, JSONObject previous) {
+        return current != null && previous != null
+                && !SnapshotCodec.isImported(current) && !SnapshotCodec.isImported(previous)
+                && current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
+    }
+
+    static String previousBranchSha(String name, JSONObject current, JSONObject previous) {
+        return comparableSnapshots(current, previous) ? shaOf(previous, name) : null;
+    }
+
     /** What the owner can say about one branch pointer before compare is fetched. */
     static String branchPointerLine(String name, JSONObject current, JSONObject previous) {
         String guess = branchAssumption(name);
-        if (current == null || previous == null || previous.optBoolean("restoredFromBackup", false)
-                || current.optBoolean("restoredFromBackup", false))
+        if (!comparableSnapshots(current, previous))
             return "Сравнивать указатель не с чем. " + guess;
         String sha = shaOf(current, name);
         String prior = shaOf(previous, name);
+        if ((sha != null && sha.isEmpty()) || (prior != null && prior.isEmpty()))
+            return "Для сравнения нужны оба указателя ветки. " + guess;
         if (prior == null) {
-            if (!previous.optBoolean("branchesComplete", false))
+            if (previous.optJSONArray("branches") == null || !previous.optBoolean("branchesComplete", false))
                 return "В неполном прошлом списке этого имени не было. Новым его называть нельзя. " + guess;
             return "В прошлой полной проверке этого имени не было. Создание ветки не доказано. " + guess;
         }
@@ -492,7 +495,7 @@ final class HumanReport {
         if ("branch_moved".equals(kind))
             return "Точка работы сдвинулась. Пока нет сравнения, нельзя сказать, были это новые записи, откат или переписывание.";
         if ("branch_seen".equals(kind))
-            return "Имя появилось в полном прошлом списке. Дата создания и автор неизвестны.";
+            return "Ветка обнаружена в текущем снимке. Её имени не было в предыдущем полном списке. Дата создания и автор неизвестны.";
         if ("branch_absent".equals(kind))
             return "Имени нет в новом полном списке. Удаление ветки не подтверждено.";
         if ("issue_touch".equals(kind) || "pull_touch".equals(kind))

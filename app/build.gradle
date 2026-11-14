@@ -7,8 +7,8 @@ android {
         applicationId 'app.gitteller.mobile'
         minSdk 26
         targetSdk 35
-        versionCode 25
-        versionName '1.0.10-dev'
+        versionCode 26
+        versionName '1.0.11-dev'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildTypes {

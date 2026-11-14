@@ -27,12 +27,12 @@ final class Summary {
                 "Без синхронизации нельзя утверждать, что проект изменился или завершён.",0,0,0,0,0);
         // A user-supplied backup is not authenticated GitHub evidence.
         // Never compare a newly fetched live snapshot against a forged/imported baseline.
-        if (current.optBoolean("restoredFromBackup", false))
+        if (SnapshotCodec.isImported(current))
             return new Summary("Данные из резервной копии",
                     "Показан сохранённый файл, а не текущая проверка GitHub. Нажмите «Обновить» для получения свежих данных.",
                     "По этому файлу нельзя установить, какие изменения действительно произошли в GitHub.",
                     "Источник не проверен: импортированные сведения нельзя считать подтверждением готовности или прогресса.",0,0,0,0,0);
-        if (previous == null || previous.optBoolean("restoredFromBackup", false) ||
+        if (previous == null || SnapshotCodec.isImported(previous) ||
                 !current.optString("repo").equalsIgnoreCase(previous.optString("repo")))
             return new Summary("Первый снимок сохранён",
                     "Это первая достоверная проверка для сравнения. Обновите данные позже, чтобы увидеть изменения.",
