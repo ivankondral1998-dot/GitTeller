@@ -50,11 +50,14 @@ final class ChangeSet {
         String repo = current.optString("repo");
         boolean issuesOk = previous.optBoolean("issuesComplete", false) && current.optBoolean("issuesComplete", false);
         boolean pullsOk = previous.optBoolean("pullsComplete", false) && current.optBoolean("pullsComplete", false);
-        boolean branchesOk = previous.optBoolean("branchesComplete", false) && current.optBoolean("branchesComplete", false);
         String origin = originOf(current);
         diffRecords(out, previous.optJSONArray("issues"), current.optJSONArray("issues"), false, repo, "issue", origin, issuesOk);
         diffRecords(out, previous.optJSONArray("pulls"), current.optJSONArray("pulls"), true, repo, "pull", origin, pullsOk);
-        if (branchesOk) diffBranches(out, previous.optJSONArray("branches"), current.optJSONArray("branches"), repo, origin);
+        // Matched branch pointers are comparable even when either list is incomplete.
+        // Newly seen names need a complete previous list; absence requires two complete lists.
+        diffBranches(out, previous.optJSONArray("branches"), current.optJSONArray("branches"),
+                repo, origin, previous.optBoolean("branchesComplete", false),
+                current.optBoolean("branchesComplete", false));
         return out;
     }
 
@@ -120,7 +123,8 @@ final class ChangeSet {
                         url(repo, kind, number), origin));
             } else if (touched(was, row) && from.equals(to) && merged(was) == merged(row)) {
                 out.put(event(kind + "_touch", kind + "#" + number,
-                        ("issue".equals(kind) ? "Запись задачи #" : "Запись предложения #") + number + " обновлена.",
+                        ("issue".equals(kind) ? "Запись задачи #" : "Запись предложения #") + number
+                                + " обновлена. Что именно поменялось, из доступного снимка неизвестно.",
                         "Поле updated_at изменилось. Текст описания в снимок не входит, поэтому содержание правки неизвестно.",
                         url(repo, kind, number), origin));
             }
@@ -140,7 +144,8 @@ final class ChangeSet {
         }
     }
 
-    private static void diffBranches(JSONArray out, JSONArray old, JSONArray now, String repo, String origin) throws Exception {
+    private static void diffBranches(JSONArray out, JSONArray old, JSONArray now, String repo, String origin,
+                                     boolean previousComplete, boolean currentComplete) throws Exception {
         if (old == null || now == null) return;
         Map<String, String> prior = new HashMap<>();
         for (int i = 0; i < old.length(); i++) {
@@ -154,15 +159,30 @@ final class ChangeSet {
             String sha = b.optString("sha");
             String link = branchUrl(repo, name);
             if (!prior.containsKey(name)) {
+                if (!previousComplete) continue; // No claim about an unseen name in an earlier partial list.
                 out.put(event("branch_seen", "branch:" + name,
                         "Направление «" + name + "» впервые обнаружено между снимками.",
                         "В прошлой полной проверке этого имени не было. Это не гарантия, что ветку только что создали.",
                         link, origin));
             } else if (!prior.get(name).equals(sha)) {
                 out.put(event("branch_moved", "branch:" + name,
-                        "Указатель направления «" + name + "» изменился.",
-                        "Сдвиг указателя сам по себе не прогресс. Сравнение вперёд, назад или врозь запрашивается при открытии направления.",
+                        "В направлении «" + name + "» сдвинулась точка работы. Какие файлы изменились, ещё не запрашивалось.",
+                        "Сдвиг указателя сам по себе не прогресс и не откат. Сравнение вперёд, назад или врозь запрашивается при открытии направления.",
                         link, origin));
+            }
+        }
+        if (previousComplete && currentComplete) {
+            Map<String, Boolean> seen = new HashMap<>();
+            for (int i = 0; i < now.length(); i++) {
+                JSONObject b = now.optJSONObject(i);
+                if (b != null && !b.optString("name").isEmpty()) seen.put(b.optString("name"), true);
+            }
+            for (String name : prior.keySet()) {
+                if (seen.containsKey(name)) continue;
+                out.put(event("branch_absent", "branch:" + name,
+                        "Направление «" + name + "» не обнаружено в новом полном списке.",
+                        "В прошлом полном списке имя было, сейчас его нет. Причина неизвестна; удаление ветки не подтверждено.",
+                        branchUrl(repo, name), origin));
             }
         }
     }
@@ -202,7 +222,7 @@ final class ChangeSet {
         e.put("id", id);
         e.put("event", text);
         e.put("basis", basis);
-        e.put("unknown", "Не подтверждено: тесты, работоспособность функции и готовность на Android.");
+        e.put("unknown", "Тесты, работоспособность и готовность на телефоне.");
         if (url != null && url.startsWith("https://github.com/")) e.put("url", url);
         e.put("origin", origin == null || origin.isEmpty() ? "LIVE" : origin);
         return e;

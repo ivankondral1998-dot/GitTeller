@@ -64,8 +64,8 @@ final class SnapshotCodec {
                     JSONObject row = rawArr.optJSONObject(i);
                     if (row == null) continue;
                     JSONObject item = new JSONObject();
-                    String[] names = "commits".equals(k) ? new String[]{"sha", "message", "date"}
-                            : new String[]{"number", "title", "state", "updated_at"};
+                    String[] names = "commits".equals(k) ? new String[]{"sha", "message", "date", "author"}
+                            : new String[]{"number", "title", "state", "updated_at", "labels"};
                     for (String name : names) {
                         if ("number".equals(name)) item.put(name, row.optInt(name));
                         else {

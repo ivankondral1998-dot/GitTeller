@@ -18,6 +18,13 @@ public class SummaryTest {
                 .put("warnings",new JSONArray());
     }
 
+    @Test public void changedBranchPointerDoesNotProveNewCommits() throws Exception {
+        Summary s=Summary.of(snapshot(true,"main","aaa"),snapshot(true,"main","bbb"));
+        assertEquals(1,s.advanced);
+        assertFalse(s.plain.contains("появились новые записи"));
+        assertTrue(s.plain.contains("откат"));
+    }
+
     @Test public void firstSnapshotNeedsAnotherRefresh() throws Exception {
         assertEquals("Первый снимок сохранён",Summary.of(snapshot(true,"main","aaa"),null).heading);
     }

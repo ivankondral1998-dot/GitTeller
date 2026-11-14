@@ -1,0 +1,2 @@
+package: app.gitteller.mobile
+uses-permission: name='android.permission.INTERNET'

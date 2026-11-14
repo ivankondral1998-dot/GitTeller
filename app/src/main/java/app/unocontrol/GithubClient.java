@@ -396,11 +396,34 @@ final class GithubClient {
             String message = commit == null ? "" : commit.optString("message", "");
             if (message.contains("\n")) message = message.substring(0, message.indexOf('\n'));
             String date = "";
+            String author = "";
             if (commit != null && commit.optJSONObject("committer") != null)
                 date = commit.optJSONObject("committer").optString("date", "");
-            out.put(new JSONObject().put("sha", x.optString("sha")).put("message", message).put("date", date));
+            JSONObject account = x.optJSONObject("author");
+            if (account != null) author = account.optString("login", "");
+            if (author.isEmpty() && commit != null && commit.optJSONObject("author") != null)
+                author = commit.optJSONObject("author").optString("name", "");
+            if (author.length() > 80) author = author.substring(0, 80);
+            out.put(new JSONObject().put("sha", x.optString("sha")).put("message", message)
+                    .put("date", date).put("author", author));
         }
         return out;
+    }
+
+    private static String labelNames(JSONArray labels) {
+        if (labels == null) return "";
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < labels.length() && b.length() < 120; i++) {
+            JSONObject row = labels.optJSONObject(i);
+            String name = row == null ? labels.optString(i) : row.optString("name");
+            if (name == null) continue;
+            name = name.replace('\n', ' ').trim();
+            if (name.isEmpty()) continue;
+            if (name.length() > 40) name = name.substring(0, 40);
+            if (b.length() > 0) b.append(", ");
+            b.append(name);
+        }
+        return b.toString();
     }
 
     private static JSONArray slimIssues(JSONArray raw) throws Exception {
@@ -408,10 +431,13 @@ final class GithubClient {
         for (int i = 0; i < raw.length(); i++) {
             JSONObject x = raw.optJSONObject(i);
             if (x == null || x.has("pull_request")) continue;
-            out.put(new JSONObject().put("number", x.optInt("number"))
+            JSONObject row = new JSONObject().put("number", x.optInt("number"))
                     .put("title", x.optString("title"))
                     .put("state", x.optString("state"))
-                    .put("updated_at", cleanStamp(x.optString("updated_at"))));
+                    .put("updated_at", cleanStamp(x.optString("updated_at")));
+            String labels = labelNames(x.optJSONArray("labels"));
+            if (!labels.isEmpty()) row.put("labels", labels);
+            out.put(row);
         }
         return out;
     }
@@ -486,7 +512,7 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "GitTeller/1.0.9-dev");
+        c.setRequestProperty("User-Agent", "GitTeller/1.0.10-dev");
         if (etag != null && !etag.isEmpty()) c.setRequestProperty("If-None-Match", etag);
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         inflight = c;

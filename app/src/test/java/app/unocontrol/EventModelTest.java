@@ -34,6 +34,34 @@ public class EventModelTest {
         return b.toString();
     }
 
+    @Test public void matchedBranchChangeAppearsEvenWithPartialLists() throws Exception {
+        JSONObject before = snap(new JSONArray(),new JSONArray()).put("branchesComplete",false);
+        JSONObject after = snap(new JSONArray(),new JSONArray()).put("branchesComplete",false);
+        after.put("branches",new JSONArray().put(new JSONObject().put("name","main")
+                .put("sha", SHA2)));
+        assertEquals(1,Summary.of(after,before).advanced);
+        assertTrue(kinds(ChangeSet.between(before,after)).contains("branch_moved"));
+    }
+
+    @Test public void branchAbsenceInCompleteSnapshotsIsNotCalledDeletion() throws Exception {
+        JSONObject before = snap(new JSONArray(),new JSONArray());
+        JSONObject after = snap(new JSONArray(),new JSONArray()).put("branches",new JSONArray());
+        JSONArray events = ChangeSet.between(before,after);
+        assertTrue(kinds(events).contains("branch_absent"));
+        assertTrue(events.getJSONObject(0).getString("event").contains("не обнаружено"));
+        assertTrue(events.getJSONObject(0).getString("basis").contains("не подтверждено"));
+    }
+
+    @Test public void partialCurrentWithProvenNewNameStillShowsHomeChange() throws Exception {
+        JSONObject before = snap(new JSONArray(),new JSONArray());
+        JSONObject after = snap(new JSONArray(),new JSONArray()).put("branchesComplete",false);
+        after.put("branches",new JSONArray().put(new JSONObject().put("name","main").put("sha",SHA))
+                .put(new JSONObject().put("name","experimental").put("sha", SHA2)));
+        Summary s = Summary.of(after,before);
+        assertEquals(1,s.added);
+        assertTrue(HumanReport.whatChanged(after,before,s).contains("впервые"));
+    }
+
     @Test public void newIssueCountsWhileBranchPointersStay() throws Exception {
         JSONObject base = snap(new JSONArray(), new JSONArray());
         JSONObject created = snap(new JSONArray().put(issue(7, "Fix crash", "open")), new JSONArray());
@@ -47,7 +75,7 @@ public class EventModelTest {
         JSONArray events = ChangeSet.between(base, created);
         assertTrue(kinds(events).contains("issue_new"));
         assertTrue(events.getJSONObject(0).getString("url").startsWith("https://github.com/demo/proj/issues/7"));
-        assertTrue(events.getJSONObject(0).getString("unknown").contains("Не подтверждено"));
+        assertTrue(events.getJSONObject(0).getString("unknown").contains("работоспособность"));
     }
 
     @Test public void mergeCountsWhenStateStaysClosed() throws Exception {
@@ -94,6 +122,7 @@ public class EventModelTest {
         JSONArray events = ChangeSet.between(old, now);
         assertTrue(kinds(events).contains("issue_touch"));
         assertTrue(events.getJSONObject(0).getString("basis").contains("updated_at"));
+        assertTrue(events.getJSONObject(0).getString("event").contains("неизвестно"));
         assertFalse(events.getJSONObject(0).getString("event").contains("исправлен"));
     }
 

@@ -170,6 +170,17 @@ public final class MainActivity extends Activity {
         return card;
     }
 
+    private void question(LinearLayout parent, String title, String body, Runnable open) {
+        LinearLayout card = panel(parent);
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setContentDescription(title + ". " + body);
+        card.setOnClickListener(v -> open.run());
+        addLine(card, title, 15, ACCENT, true, 0);
+        addLine(card, body, 16, TEXT, false, 6);
+        addLine(card, "Подробнее", 13, MUTED, false, 10);
+    }
+
     private void draw() {
         applyPalette();
         FrameLayout root=new FrameLayout(this);
@@ -196,15 +207,15 @@ public final class MainActivity extends Activity {
         menu.setOnClickListener(v -> showMenu(menu));
         wrap.addView(head,lp(-1,-2));
         space(wrap,18);
-        addLine(wrap,"Что происходит с проектом",24,TEXT,true,0);
-        String shortRepo=repo.length()>43?repo.substring(0,40)+"…":repo;
-        addLine(wrap,shortRepo,13,MUTED,false,8);
-        space(wrap,12);
+        addLine(wrap,"Что происходит с проектом",22,TEXT,true,0);
+        String shortRepo=repo.length()>48?repo.substring(0,45)+"…":repo;
+        addLine(wrap,"Проект: "+shortRepo,18,TEXT,true,6);
+        space(wrap,8);
 
+        Summary summary=Summary.of(current,previous);
         if (current != null && !loading) {
-            addLine(wrap,HumanReport.syncStatus(current),12,MUTED,false,0);
-            addLine(wrap,HumanReport.coverageLine(current),12,MUTED,false,4);
-            space(wrap,12);
+            addLine(wrap,HumanReport.ownerStatus(current,previous,summary),14,MUTED,false,0);
+            space(wrap,8);
         }
         refresh=new Button(this);
         refresh.setText(loading?"Обновление…":"Обновить");
@@ -217,26 +228,38 @@ public final class MainActivity extends Activity {
         refresh.setContentDescription("Обновить данные с GitHub");
         wrap.addView(refresh,lp(-1,56));
         refresh.setOnClickListener(v->sync());
+        space(wrap,8);
+        Button switchProject=new Button(this);
+        switchProject.setText("Сменить проект");
+        switchProject.setAllCaps(false);
+        switchProject.setTextSize(15);
+        switchProject.setTextColor(TEXT);
+        switchProject.setBackground(shape(PANEL,15,STROKE));
+        switchProject.setContentDescription("Сменить репозиторий GitHub");
+        wrap.addView(switchProject,lp(-1,48));
+        switchProject.setOnClickListener(v->openPage("access"));
         space(wrap,16);
 
-        Summary summary=Summary.of(current,previous);
         String step = HumanReport.nextStep(current,previous,summary,lastError);
-        LinearLayout hero=panel(wrap);
         if (loading) {
+            LinearLayout hero=panel(wrap);
             addLine(hero,"Идёт чтение GitHub",20,TEXT,true,0);
             addLine(hero,"Подождите. Старые сведения проекта пока не меняются.",16,TEXT,false,10);
         } else {
-            addLine(hero,"Что изменилось",13,ACCENT,true,0);
-            addLine(hero,HumanReport.whatChanged(current,previous,summary),16,TEXT,false,8);
-            addLine(hero,"Что требует внимания",13,ACCENT,true,14);
-            addLine(hero,HumanReport.needsAttention(current,summary),16,TEXT,false,8);
-            addLine(hero,"Следующий шаг",13,ACCENT,true,14);
-            addLine(hero,step,16,TEXT,false,8);
-            if (lastError != null) addLine(hero,"Последняя попытка не удалась. "+lastError,14,WARN,false,12);
+            question(wrap,"Что изменилось", HumanReport.ownerChanged(current,previous,summary), ()->openPage("changes"));
+            question(wrap,"Где работа", HumanReport.ownerWhere(current,previous), ()->openPage("branches"));
+            question(wrap,"Какие проблемы", HumanReport.ownerProblems(current), ()->openPage("problems"));
+            question(wrap,"Кто выполнял", HumanReport.ownerWho(current), ()->openPage("commits"));
+            if (lastError != null) {
+                LinearLayout warn=panel(wrap);
+                addLine(warn,"Последняя попытка не удалась. "+lastError,14,WARN,false,0);
+            }
             if (current != null && (current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
                     || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
-                    || current.optBoolean("restoredFromBackup", false)))
-                addLine(hero,"Часть сведений с прошлой удачной загрузки.",12,WARN,false,8);
+                    || current.optBoolean("restoredFromBackup", false))) {
+                LinearLayout stale=panel(wrap);
+                addLine(stale,"Часть сведений с прошлой удачной загрузки.",14,WARN,false,0);
+            }
         }
         if (!loading && !"Повторить загрузку".equals(step)) {
             Button next=new Button(this);

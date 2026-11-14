@@ -113,6 +113,7 @@ public final class SectionActivity extends Activity {
     private String title() {
         switch(page){
             case "changes":return "Изменения";
+            case "problems":return "Проблемы";
             case "branches":return "Направления работы";
             case "commits":return "История изменений";
             case "tasks":return "Задачи";
@@ -143,9 +144,11 @@ public final class SectionActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
         body=col();body.setPadding(dp(18),dp(8),dp(18),dp(28));scroll.addView(body);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));setContentView(root);
+        line(body,"Проект: "+repo,15,true,ink);gap(body,10);
         switch(page) {
             case "overview":overview();break;
             case "changes":changes();break;
+            case "problems":problems();break;
             case "branches":branches();break;
             case "commits":commits();break;
             case "tasks":tasks();break;
@@ -162,13 +165,14 @@ public final class SectionActivity extends Activity {
     }
     private void index(){
         line(body,"Разделы",22,true,ink);gap(body,8);
-        line(body,"Каждый раздел — отдельный экран. Кнопка «Назад» и системная кнопка Back возвращают на предыдущий.",14,false,muted);
+        line(body,"Сначала четыре коротких ответа. Остальное — подробности. Кнопка «Назад» и системная Back возвращают назад.",14,false,muted);
         gap(body,14);
-        action("Обзор","Что изменилось и чего нельзя утверждать",()->go("overview"));
-        action("Изменения","Лента событий между проверками, с источником",()->go("changes"));
-        action("Направления работы","Все ветки, включая исследовательские",()->go("branches"));
+        action("Обзор","Что изменилось, где работа, какие проблемы, кто выполнял",()->go("overview"));
+        action("Изменения","Каждое событие: что, где, откуда известно",()->go("changes"));
+        action("Направления работы","Где сдвинулась точка работы",()->go("branches"));
+        action("Проблемы","Проверки, похожие на дефект названия и обычные задачи — отдельно",()->go("problems"));
         action("История изменений","Записи выбранного направления, не весь проект сразу",()->go("commits"));
-        action("Задачи","Открытые и закрытые обсуждения",()->go("tasks"));
+        action("Задачи","Открытые и закрытые обсуждения. Не каждая задача — ошибка",()->go("tasks"));
         action("Предложения изменений","Что предлагают внести и внесено ли это",()->go("pulls"));
         action("Надёжность сведений","Что загружено полностью, а что нет",()->go("accuracy"));
         action("Подключение GitHub","Репозиторий и доступ только на чтение",()->go("access"));
@@ -177,12 +181,13 @@ public final class SectionActivity extends Activity {
     private void overview(){
         if(current==null){note("Нет данных","Вернитесь назад и нажмите «Обновить».");return;}
         Summary s=Summary.of(current,previous);
-        note("Что изменилось", HumanReport.whatChanged(current,previous,s));
-        note("Что требует внимания", HumanReport.needsAttention(current,s));
-        note("Следующий шаг", HumanReport.nextStep(current,previous,s));
-        note("Покрытие", HumanReport.coverageLine(current)+" "+HumanReport.syncStatus(current));
-        action("Открыть направления","Посмотреть, где именно сдвинулась работа",()->go("branches"));
-        action("Открыть задачи","Конкретные открытые записи",()->go("tasks"));
+        note("Что изменилось", HumanReport.ownerChanged(current,previous,s));
+        note("Где работа", HumanReport.ownerWhere(current,previous));
+        note("Какие проблемы", HumanReport.ownerProblems(current));
+        note("Кто выполнял", HumanReport.ownerWho(current));
+        action("Открыть изменения","Каждое событие отдельно",()->go("changes"));
+        action("Открыть направления","Где именно сдвинулась точка работы",()->go("branches"));
+        action("Открыть проблемы","Ошибки, задачи и неизвестное — отдельно",()->go("problems"));
     }
     private void branches(){
         if(current==null){note("Нет данных","Сначала обновите проект.");return;}
@@ -195,7 +200,7 @@ public final class SectionActivity extends Activity {
         for(int i=0;i<list.length();i++){
             JSONObject x=list.optJSONObject(i);if(x==null)continue;final int idx=i;
             String name=x.optString("name");
-            action(name.isEmpty()?"Без названия":name, HumanReport.branchAssumption(name), ()->goItem("branch-detail",idx));
+            action(name.isEmpty()?"Без названия":name, HumanReport.branchPointerLine(name, current, previous), ()->goItem("branch-detail",idx));
         }
     }
     private void branchDetail(){
@@ -245,8 +250,8 @@ public final class SectionActivity extends Activity {
             try {
                 String token = vault.load(selected);
                 GithubClient client = new GithubClient(token == null ? "" : token);
-                text = "Событие: указатели направления различаются.\nОснование: "+client.readCompare(selected, base, head)
-                        +"\nНе подтверждено: тесты и готовность на Android.";
+                text = "Что произошло: указатели направления различаются.\nОткуда известно: "+client.readCompare(selected, base, head)
+                        +"\nЧто не проверено: тесты и готовность на Android.";
             } catch (Exception e) {
                 text = HumanReport.NOT_ENOUGH+". "+GithubClient.safeMessage(e);
             }
@@ -275,10 +280,15 @@ public final class SectionActivity extends Activity {
             JSONObject event=log.optJSONObject(i);
             if(event==null || !matches(filter, event.optString("kind"))) continue;
             shown++;
-            String title=event.optString("event");
-            String bodyText="Основание: "+event.optString("basis")+"\nНе подтверждено: "+event.optString("unknown")
-                    +"\nИсточник: "+event.optString("origin","LIVE")+", "+HumanReport.humanDate(event.optLong("at",0))+".";
-            note(title.isEmpty()?"Событие":title, bodyText);
+            String happened=event.optString("event");
+            if(happened.isEmpty()) happened="Запись без текста.";
+            String bodyText="Что произошло: "+happened
+                    +"\nГде: "+HumanReport.eventWhere(event)
+                    +"\nОткуда известно: "+event.optString("origin","LIVE")+", "+HumanReport.humanDate(event.optLong("at",0))
+                    +". "+event.optString("basis")
+                    +"\nЧто это значит: "+HumanReport.eventMeaning(event.optString("kind"))
+                    +"\n"+HumanReport.unknownOnce(event.optString("unknown"));
+            note(happened, bodyText);
             String url=event.optString("url");
             if(url.startsWith("https://github.com/")) technical("Ссылка\n"+url+"\nИдентификатор\n"+event.optString("id"));
         }
@@ -397,7 +407,14 @@ public final class SectionActivity extends Activity {
         for(int i=0;i<issues.length();i++){
             JSONObject x=issues.optJSONObject(i);if(x==null)continue;final int idx=i;
             String title=x.optString("title","Без названия");
-            action(title, HumanReport.state(x.optString("state")), ()->goItem("issue-detail",idx));
+            String kind=HumanReport.problemKind(title, x.optString("labels"));
+            String hint=HumanReport.state(x.optString("state"));
+            if("open".equals(x.optString("state"))) {
+                if("defect".equals(kind)) hint=hint+" По названию похоже на дефект, это не проверка.";
+                else if("blocker".equals(kind)) hint=hint+" По названию похоже на блокировку, это не проверка.";
+                else hint=hint+" Обычная задача, не подтверждённая ошибка.";
+            }
+            action(title, hint, ()->goItem("issue-detail",idx));
         }
     }
     private void pulls(){
@@ -485,6 +502,40 @@ public final class SectionActivity extends Activity {
             toast("Скопировано");
         });
     }
+    private void problems(){
+        if(current==null){note("Нет данных","Сначала обновите проект.");return;}
+        note("Подтверждённые ошибки проверок",
+                "В общем снимке их нет: автоматические проверки читаются только у конкретной записи. Пустое место здесь не означает, что проверки прошли.");
+        action("Надёжность сведений","Что загружено и чего нет",()->go("accuracy"));
+        boolean complete=current.optBoolean("issuesComplete", false);
+        note("Список задач", complete
+                ? "Список в пределах запроса загружен. Это не все возможные дефекты программы."
+                : "Список неполный. Нельзя сказать, сколько проблем всего, и пустой ответ не означает отсутствие ошибок.");
+        JSONArray issues=current.optJSONArray("issues");
+        int defects=0, blockers=0, ordinary=0, shown=0;
+        if(issues!=null) for(int i=0;i<issues.length();i++){
+            JSONObject x=issues.optJSONObject(i);
+            if(x==null || !"open".equals(x.optString("state"))) continue;
+            shown++;
+            String title=x.optString("title","Без названия");
+            String kind=HumanReport.problemKind(title, x.optString("labels"));
+            String hint;
+            if("defect".equals(kind)){defects++; hint="По названию похоже на дефект. Это не проверка и не доказанная ошибка.";}
+            else if("blocker".equals(kind)){blockers++; hint="По названию похоже на блокировку. Это не проверка.";}
+            else {ordinary++; hint="Обычная открытая задача. Это не подтверждённая ошибка.";}
+            final int idx=i;
+            action(title, hint, ()->goItem("issue-detail", idx));
+        }
+        if(shown==0) note("Открытых задач в выборке нет", complete
+                ? "Это не значит, что программа без дефектов."
+                : "Неполная выборка не доказывает отсутствие задач.");
+        else note("Как читать", "Похожих на дефект по названию: "+defects
+                +". Похожих на блокировку: "+blockers
+                +". Обычных открытых задач: "+ordinary
+                +". Название и метка не являются подтверждённой ошибкой.");
+        action("Все задачи","Включая закрытые. Закрытие не означает исправление.",()->go("tasks"));
+        action("Предложения изменений","Закрытие не означает внесение в проект.",()->go("pulls"));
+    }
     private void accuracy(){
         if(current==null){note("Нет данных","Ещё не было проверки GitHub.");return;}
         note("Источник", sourceLine());
@@ -559,7 +610,7 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.9-dev", "Объясняет историю GitHub человеку без разработки. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.10-dev", "Объясняет, что произошло в проекте. Это не коммерческий релиз и не проверка готовности программы.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
         note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");
@@ -588,9 +639,11 @@ public final class SectionActivity extends Activity {
     }
     private void shareReport(){
         Summary s=Summary.of(current, previous);
-        String text="GitTeller\n"+repo+"\n"+HumanReport.syncStatus(current)+"\n\nЧто изменилось:\n"
-                +HumanReport.whatChanged(current, previous, s)+"\n\nЧто требует внимания:\n"
-                +HumanReport.needsAttention(current, s)+"\n\n"+HumanReport.coverageLine(current)
+        String text="GitTeller\nПроект: "+repo+"\n"+HumanReport.ownerStatus(current, previous, s)
+                +"\n\nЧто изменилось:\n"+HumanReport.ownerChanged(current, previous, s)
+                +"\n\nГде работа:\n"+HumanReport.ownerWhere(current, previous)
+                +"\n\nКакие проблемы:\n"+HumanReport.ownerProblems(current)
+                +"\n\nКто выполнял:\n"+HumanReport.ownerWho(current)
                 +"\n\nЭто не проверка работоспособности и не отчёт о готовности.";
         Intent send=new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
