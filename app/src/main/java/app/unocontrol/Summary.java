@@ -65,15 +65,16 @@ final class Summary {
                 && current.optBoolean("pullsComplete", false);
         int issueChanges = ChangeSet.issueChanges(previous, current);
         int pullChanges = ChangeSet.pullChanges(previous, current);
-        String headline = (moved+added+removed)==0 ?
-                (complete ? "SHA веток не изменились" : "Сравнение неполное") : "В истории проекта есть изменения";
+        String headline = (moved+added+removed)>0 ? "В истории проекта есть изменения"
+                : issueChanges + pullChanges > 0 ? "Изменились записи задач или предложений"
+                : (complete ? "SHA веток не изменились" : "Сравнение неполное");
         String desc = moved + " веток изменили указатель, " + added + " появились в сравнении с полностью загруженным списком.";
         if (previouslyUnseen>0) desc += " Ещё " + previouslyUnseen +
                 " веток впервые встретились в нашей выборке, но могли существовать раньше.";
         if (complete) desc += " Ещё " + removed + " веток не обнаружены в новом списке.";
         else desc += " Список мог загрузиться не полностью, исчезновение веток не оценивается.";
-        if (issueChanges > 0) desc += " Статус изменился у " + issueChanges + " задач в доступной выборке.";
-        if (pullChanges > 0) desc += " Статус изменился у " + pullChanges + " запросов изменений.";
+        if (issueChanges > 0) desc += " Изменились записи " + issueChanges + " задач в доступной выборке.";
+        if (pullChanges > 0) desc += " Изменились записи " + pullChanges + " запросов изменений.";
         if (!issueScopeComplete || !pullScopeComplete)
             desc += " Сравнение статусов задач или предложений ограничено неполными данными.";
         String plain;
@@ -85,11 +86,11 @@ final class Summary {
             plain = "В истории проекта появились новые записи. Это видно по веткам, но не доказывает, что программа работает или тесты прошли.";
         }
         if (issueChanges + pullChanges > 0) {
-            plain += " В доступной выборке изменился статус задач или запросов — это заявление GitHub, не проверка на устройстве.";
+            plain += " В доступной выборке изменились записи задач или запросов — это данные GitHub, не проверка на устройстве.";
         }
         String attention = "Изменения веток не показывают, прошли ли тесты и готово ли приложение.";
         if (issueChanges + pullChanges > 0 && moved + added + removed == 0) {
-            attention = "Указатели веток те же, но статусы задач или запросов в выборке изменились. Это не доказательство, что программа работает. " + attention;
+            attention = "Указатели веток те же, но записи задач или запросов в выборке изменились. Это не доказательство, что программа работает. " + attention;
         }
         if (!issueScopeComplete || !pullScopeComplete)
             attention = "Статусы задач или предложений не удалось сравнить полностью. " + attention;

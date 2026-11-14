@@ -40,36 +40,17 @@ final class TokenVault {
     /** Test hook: the install step fails and the previous file must remain. */
     static boolean testFailInstall;
 
-    /** Install tmp as dest. If install fails, the previous dest is restored. Tmp is ciphertext only. */
+    /** Atomic replacement. On a rejected installation the previous ciphertext is untouched. */
     static void replaceAtomically(File tmp, File dest) throws VaultException {
-        if (tmp == null || dest == null || !tmp.isFile())
-            throw new VaultException("Не удалось записать доступ. Прежняя запись не тронута.");
-        File parent = dest.getParentFile();
-        if (parent == null) {
-            tmp.delete();
-            throw new VaultException("Не удалось подготовить каталог. Прежняя запись не тронута.");
-        }
-        if (!parent.exists() && !parent.mkdirs()) {
-            tmp.delete();
-            throw new VaultException("Не удалось подготовить каталог. Прежняя запись не тронута.");
-        }
-        File bak = new File(parent, dest.getName() + ".bak");
-        if (bak.exists() && !bak.delete()) {
-            tmp.delete();
-            throw new VaultException("Не удалось подготовить замену. Прежняя запись не тронута.");
-        }
-        boolean had = dest.exists();
-        if (had && !dest.renameTo(bak)) {
-            tmp.delete();
-            throw new VaultException("Не удалось отложить прежнюю запись. Она не удалена.");
-        }
-        boolean installed = !testFailInstall && tmp.renameTo(dest);
-        if (!installed) {
-            if (had && bak.exists() && !dest.exists()) bak.renameTo(dest);
-            tmp.delete();
+        if (testFailInstall) {
+            if (tmp != null) tmp.delete();
             throw new VaultException("Не удалось записать доступ. Прежняя запись сохранена.");
         }
-        if (bak.exists()) bak.delete();
+        try {
+            AtomicCipherFile.replace(tmp, dest);
+        } catch (Exception e) {
+            throw new VaultException("Не удалось атомарно заменить токен. Прежняя запись не удалена.");
+        }
     }
 
     static String normalizeRepo(String repo) {
@@ -118,6 +99,8 @@ final class TokenVault {
     String load(String repoId) throws VaultException {
         String repo = normalizeRepo(repoId);
         File f = fileFor(repo);
+        try { f = AtomicCipherFile.recover(f); }
+        catch (Exception e) { throw new VaultException("Не удалось восстановить защищённую запись. Она не удалена."); }
         if (!f.isFile()) return null;
         try {
             byte[] blob = java.nio.file.Files.readAllBytes(f.toPath());
@@ -143,7 +126,7 @@ final class TokenVault {
 
     boolean hasToken(String repoId) {
         try {
-            return fileFor(normalizeRepo(repoId)).isFile();
+            return AtomicCipherFile.hasRecord(fileFor(normalizeRepo(repoId)));
         } catch (RuntimeException | VaultException e) {
             return false;
         }
@@ -152,7 +135,8 @@ final class TokenVault {
     void delete(String repoId) throws VaultException {
         String repo = normalizeRepo(repoId);
         File f = fileFor(repo);
-        if (f.exists() && !f.delete()) throw new VaultException("Не удалось удалить сохранённый доступ.");
+        try { AtomicCipherFile.delete(f); }
+        catch (Exception e) { throw new VaultException("Не удалось удалить сохранённый доступ полностью."); }
     }
 
     private File fileFor(String normalizedRepo) throws VaultException {

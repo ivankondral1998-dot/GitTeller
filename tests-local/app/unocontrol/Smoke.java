@@ -47,11 +47,11 @@ public class Smoke {
     openTask.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","open")));
     Summary taskDiff=Summary.of(closedTask,openTask);
     check(taskDiff.issueChanges==1,"same branches can have changed issue status");
-    check(HumanReport.homeTitle(closedTask,openTask,taskDiff).contains("статусы задач"),"home discloses changed issues");
+    check(HumanReport.homeTitle(closedTask,openTask,taskDiff).contains("записи задач"),"home discloses changed issues");
     check(HumanReport.homeDescription(closedTask,openTask,taskDiff).contains("не доказывает"),"status change not a passing test");
     closedTask.put("issuesComplete",false);
-    check(Summary.of(closedTask,openTask).issueChanges==0,"partial issue responses are not proof of status transition");
-    check(HumanReport.homeTitle(closedTask,openTask,Summary.of(closedTask,openTask)).contains("недоступна"),"incomplete issues shown on home");
+    check(Summary.of(closedTask,openTask).issueChanges==1,"known matched issue transition remains visible despite partial listing");
+    check(HumanReport.homeTitle(closedTask,openTask,Summary.of(closedTask,openTask)).contains("записи задач"),"known matched issue change shown despite incomplete listing");
     JSONObject emptyIssues=snapshot(true,"main","1");
     emptyIssues.put("issues",new JSONArray());
     emptyIssues.put("pulls",new JSONArray());

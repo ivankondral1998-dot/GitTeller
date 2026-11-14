@@ -99,32 +99,10 @@ public final class MainActivity extends Activity {
         try {
             JSONArray prior = parseArray(prefs.getString(key(repo, "feed"), ""));
             JSONArray news = ChangeSet.between(older, newer);
-            JSONArray merged = new JSONArray();
-            for (int i = 0; i < news.length() && merged.length() < 30; i++) {
-                JSONObject event = news.optJSONObject(i);
-                if (event == null) continue;
-                event.put("at", newer.optLong("capturedAt", System.currentTimeMillis()));
-                if (!seen(prior, event)) merged.put(event);
-            }
-            for (int i = 0; i < prior.length() && merged.length() < 30; i++) {
-                JSONObject event = prior.optJSONObject(i);
-                if (event != null) merged.put(event);
-            }
-            feed = merged;
+            feed = EventFeed.merge(prior, news, newer.optLong("capturedAt", System.currentTimeMillis()));
         } catch (Exception ignored) {
             // A broken local feed must not discard the fresh snapshot.
         }
-    }
-
-    private static boolean seen(JSONArray prior, JSONObject event) {
-        String key = event.optString("kind") + "|" + event.optString("id") + "|" + event.optString("event");
-        for (int i = 0; i < prior.length(); i++) {
-            JSONObject old = prior.optJSONObject(i);
-            if (old == null) continue;
-            String other = old.optString("kind") + "|" + old.optString("id") + "|" + old.optString("event");
-            if (key.equals(other)) return true;
-        }
-        return false;
     }
 
     private void applyPalette() {

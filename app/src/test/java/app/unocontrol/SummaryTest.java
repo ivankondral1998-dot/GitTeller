@@ -53,32 +53,44 @@ public class SummaryTest {
         now.put("issues", new JSONArray().put(new JSONObject().put("number", 7).put("title", "login").put("state", "closed")));
         old.put("issues", new JSONArray().put(new JSONObject().put("number", 7).put("title", "login").put("state", "open")));
         Summary s = Summary.of(now, old);
-        assertEquals("SHA веток не изменились", s.heading);
+        assertEquals("Изменились записи задач или предложений", s.heading);
         assertTrue(s.description.contains("1 задач"));
+        assertTrue(s.description.contains("Изменились записи"));
+        assertFalse(s.description.contains("Статус изменился"));
         assertEquals(1,s.issueChanges);
-        assertTrue(HumanReport.homeTitle(now,old,s).contains("статусы задач"));
+        assertTrue(HumanReport.homeTitle(now,old,s).contains("записи"));
         assertTrue(s.plain.contains("не доказательство") || s.attention.contains("не доказательство"));
         assertFalse(s.plain.contains("PASS"));
     }
-    @Test public void partialIssueListMustNotAssertStateTransition() throws Exception {
+    @Test public void knownIssueChangeSurvivesAPartialList() throws Exception {
         JSONObject now=snapshot(true,"main","aaa").put("issuesComplete",false);
         JSONObject old=snapshot(true,"main","aaa");
         now.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","closed")));
         old.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","open")));
         Summary s=Summary.of(now,old);
-        assertEquals(0,s.issueChanges);
+        assertEquals(1,s.issueChanges);
         assertTrue(s.attention.contains("не удалось сравнить полностью"));
-        assertTrue(HumanReport.homeTitle(now,old,s).contains("недоступна"));
+        assertTrue(HumanReport.homeTitle(now,old,s).contains("записи"));
         assertFalse(HumanReport.homeTitle(now,old,s).contains("сдвигов"));
+        assertEquals(0, ChangeSet.between(snapshot(true,"main","aaa").put("issues", new JSONArray()),
+                now.put("issues", new JSONArray().put(new JSONObject().put("number", 9).put("state","open")))).length());
     }
-    @Test public void oldSnapshotWithoutCoverageFlagMustNotAssertStateTransition() throws Exception {
+    @Test public void incompleteListWithoutMatchedChangeStaysUndetermined() throws Exception {
+        JSONObject now=snapshot(true,"main","aaa").put("issuesComplete",false);
+        JSONObject old=snapshot(true,"main","aaa");
+        Summary s=Summary.of(now,old);
+        assertEquals(0,s.issueChanges);
+        assertTrue(HumanReport.homeTitle(now,old,s).contains("недоступна"));
+    }
+    @Test public void missingCoverageFlagStillShowsAMatchedRecord() throws Exception {
         JSONObject now=snapshot(true,"main","aaa");
         JSONObject old=snapshot(true,"main","aaa");
         old.remove("issuesComplete");
         now.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","closed")));
         old.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("state","open")));
         Summary s=Summary.of(now,old);
-        assertEquals(0,s.issueChanges);
+        assertEquals(1,s.issueChanges);
+        assertTrue(s.description.contains("ограничено"));
     }
     @Test public void warningsLimitTheClaim() throws Exception {
         JSONObject now = snapshot(true, "main", "aaa");

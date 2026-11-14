@@ -12,12 +12,12 @@ final class HumanReport {
         if (current.optBoolean("restoredFromBackup", false)) return "Сведения из сохранённого файла";
         if (previous == null || previous.optBoolean("restoredFromBackup", false)) return "Первая проверка выполнена";
         if (s.advanced + s.added + s.missing > 0) return "В истории проекта есть изменения";
+        if (s.issueChanges + s.pullChanges > 0) return "Изменились записи задач или предложений";
         if (!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false))
             return "Часть данных GitHub недоступна";
         if (!current.optBoolean("branchesComplete", false) || !previous.optBoolean("branchesComplete", false))
             return "Не все данные удалось сравнить";
         if (!listsKnown(previous)) return "Статусы задач сравнить нельзя";
-        if (s.issueChanges + s.pullChanges > 0) return "Изменились статусы задач";
         return "Новых сдвигов веток не обнаружено";
     }
     static String homeDescription(JSONObject current, JSONObject previous, Summary s) {
@@ -29,7 +29,12 @@ final class HumanReport {
                     ? " Сведения о задачах или предложениях загрузились не полностью." : "");
         if (s.advanced + s.added + s.missing > 0)
             return "По сравнению с прошлой проверкой изменились указатели некоторых веток. Что именно сделано и работает ли это, нужно проверять отдельно."
-                    + (listsKnown(current) && listsKnown(previous) ? "" : " Статусы задач при неполном списке не сравниваются.");
+                    + (listsKnown(current) && listsKnown(previous) ? "" : " Записи вне пересечения списков не оцениваются.");
+        if (s.issueChanges + s.pullChanges > 0)
+            return "В доступной выборке изменились записи задач или предложений. Это не доказывает готовность функций."
+                    + ((!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false)
+                    || !previous.optBoolean("issuesComplete", false) || !previous.optBoolean("pullsComplete", false))
+                    ? " Остальные записи вне пересечения списков не оцениваются." : "");
         if (!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false))
             return "Ветки можно сравнить отдельно, но список задач или предложений загружен не полностью. Нельзя делать вывод о полном состоянии проекта.";
         if (!current.optBoolean("branchesComplete", false) || !previous.optBoolean("branchesComplete", false))
@@ -37,7 +42,7 @@ final class HumanReport {
         if (!listsKnown(previous))
             return "Указатели веток те же. Статусы задач сравнить нельзя: в прошлой проверке нет признака полноты списка.";
         if (s.advanced + s.added + s.missing == 0 && s.issueChanges + s.pullChanges > 0)
-            return "Ветки остались прежними, но в GitHub изменились статусы задач или предложений. Это не доказывает готовность функций.";
+            return "Ветки остались прежними, но в GitHub изменились записи задач или предложений. Это не доказывает готовность функций.";
         if (s.advanced + s.added + s.missing == 0)
             return "С прошлой проверки указатели веток остались прежними. Это не означает, что работа над проектом закончена.";
         return "По сравнению с прошлой проверкой изменились указатели некоторых веток. Что именно сделано и работает ли это, нужно проверять отдельно.";
@@ -56,17 +61,17 @@ final class HumanReport {
                 || !current.optString("repo").equalsIgnoreCase(previous.optString("repo")))
             return "Это первая проверка. Базы для сравнения нет, поэтому нельзя сказать, что проект стоит на месте или что в нём нет нового.";
         boolean branchesKnown = current.optBoolean("branchesComplete", false) && previous.optBoolean("branchesComplete", false);
-        if (!branchesKnown && s.advanced == 0)
+        if (!branchesKnown && s.advanced == 0 && s.issueChanges + s.pullChanges == 0)
             return "Список направлений неполный. Считать его полной картиной изменений нельзя.";
         if (s.advanced + s.added + s.missing > 0) {
             if (researchMoved(current, previous))
-                return "В исследовательском направлении появились новые изменения. Их работоспособность не проверена.";
-            return "В направлениях разработки появились изменения. Их работоспособность не проверена.";
+                return "Указатель исследовательского направления изменился. Это могло быть продвижение, откат или переписывание истории. Работоспособность не проверена.";
+            return "Указатели направлений разработки изменились. Это могло быть продвижение, откат или переписывание истории. Работоспособность не проверена.";
         }
         if (s.issueChanges + s.pullChanges > 0) {
             String lead = ChangeSet.homeLine(previous, current);
             if (lead != null && !lead.toLowerCase(java.util.Locale.ROOT).contains("sha")) return lead;
-            return "Указатели направлений те же, но изменились статусы задач или предложений. Это не доказательство готовности.";
+            return "Указатели направлений те же, но изменились записи задач или предложений. Это не доказательство готовности.";
         }
         String quiet = ChangeSet.homeLine(previous, current);
         if (quiet != null && !quiet.toLowerCase(java.util.Locale.ROOT).contains("sha")) return quiet;

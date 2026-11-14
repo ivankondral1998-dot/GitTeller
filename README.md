@@ -1,8 +1,8 @@
-# GitTeller 1.0.8-dev
+# GitTeller 1.0.9-dev
 
-Нативное Android-приложение. Не коммерческий релиз и не проверка готовности чужого проекта.
+Нативное Android-приложение. Не коммерческий релиз и не приёмка на устройстве.
 
-`applicationId` `app.gitteller.mobile`, `versionCode` 23, `versionName` 1.0.8-dev. Подпись debug совпадает с 1.0.6 и 1.0.7, поэтому обновление идёт поверх, без удаления. Если система откажется, не очищайте приложение: на телефоне может быть токен.
+`applicationId` `app.gitteller.mobile`, `versionCode` 24, `versionName` 1.0.9-dev. Подпись debug совпадает с 1.0.6, 1.0.7 и 1.0.8, поэтому обновление идёт поверх, без удаления. Если система откажется, не очищайте приложение: на телефоне может быть токен.
 
 ```bash
 ANDROID_HOME=/tmp/android-sdk gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest

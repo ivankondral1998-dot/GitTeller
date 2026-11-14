@@ -203,4 +203,56 @@ public class EventModelTest {
             dir.delete();
         }
     }
+
+    @Test public void repeatedBranchMoveStaysInTheFeed() throws Exception {
+        JSONArray prior = new JSONArray().put(new JSONObject().put("kind", "branch_moved").put("id", "branch:main")
+                .put("event", "Указатель изменился").put("at", 100L));
+        JSONArray again = new JSONArray().put(new JSONObject().put("kind", "branch_moved").put("id", "branch:main")
+                .put("event", "Указатель изменился"));
+        JSONArray merged = EventFeed.merge(prior, again, 200L);
+        assertEquals(2, merged.length());
+        assertEquals(200L, merged.getJSONObject(0).getLong("at"));
+    }
+
+    @Test public void pageOneEtagIsDroppedWhenAnotherPageExists() {
+        String next = "<https://api.github.com/repositories/1/issues?page=2>; rel=\"next\"";
+        assertEquals("", GithubClient.etagIfCompletePage("\"page-1\"", next));
+        assertEquals("\"page-1\"", GithubClient.etagIfCompletePage("\"page-1\"", null));
+        assertEquals("", GithubClient.etagIfCompletePage("", null));
+    }
+
+    @Test public void legacyEtagWithoutSinglePageProofIsIgnored() throws Exception {
+        java.lang.reflect.Method method = GithubClient.class.getDeclaredMethod("etagIfSafe",
+                JSONObject.class, String.class, String.class, String.class);
+        method.setAccessible(true);
+        JSONObject legacy = new JSONObject().put("repo", "demo/proj").put("issuesComplete", true)
+                .put("issues", new JSONArray().put(issue(7, "Fix crash", "open")))
+                .put("issuesEtag", "\"page-1\"");
+        assertNull(method.invoke(null, legacy, "issues", "issuesComplete", "issuesEtag"));
+        legacy.put("issuesEtagSinglePage", true);
+        assertEquals("\"page-1\"", method.invoke(null, legacy, "issues", "issuesComplete", "issuesEtag"));
+    }
+
+    @Test public void interruptedRenameLeavesRecoverableCiphertext() throws Exception {
+        java.io.File dir = Files.createTempDirectory("gt-bak").toFile();
+        java.io.File dest = new java.io.File(dir, "token.bin");
+        java.io.File bak = new java.io.File(dir, "token.bin.bak");
+        byte[] oldBytes = new byte[] {7, 1, 2};
+        Files.write(bak.toPath(), oldBytes);
+        assertTrue(AtomicCipherFile.hasRecord(dest));
+        assertFalse(dest.isFile());
+        java.io.File restored = AtomicCipherFile.recover(dest);
+        assertTrue(restored.isFile());
+        assertFalse(bak.exists());
+        assertArrayEquals(oldBytes, Files.readAllBytes(restored.toPath()));
+        java.io.File tmp = new java.io.File(dir, "token.bin.tmp");
+        Files.write(tmp.toPath(), new byte[] {9});
+        AtomicCipherFile.replace(tmp, dest);
+        assertArrayEquals(new byte[] {9}, Files.readAllBytes(dest.toPath()));
+        assertFalse(tmp.exists());
+        AtomicCipherFile.delete(dest);
+        assertFalse(AtomicCipherFile.hasRecord(dest));
+        dest.delete();
+        dir.delete();
+    }
 }

@@ -52,15 +52,15 @@ final class ChangeSet {
         boolean pullsOk = previous.optBoolean("pullsComplete", false) && current.optBoolean("pullsComplete", false);
         boolean branchesOk = previous.optBoolean("branchesComplete", false) && current.optBoolean("branchesComplete", false);
         String origin = originOf(current);
-        if (issuesOk) diffRecords(out, previous.optJSONArray("issues"), current.optJSONArray("issues"), false, repo, "issue", origin);
-        if (pullsOk) diffRecords(out, previous.optJSONArray("pulls"), current.optJSONArray("pulls"), true, repo, "pull", origin);
+        diffRecords(out, previous.optJSONArray("issues"), current.optJSONArray("issues"), false, repo, "issue", origin, issuesOk);
+        diffRecords(out, previous.optJSONArray("pulls"), current.optJSONArray("pulls"), true, repo, "pull", origin, pullsOk);
         if (branchesOk) diffBranches(out, previous.optJSONArray("branches"), current.optJSONArray("branches"), repo, origin);
         return out;
     }
 
     private static int count(JSONObject previous, JSONObject current, String array, String flag, boolean pulls) {
         if (previous == null || current == null) return 0;
-        if (!previous.optBoolean(flag, false) || !current.optBoolean(flag, false)) return 0;
+        boolean full = previous.optBoolean(flag, false) && current.optBoolean(flag, false);
         JSONArray old = previous.optJSONArray(array);
         JSONArray now = current.optJSONArray(array);
         if (old == null || now == null) return 0;
@@ -70,12 +70,12 @@ final class ChangeSet {
             JSONObject row = now.optJSONObject(i);
             if (row == null) continue;
             JSONObject was = prior.get(row.optInt("number"));
-            if (was == null || differs(was, row, pulls)) changed++;
+            if ((was == null && full) || (was != null && differs(was, row, pulls))) changed++;
         }
         return changed;
     }
 
-    private static void diffRecords(JSONArray out, JSONArray old, JSONArray now, boolean pulls, String repo, String kind, String origin) throws Exception {
+    private static void diffRecords(JSONArray out, JSONArray old, JSONArray now, boolean pulls, String repo, String kind, String origin, boolean complete) throws Exception {
         if (old == null || now == null) return;
         Map<Integer, JSONObject> prior = index(old);
         for (int i = 0; i < now.length(); i++) {
@@ -84,6 +84,7 @@ final class ChangeSet {
             int number = row.optInt("number");
             JSONObject was = prior.get(number);
             if (was == null) {
+                if (!complete) continue; // Unknown whether the record existed outside an earlier partial list.
                 out.put(event(kind + "_new", kind + "#" + number,
                         ("issue".equals(kind) ? "Появилась задача #" : "Появилось предложение #") + number + ".",
                         "В прошлом полном списке этого номера не было. Сейчас заголовок: «" + clip(row.optString("title")) + "», состояние " + row.optString("state") + ".",
@@ -124,6 +125,7 @@ final class ChangeSet {
                         url(repo, kind, number), origin));
             }
         }
+        if (!complete) return; // Absence from a partial list cannot imply removal.
         for (Integer number : prior.keySet()) {
             boolean found = false;
             for (int i = 0; i < now.length(); i++) {

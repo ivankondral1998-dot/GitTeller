@@ -472,8 +472,13 @@ public final class SectionActivity extends Activity {
     }
     private void technical(String value){
         LinearLayout card=card();
-        line(card,"Технические детали",13,true,muted);gap(card,8);
-        line(card,value,13,false,muted);gap(card,10);
+        line(card,"Технические детали скрыты",13,true,muted);gap(card,8);
+        line(card,"Указатель и сырые поля не показаны, пока вы сами их не откроете.",14,false,muted);gap(card,10);
+        TextView hidden=line(card,value,13,false,muted);
+        hidden.setVisibility(View.GONE);
+        button(card,"Показать технические сведения",()->{
+            hidden.setVisibility(View.VISIBLE);
+        });
         button(card,"Скопировать технические сведения",()->{
             ClipboardManager clipboard=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
             if(clipboard!=null) clipboard.setPrimaryClip(ClipData.newPlainText("GitTeller", value));
@@ -554,7 +559,7 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.8-dev", "Объясняет историю GitHub человеку без разработки. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.9-dev", "Объясняет историю GitHub человеку без разработки. Это не коммерческий релиз и не проверка готовности программы.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
         note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");

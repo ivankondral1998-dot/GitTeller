@@ -209,9 +209,9 @@ final class GithubClient {
                 .put("commitsStale", false)
                 .put("issuesStale", false)
                 .put("pullsStale", false);
-        if (!outEtagBranches.isEmpty()) out.put("branchesEtag", outEtagBranches);
-        if (!issuesEtag.isEmpty()) out.put("issuesEtag", issuesEtag);
-        if (!pullsEtag.isEmpty()) out.put("pullsEtag", pullsEtag);
+        if (!outEtagBranches.isEmpty()) out.put("branchesEtag", outEtagBranches).put("branchesEtagSinglePage", true);
+        if (!issuesEtag.isEmpty()) out.put("issuesEtag", issuesEtag).put("issuesEtagSinglePage", true);
+        if (!pullsEtag.isEmpty()) out.put("pullsEtag", pullsEtag).put("pullsEtagSinglePage", true);
         long nowMs = out.optLong("capturedAt", System.currentTimeMillis());
         if (branchesFetched) out.put("branchesFetchedAt", nowMs);
         if (commitsFetched) out.put("commitsFetchedAt", nowMs);
@@ -282,10 +282,19 @@ final class GithubClient {
     private static String etagIfSafe(JSONObject previous, String array, String completeKey, String etagKey) {
         if (previous == null || previous.optBoolean("restoredFromBackup", false)) return null;
         if (!previous.optBoolean(completeKey, false)) return null;
+        // Older snapshots may have cached the ETag of page one of a multi-page list.
+        // The explicit single-page marker is mandatory before conditional requests.
+        if (!previous.optBoolean(array + "EtagSinglePage", false)) return null;
         JSONArray list = previous.optJSONArray(array);
         if (list == null || list.length() >= 100) return null;
         String tag = previous.optString(etagKey, "");
         return tag.isEmpty() ? null : tag;
+    }
+
+    /** Page-1 ETag is the whole list only when GitHub sent no next page. A short list after dropping pull requests is not enough. */
+    static String etagIfCompletePage(String etag, String link) {
+        if (etag == null || etag.isEmpty() || nextLink(link) != null) return "";
+        return etag;
     }
 
     private JSONArray pages(String start, int max, List<String> warnings, String label) throws Exception {
@@ -304,7 +313,7 @@ final class GithubClient {
                 warnings.add(label + ": загрузка прервана");
                 return all;
             }
-            if (page == 0 && tag != null && response.etag != null) tag[0] = response.etag;
+            if (page == 0 && tag != null) tag[0] = etagIfCompletePage(response.etag, response.link);
             if (page == 0 && response.notModified) {
                 if (cached != null) cached[0] = true;
                 return all;
@@ -477,7 +486,7 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "GitTeller/1.0.8-dev");
+        c.setRequestProperty("User-Agent", "GitTeller/1.0.9-dev");
         if (etag != null && !etag.isEmpty()) c.setRequestProperty("If-None-Match", etag);
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         inflight = c;
