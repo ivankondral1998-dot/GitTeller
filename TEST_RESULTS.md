@@ -1,36 +1,45 @@
-# Проверки 1.0.7-dev
+# Проверки 1.0.8-dev
 
-Каталог: `/workspace/gitteller`. Подпись APK совпадает с debug-сертификатом 1.0.6 (`SHA-256` сертификата `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`). `applicationId` `app.gitteller.mobile`, `versionCode` 22, `versionName` 1.0.7-dev.
+Каталог: `/workspace/gitteller`. Подпись APK совпадает с debug-сертификатом 1.0.7 и 1.0.6 (`SHA-256` сертификата `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`). `applicationId` `app.gitteller.mobile`, `versionCode` 23, `versionName` 1.0.8-dev. `minSdk` 26, `targetSdk` 35. Только `INTERNET`. `allowBackup=false`. `usesCleartextTraffic=false`. Сборка debuggable.
 
-## Сборка
+APK SHA-256: `482c8777c8ceaa44090be627e46f600ce832f510a40db36ed64212f1b98236f7`  
+Копия: `evidence/apk/GitTeller-1.0.8-dev-debug.apk` и `/workspace/artifacts/GitTeller-1.0.8-dev.apk`.  
+Прежний 1.0.7 не перезаписан: `a2a9778ff5af812e8783554d9c4ae63ce9ca3aec581abf575fde97faa1e004d8`.
 
-```
-ANDROID_HOME=/tmp/android-sdk gradle --no-daemon :app:assembleDebug
-```
+Это host-проверки. Они не равны приёмке на A52.
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`  
-Копия: `evidence/apk/GitTeller-1.0.7-dev-debug.apk`  
-SHA-256: `a2a9778ff5af812e8783554d9c4ae63ce9ca3aec581abf575fde97faa1e004d8`
+## Сборка и Gradle
 
-## Gradle unit tests
-
-Первый прогон вместе со сборкой:
+Команда:
 
 ```
-gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
+cd /workspace/gitteller
+ANDROID_HOME=/tmp/android-sdk /opt/gradle-8.9/bin/gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
 ```
 
-**FAIL, exit 1.** Причина в логе `evidence/logs/gradle-test-1.0.7-FIRST-FAIL.log`: `Gradle Test Executor` / `Unexpected type tag 71` и `Connection refused`. Это сбой канала Gradle, не утверждение о тестах. XML того прогона не обновлялся.
+Первый прогон: **FAIL, exit 1**. Лог `evidence/logs/gradle-108-assemble-and-test-FIRST-FAIL.log`. Причина: `Unexpected type tag 71` и `Connection refused` у `Gradle Test Executor`. Сборка при этом дошла до `packageDebug`. Это не результат тестов.
 
-Повтор только тестов:
+Отдельный повтор `:app:testDebugUnitTest`: **FAIL, exit 1**, тот же обрыв сокета. Лог `evidence/logs/gradle-108-test-SECOND-FAIL.log`.
 
-```
-gradle --no-daemon :app:testDebugUnitTest
-```
+Дальше пять повторов того же теста. Первые два снова **FAIL** (`gradle-108-try1.log`, `gradle-108-try2.log`). Третий: **PASS, exit 0**, `BUILD SUCCESSFUL in 10s`. Лог `evidence/logs/gradle-108-test-PASS.log`.
 
-**PASS, exit 0.** Лог: `evidence/logs/gradle-test-1.0.7-PASS.log`. XML в `app/build/test-results/testDebugUnitTest`: **67 тестов, 0 failures, 0 errors** (Summary 14, GithubStatus 12, Truth 23, DetailFormat 5, Snapshot 4, HumanReport 3, CommitExplainer 3, TokenVaultRules 3).
+XML этого успешного прогона скопирован в `evidence/unit-xml-1.0.8/`.
 
-Прямой `org.junit.runner.JUnitCore` на тех же class-файлах: **OK (66 tests)** до добавления теста `continuationStaysInsideTheSameRepository`, затем Gradle-прогон уже содержит 67. JUnitCore не подменяет Gradle. Оба способа после исправления пагинации согласованы с успешным Gradle-прогоном.
+**78 tests, 0 failures, 0 errors, 0 skipped.**
+
+| Класс | Тесты |
+|---|---|
+| TruthTest | 23 |
+| SummaryTest | 14 |
+| GithubStatusTest | 12 |
+| EventModelTest | 11 |
+| DetailFormatTest | 5 |
+| SnapshotCodecTest | 4 |
+| CommitExplainerTest | 3 |
+| HumanReportTest | 3 |
+| TokenVaultRulesTest | 3 |
+
+`EventModelTest` покрывает четыре бывших RED-сценария, повторное открытие, `updated_at`, неполный список, первый снимок, тексты compare и отказ установки файла токена. Прямой JUnitCore в этот раз не запускался и не выдаётся за Gradle.
 
 ## Локальные двойники
 
@@ -38,36 +47,24 @@ gradle --no-daemon :app:testDebugUnitTest
 sh tests-local/run.sh
 ```
 
-**exit 0.** `PASS: 32`, `PASS: 8` GithubAuditSmoke, `PARSE OK: 18`. Это не Android и не сеть.
+**PASS, exit 0.** `PASS: 46 model checks`, `PASS: 8 GithubAuditSmoke checks`, `PARSE OK: 20`. Лог: `evidence/logs/tests-local-1.0.8.log`. Это `org.json`-двойник, не Android и не сеть.
 
-## Сеть, публичный репозиторий, без токена
+## Исходный RED-зонд 1.0.8, без правок зонда
 
-`GithubClient.load("octocat/Hello-World")` и `readCommit` первого коммита. Лог: `evidence/logs/api-smoke-hello-world.log`. **exit 0, `API_SMOKE_OK`.**
+```
+javac ... Summary.java ChangeSet.java SnapshotCodec.java GitTellerRedProbe.java
+java app.unocontrol.GitTellerRedProbe
+```
 
-- Веток 3, `branchesComplete=true`.
-- История помечена частичной.
-- Задачи и предложения: `предел 2 страниц`, полнота `false`. Не сказано «ноль задач».
-- В тексте коммита есть имя файла `README` и фраза, что список проверок GitHub не заменяет проверку на телефоне.
-- Ссылка продолжения вида `/repositories/{id}/` принимается только для того же репозитория. Чужой хост и чужой id отклоняются (тест `continuationStaysInsideTheSameRepository`).
+**exit 0.** Четыре строки `PASS`: новая задача, слияние при `closed → closed`, смена названия, `merged` после sanitize. Лог: `evidence/logs/red-probe-1.0.8.log`. На 1.0.7 тот же зонд давал exit 2 и 4 RED. Это не прогон Gradle и не телефон.
 
-Приватный репозиторий: **NOT_RUN**. Токен владельца не использовался.
+## Эмулятор и устройство
 
-## Эмулятор Android 14
+Эмулятор Android 14 (`gt14`, 1080×2400) дошёл до `sys.boot_completed=1`, затем оборвал графику: `Failed to find ColorBuffer` / `Failed to bind to texture`. `pm`/`am` ответили `Can't find service`, устройство ушло в `offline`. Чёрный кадр 15 КБ удалён и не считается экраном.
 
-AVD `gt14`, образ `android-34`, экран 1080x2400. Установка debug APK прошла. Живой запрос к `octocat/Hello-World` без токена обновил главный экран.
+Экраны, системный Back, светлая и тёмная темы, крупный шрифт, живая синхронизация в приложении: **NOT_RUN**.
 
-Снято:
+С телефона хост сделал только GET без токена к публичному `octocat/Hello-World` (не из APK): репозиторий открыт, три ветки, compare `master...octocat-patch-1` вернул `status=ahead`, `ahead_by=1`, `behind_by=0`, 1 коммит, 1 файл. Это проверка формы ответа GitHub, не прогон приложения. Лог: `evidence/logs/api-smoke-1.0.8.log`.
 
-- `evidence/ui-107/home-try2.png` — пустой проект, кнопка «Обновить», без SHA.
-- `evidence/ui-107/home-synced.png` — первая проверка, дата, покрытие, две открытые задачи, честная неполнота списка.
-- `evidence/ui-107/branches.png` — направления, предположение по названию.
-- `evidence/ui-107/sections.png` — отдельные разделы.
-- `evidence/ui-107/menu.png` — меню.
+A52: **NOT_DEVICE_VERIFIED**. Приватный репозиторий: **NOT_RUN**.
 
-Системный Back с экрана направлений вернул на главный: текст главного экрана снова в дампе UI. Остальные экраны (задачи, предложения, история, надёжность, настройки, тёмная тема, подробности коммита) в этом прогоне не сняты: эмулятор оборвал adb (`Broken pipe`, затем `no devices`). Кадры рабочего стола и пустые файлы в доказательство не входят.
-
-**NOT_DEVICE_VERIFIED.** Samsung A52 не подключался. Это не приёмка на телефоне владельца.
-
-## Чего эти проверки не доказывают
-
-Keystore на устройстве, смена проекта во время запроса, 401 на живом токене, инструментальные тесты `androidTest`: **NOT_RUN** в этом прогоне.

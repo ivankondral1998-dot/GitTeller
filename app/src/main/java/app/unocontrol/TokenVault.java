@@ -37,6 +37,41 @@ final class TokenVault {
         }
     }
 
+    /** Test hook: the install step fails and the previous file must remain. */
+    static boolean testFailInstall;
+
+    /** Install tmp as dest. If install fails, the previous dest is restored. Tmp is ciphertext only. */
+    static void replaceAtomically(File tmp, File dest) throws VaultException {
+        if (tmp == null || dest == null || !tmp.isFile())
+            throw new VaultException("Не удалось записать доступ. Прежняя запись не тронута.");
+        File parent = dest.getParentFile();
+        if (parent == null) {
+            tmp.delete();
+            throw new VaultException("Не удалось подготовить каталог. Прежняя запись не тронута.");
+        }
+        if (!parent.exists() && !parent.mkdirs()) {
+            tmp.delete();
+            throw new VaultException("Не удалось подготовить каталог. Прежняя запись не тронута.");
+        }
+        File bak = new File(parent, dest.getName() + ".bak");
+        if (bak.exists() && !bak.delete()) {
+            tmp.delete();
+            throw new VaultException("Не удалось подготовить замену. Прежняя запись не тронута.");
+        }
+        boolean had = dest.exists();
+        if (had && !dest.renameTo(bak)) {
+            tmp.delete();
+            throw new VaultException("Не удалось отложить прежнюю запись. Она не удалена.");
+        }
+        boolean installed = !testFailInstall && tmp.renameTo(dest);
+        if (!installed) {
+            if (had && bak.exists() && !dest.exists()) bak.renameTo(dest);
+            tmp.delete();
+            throw new VaultException("Не удалось записать доступ. Прежняя запись сохранена.");
+        }
+        if (bak.exists()) bak.delete();
+    }
+
     static String normalizeRepo(String repo) {
         if (repo == null) throw new IllegalArgumentException("Репозиторий укажите в формате владелец/проект.");
         String n = repo.trim().toLowerCase(Locale.ROOT);
@@ -68,10 +103,7 @@ final class TokenVault {
                 out.write(blob);
                 out.getFD().sync();
             }
-            if (!tmp.renameTo(dest)) {
-                if (dest.exists() && !dest.delete()) throw new VaultException("Не удалось заменить запись доступа.");
-                if (!tmp.renameTo(dest)) throw new VaultException("Не удалось записать доступ на устройство.");
-            }
+            replaceAtomically(tmp, dest);
         } catch (VaultException e) {
             throw e;
         } catch (android.security.keystore.KeyPermanentlyInvalidatedException e) {

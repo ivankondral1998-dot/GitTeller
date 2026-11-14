@@ -62,16 +62,36 @@ final class GithubClient {
         List<String> warnings = new ArrayList<>();
         String firstError = null;
         boolean anyFresh = false;
+        boolean branchesCached = false, issuesCached = false, pullsCached = false;
+        String outEtagBranches = "", issuesEtag = "", pullsEtag = "";
 
         boolean branchesFetched = false;
         boolean branchComplete = false;
         JSONArray branches = new JSONArray();
         try {
             int before = warnings.size();
-            branches = pages(root + "/branches?per_page=100", BRANCH_PAGE_CAP, warnings, "ветки");
+            boolean[] cached = new boolean[1];
+            String[] tag = new String[1];
+            String priorTag = etagIfSafe(previous, "branches", "branchesComplete", "branchesEtag");
+            branches = pages(root + "/branches?per_page=100", BRANCH_PAGE_CAP, warnings, "ветки", priorTag, cached, tag);
             branchesFetched = true;
             anyFresh = true;
-            branchComplete = !coverageBroken(warnings.subList(before, warnings.size()), "ветки");
+            if (cached[0]) {
+                JSONArray kept = previous == null ? null : previous.optJSONArray("branches");
+                if (kept != null) {
+                    branches = kept;
+                    branchComplete = previous.optBoolean("branchesComplete", false);
+                    outEtagBranches = tag[0] == null || tag[0].isEmpty() ? previous.optString("branchesEtag", "") : tag[0];
+                    branchesCached = true;
+                } else {
+                    branchComplete = false;
+                    branches = new JSONArray();
+                    warnings.add("ветки: ответ 304 без сохранённого списка");
+                }
+            } else {
+                branchComplete = !coverageBroken(warnings.subList(before, warnings.size()), "ветки");
+                outEtagBranches = tag[0] == null ? "" : tag[0];
+            }
         } catch (Exception e) {
             firstError = sourceError("ветки", e);
             warnings.add(firstError);
@@ -99,10 +119,28 @@ final class GithubClient {
         if (!halted) {
             try {
                 int before = warnings.size();
-                issues = pages(root + "/issues?state=all&per_page=100", ISSUE_PAGE_CAP, warnings, "задачи");
+                String priorTag = etagIfSafe(previous, "issues", "issuesComplete", "issuesEtag");
+                boolean[] cached = new boolean[1];
+                String[] tag = new String[1];
+                issues = pages(root + "/issues?state=all&per_page=100", ISSUE_PAGE_CAP, warnings, "задачи", priorTag, cached, tag);
                 issuesFetched = true;
                 anyFresh = true;
-                issuesComplete = !coverageBroken(warnings.subList(before, warnings.size()), "задачи");
+                if (cached[0]) {
+                    JSONArray kept = previous == null ? null : previous.optJSONArray("issues");
+                    if (kept != null) {
+                        issues = kept;
+                        issuesComplete = previous.optBoolean("issuesComplete", false);
+                        issuesEtag = tag[0] == null || tag[0].isEmpty() ? previous.optString("issuesEtag", "") : tag[0];
+                        issuesCached = true;
+                    } else {
+                        issuesComplete = false;
+                        issues = new JSONArray();
+                        warnings.add("задачи: ответ 304 без сохранённого списка");
+                    }
+                } else {
+                    issuesComplete = !coverageBroken(warnings.subList(before, warnings.size()), "задачи");
+                    issuesEtag = tag[0] == null ? "" : tag[0];
+                }
             } catch (Exception e) {
                 String message = sourceError("задачи", e);
                 if (firstError == null) firstError = message;
@@ -117,10 +155,28 @@ final class GithubClient {
         if (!halted) {
             try {
                 int before = warnings.size();
-                pulls = pages(root + "/pulls?state=all&per_page=100", PULL_PAGE_CAP, warnings, "предложения");
+                String priorTag = etagIfSafe(previous, "pulls", "pullsComplete", "pullsEtag");
+                boolean[] cached = new boolean[1];
+                String[] tag = new String[1];
+                pulls = pages(root + "/pulls?state=all&per_page=100", PULL_PAGE_CAP, warnings, "предложения", priorTag, cached, tag);
                 pullsFetched = true;
                 anyFresh = true;
-                pullsComplete = !coverageBroken(warnings.subList(before, warnings.size()), "предложения");
+                if (cached[0]) {
+                    JSONArray kept = previous == null ? null : previous.optJSONArray("pulls");
+                    if (kept != null) {
+                        pulls = kept;
+                        pullsComplete = previous.optBoolean("pullsComplete", false);
+                        pullsEtag = tag[0] == null || tag[0].isEmpty() ? previous.optString("pullsEtag", "") : tag[0];
+                        pullsCached = true;
+                    } else {
+                        pullsComplete = false;
+                        pulls = new JSONArray();
+                        warnings.add("предложения: ответ 304 без сохранённого списка");
+                    }
+                } else {
+                    pullsComplete = !coverageBroken(warnings.subList(before, warnings.size()), "предложения");
+                    pullsEtag = tag[0] == null ? "" : tag[0];
+                }
             } catch (Exception e) {
                 String message = sourceError("предложения", e);
                 if (firstError == null) firstError = message;
@@ -136,10 +192,10 @@ final class GithubClient {
         JSONObject out = new JSONObject();
         out.put("repo", actual).put("defaultBranch", branch)
                 .put("capturedAt", System.currentTimeMillis())
-                .put("branches", branchesFetched ? slimBranches(branches) : new JSONArray())
+                .put("branches", branchesCached ? branches : (branchesFetched ? slimBranches(branches) : new JSONArray()))
                 .put("commits", commits)
-                .put("issues", issuesFetched ? slimIssues(issues) : new JSONArray())
-                .put("pulls", pullsFetched ? slimPulls(pulls) : new JSONArray())
+                .put("issues", issuesCached ? issues : (issuesFetched ? slimIssues(issues) : new JSONArray()))
+                .put("pulls", pullsCached ? pulls : (pullsFetched ? slimPulls(pulls) : new JSONArray()))
                 .put("branchesComplete", branchComplete)
                 .put("issuesComplete", issuesComplete)
                 .put("pullsComplete", pullsComplete)
@@ -153,7 +209,23 @@ final class GithubClient {
                 .put("commitsStale", false)
                 .put("issuesStale", false)
                 .put("pullsStale", false);
+        if (!outEtagBranches.isEmpty()) out.put("branchesEtag", outEtagBranches);
+        if (!issuesEtag.isEmpty()) out.put("issuesEtag", issuesEtag);
+        if (!pullsEtag.isEmpty()) out.put("pullsEtag", pullsEtag);
+        long nowMs = out.optLong("capturedAt", System.currentTimeMillis());
+        if (branchesFetched) out.put("branchesFetchedAt", nowMs);
+        if (commitsFetched) out.put("commitsFetchedAt", nowMs);
+        if (issuesFetched) out.put("issuesFetchedAt", nowMs);
+        if (pullsFetched) out.put("pullsFetchedAt", nowMs);
+        out.put("branchesCached", branchesCached);
+        out.put("issuesCached", issuesCached);
+        out.put("pullsCached", pullsCached);
         preserveSources(out, previous);
+        boolean partial = !out.optBoolean("branchesComplete", false) || !out.optBoolean("issuesComplete", false)
+                || !out.optBoolean("pullsComplete", false) || out.optBoolean("branchesStale", false)
+                || out.optBoolean("issuesStale", false) || out.optBoolean("pullsStale", false)
+                || out.optBoolean("commitsStale", false);
+        out.put("origin", partial ? "PARTIAL" : "LIVE");
         JSONArray warn = new JSONArray();
         for (String w : warnings) warn.put(w);
         JSONArray extra = out.optJSONArray("warnings");
@@ -206,15 +278,35 @@ final class GithubClient {
         return label + ": " + safeMessage(e);
     }
 
+    /** ETag is trustworthy only for one complete page. A later page can change while page 1 stays the same. */
+    private static String etagIfSafe(JSONObject previous, String array, String completeKey, String etagKey) {
+        if (previous == null || previous.optBoolean("restoredFromBackup", false)) return null;
+        if (!previous.optBoolean(completeKey, false)) return null;
+        JSONArray list = previous.optJSONArray(array);
+        if (list == null || list.length() >= 100) return null;
+        String tag = previous.optString(etagKey, "");
+        return tag.isEmpty() ? null : tag;
+    }
+
     private JSONArray pages(String start, int max, List<String> warnings, String label) throws Exception {
+        return pages(start, max, warnings, label, null, null, null);
+    }
+
+    private JSONArray pages(String start, int max, List<String> warnings, String label,
+                            String etag, boolean[] cached, String[] tag) throws Exception {
         JSONArray all = new JSONArray();
         String url = start;
         for (int page = 0; page < max; page++) {
             Response response;
-            try { response = get(url); }
+            try { response = get(url, page == 0 ? etag : null); }
             catch (Exception e) {
                 if (page == 0) throw e;
                 warnings.add(label + ": загрузка прервана");
+                return all;
+            }
+            if (page == 0 && tag != null && response.etag != null) tag[0] = response.etag;
+            if (page == 0 && response.notModified) {
+                if (cached != null) cached[0] = true;
                 return all;
             }
             JSONArray current = jsonArray(response);
@@ -309,7 +401,8 @@ final class GithubClient {
             if (x == null || x.has("pull_request")) continue;
             out.put(new JSONObject().put("number", x.optInt("number"))
                     .put("title", x.optString("title"))
-                    .put("state", x.optString("state")));
+                    .put("state", x.optString("state"))
+                    .put("updated_at", cleanStamp(x.optString("updated_at"))));
         }
         return out;
     }
@@ -325,7 +418,9 @@ final class GithubClient {
             out.put(new JSONObject().put("number", x.optInt("number"))
                     .put("title", x.optString("title"))
                     .put("state", x.optString("state"))
-                    .put("merged", merged));
+                    .put("updated_at", cleanStamp(x.optString("updated_at")))
+                    .put("merged", merged)
+                    .put("merged_at", cleanStamp(mergedAt)));
         }
         return out;
     }
@@ -342,7 +437,9 @@ final class GithubClient {
         return e instanceof java.net.SocketTimeoutException || s.contains("timed out") || s.contains("timeout");
     }
 
-    private Response get(String address) throws Exception {
+    private Response get(String address) throws Exception { return get(address, null); }
+
+    private Response get(String address, String etag) throws Exception {
         Exception last = null;
         for (int attempt = 0; attempt < 2; attempt++) {
             if (attempt > 0) {
@@ -353,7 +450,7 @@ final class GithubClient {
                 }
             }
             try {
-                return getOnce(address);
+                return getOnce(address, etag);
             } catch (HttpFailure e) {
                 last = e;
                 if (e.status == 429 || (e.getMessage() != null && e.getMessage().contains("Лимит запросов"))) halted = true;
@@ -368,7 +465,7 @@ final class GithubClient {
         throw last == null ? new IllegalStateException("GitHub не ответил. Старые данные сохранены.") : last;
     }
 
-    private Response getOnce(String address) throws Exception {
+    private Response getOnce(String address, String etag) throws Exception {
         if (halted) throw new HttpFailure(429, "Лимит запросов GitHub исчерпан. Повторите позже. Старые данные сохранены.");
         if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Запрос отменён.");
         if (!safeContinuation(address, boundRepo, boundId))
@@ -380,11 +477,13 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "GitTeller/1.0.7-dev");
+        c.setRequestProperty("User-Agent", "GitTeller/1.0.8-dev");
+        if (etag != null && !etag.isEmpty()) c.setRequestProperty("If-None-Match", etag);
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         inflight = c;
         try {
             int status = c.getResponseCode();
+            if (status == 304) return new Response("", null, c.getHeaderField("ETag"), true);
             if (status != 200) {
                 String apiMessage = apiMessage(c);
                 throw new HttpFailure(status, errorForStatus(status,
@@ -402,7 +501,7 @@ final class GithubClient {
                     data.write(buf, 0, n);
                 }
             }
-            return new Response(data.toString(StandardCharsets.UTF_8.name()), link);
+            return new Response(data.toString(StandardCharsets.UTF_8.name()), link, c.getHeaderField("ETag"), false);
         } finally {
             if (inflight == c) inflight = null;
             c.disconnect();
@@ -766,7 +865,70 @@ final class GithubClient {
     private static JSONArray jsonArray(Response r) throws Exception { return new JSONArray(r.body); }
     private static JSONObject jsonObject(Response r) throws Exception { return new JSONObject(r.body); }
     private static final class Response {
-        final String body; final String link;
-        Response(String body, String link) { this.body = body; this.link = link; }
+        final String body; final String link; final String etag; final boolean notModified;
+        Response(String body, String link) { this(body, link, null, false); }
+        Response(String body, String link, String etag, boolean notModified) {
+            this.body = body; this.link = link; this.etag = etag; this.notModified = notModified;
+        }
+    }
+
+    private static String cleanStamp(String value) {
+        if (value == null || value.isEmpty() || "null".equals(value)) return "";
+        return value.length() > 40 ? value.substring(0, 40) : value;
+    }
+
+    static String explainCompareStatus(String status, int ahead, int behind, boolean cut) {
+        String text;
+        if ("ahead".equals(status))
+            text = "Появились новые записи (" + ahead + "). Это не прогресс продукта и не проверка.";
+        else if ("behind".equals(status))
+            text = "История откатилась (" + behind + " позади). Это не продвижение вперёд.";
+        else if ("diverged".equals(status))
+            text = "История разошлась: впереди " + ahead + ", позади " + behind + ". Нельзя считать это обычным продвижением.";
+        else if ("identical".equals(status))
+            text = "Указатели совпадают. Новых записей между ними нет.";
+        else text = HumanReport.NOT_ENOUGH + ": направление сравнения неизвестно.";
+        if (cut) text += " Список сравнения неполный.";
+        if (!"identical".equals(status)) text += " " + HumanReport.NO_CHECK + ".";
+        return text;
+    }
+
+    String readCompare(String repo, String base, String head) {
+        if (base == null || head == null || !base.matches("[0-9a-fA-F]{40}") || !head.matches("[0-9a-fA-F]{40}"))
+            return HumanReport.NOT_ENOUGH + ": нет двух полных указателей для сравнения.";
+        if (base.equalsIgnoreCase(head)) return explainCompareStatus("identical", 0, 0, false);
+        try {
+            bind(repo);
+            String address = root(repo) + "/compare/" + base + "..." + head;
+            Response response = get(address);
+            boolean cut = nextLink(response.link) != null;
+            JSONObject body = jsonObject(response);
+            int ahead = body.optInt("ahead_by", 0);
+            int behind = body.optInt("behind_by", 0);
+            String status = body.optString("status");
+            JSONArray commits = body.optJSONArray("commits");
+            JSONArray files = body.optJSONArray("files");
+            if (commits != null && commits.length() >= 250) cut = true;
+            if (files != null && files.length() >= 300) cut = true;
+            String text = explainCompareStatus(status, ahead, behind, cut);
+            if (files != null && files.length() > 0) {
+                StringBuilder names = new StringBuilder(" GitHub показывает файлы: ");
+                int n = Math.min(4, files.length());
+                for (int i = 0; i < n; i++) {
+                    JSONObject row = files.optJSONObject(i);
+                    if (i > 0) names.append(", ");
+                    names.append(row == null ? "без имени" : row.optString("filename"));
+                }
+                names.append(".");
+                text += names.toString();
+            }
+            return text;
+        } catch (Exception e) {
+            return compareFailure(e);
+        }
+    }
+
+    static String compareFailure(Exception e) {
+        return HumanReport.NOT_ENOUGH + ". Сравнение веток не получено (" + safeMessage(e) + ").";
     }
 }

@@ -38,6 +38,7 @@ public final class SectionActivity extends Activity {
     private String repo, page, seenCurrent;
     private TokenVault vault;
     private int detailEpoch;
+    private int compareEpoch;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -111,7 +112,7 @@ public final class SectionActivity extends Activity {
     private void goItem(String name,int idx){Intent i=new Intent(this,SectionActivity.class);i.putExtra("page",name);i.putExtra("idx",idx);startActivity(i);}
     private String title() {
         switch(page){
-            case "overview":return "Обзор";
+            case "changes":return "Изменения";
             case "branches":return "Направления работы";
             case "commits":return "История изменений";
             case "tasks":return "Задачи";
@@ -119,6 +120,7 @@ public final class SectionActivity extends Activity {
             case "accuracy":return "Надёжность сведений";
             case "access":return "Подключение GitHub";
             case "settings":return "Настройки";
+            case "why":return "Почему это не доказательство";
             case "data":return "Настройки";
             case "about":return "Настройки";
             case "branch-detail":return "Направление работы";
@@ -143,6 +145,7 @@ public final class SectionActivity extends Activity {
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));setContentView(root);
         switch(page) {
             case "overview":overview();break;
+            case "changes":changes();break;
             case "branches":branches();break;
             case "commits":commits();break;
             case "tasks":tasks();break;
@@ -150,6 +153,7 @@ public final class SectionActivity extends Activity {
             case "accuracy":accuracy();break;
             case "access":access();break;
             case "settings":case "data":case "about":settings();break;
+            case "why":why();break;
             case "branch-detail":branchDetail();break;
             case "commit-detail":commitDetail();break;
             case "issue-detail":case "pull-detail":taskDetail();break;
@@ -161,6 +165,7 @@ public final class SectionActivity extends Activity {
         line(body,"Каждый раздел — отдельный экран. Кнопка «Назад» и системная кнопка Back возвращают на предыдущий.",14,false,muted);
         gap(body,14);
         action("Обзор","Что изменилось и чего нельзя утверждать",()->go("overview"));
+        action("Изменения","Лента событий между проверками, с источником",()->go("changes"));
         action("Направления работы","Все ветки, включая исследовательские",()->go("branches"));
         action("История изменений","Записи выбранного направления, не весь проект сразу",()->go("commits"));
         action("Задачи","Открытые и закрытые обсуждения",()->go("tasks"));
@@ -175,7 +180,7 @@ public final class SectionActivity extends Activity {
         note("Что изменилось", HumanReport.whatChanged(current,previous,s));
         note("Что требует внимания", HumanReport.needsAttention(current,s));
         note("Следующий шаг", HumanReport.nextStep(current,previous,s));
-        note("Покрытие", HumanReport.coverageLine(current)+" Последняя удачная загрузка: "+HumanReport.humanDate(current.optLong("capturedAt",0))+".");
+        note("Покрытие", HumanReport.coverageLine(current)+" "+HumanReport.syncStatus(current));
         action("Открыть направления","Посмотреть, где именно сдвинулась работа",()->go("branches"));
         action("Открыть задачи","Конкретные открытые записи",()->go("tasks"));
     }
@@ -201,6 +206,8 @@ public final class SectionActivity extends Activity {
         note("Что остаётся неизвестным", "По названию и указателю нельзя узнать, прошли ли проверки и можно ли этим пользоваться. История ниже — только последние записи, не вся работа.");
         note("Источник", sourceLine());
         technical("Направление\n"+name+"\nУказатель\n"+sha);
+        String prior = priorSha(name);
+        if(prior != null && !prior.equals(sha)) loadCompare(prior, sha);
         loadBranchStory(name);
     }
     private String branchDelta(String name, String sha){
@@ -215,8 +222,100 @@ public final class SectionActivity extends Activity {
             if(b!=null && name.equals(b.optString("name"))) prior=b.optString("sha");
         }
         if(prior==null) return "В прошлой полной проверке этого направления не было. Это ещё не доказательство, что его только что создали: название могло измениться.";
-        if(!prior.equals(sha)) return "Указатель этого направления изменился с прошлой проверки. Что именно сделано, видно только в истории ниже. Работоспособность не проверена.";
+        if(!prior.equals(sha)) return "Указатель этого направления изменился. Это ещё не прогресс: ниже будет сравнение GitHub, если оно доступно. Работоспособность не проверена.";
         return "Указатель с прошлой полной проверки не изменился. Это не значит, что работа закончена.";
+    }
+    private String priorSha(String name) {
+        if(previous==null) return null;
+        JSONArray old=previous.optJSONArray("branches");
+        if(old==null) return null;
+        for(int i=0;i<old.length();i++){
+            JSONObject b=old.optJSONObject(i);
+            if(b!=null && name.equals(b.optString("name"))) return b.optString("sha");
+        }
+        return null;
+    }
+    private void loadCompare(String base, String head) {
+        final int epoch = ++compareEpoch;
+        LinearLayout slot = card();
+        TextView status = line(slot, HumanReport.NOT_ENOUGH+". Сравнение указателей ещё не получено.", 15, false, muted);
+        final String selected = repo;
+        new Thread(() -> {
+            String text;
+            try {
+                String token = vault.load(selected);
+                GithubClient client = new GithubClient(token == null ? "" : token);
+                text = "Событие: указатели направления различаются.\nОснование: "+client.readCompare(selected, base, head)
+                        +"\nНе подтверждено: тесты и готовность на Android.";
+            } catch (Exception e) {
+                text = HumanReport.NOT_ENOUGH+". "+GithubClient.safeMessage(e);
+            }
+            final String shown = text;
+            runOnUiThread(() -> {
+                if (isFinishing() || epoch != compareEpoch) return;
+                status.setText(shown);
+            });
+        }, "gitteller-compare").start();
+    }
+    private void changes() {
+        String filter = getIntent().getStringExtra("filter");
+        if(filter==null) filter="all";
+        line(body,"Что это",16,true,ink);gap(body,6);
+        line(body,"Каждая строка — разница двух сохранённых проверок. Это не оценка готовности.",14,false,muted);
+        gap(body,12);
+        filterChip("Все","all",filter);
+        filterChip("Новое","new",filter);
+        filterChip("Проверки","checks",filter);
+        filterChip("Задачи","tasks",filter);
+        filterChip("Слияния","merges",filter);
+        gap(body,8);
+        JSONArray log = parseFeed();
+        int shown=0;
+        for(int i=0;i<log.length();i++){
+            JSONObject event=log.optJSONObject(i);
+            if(event==null || !matches(filter, event.optString("kind"))) continue;
+            shown++;
+            String title=event.optString("event");
+            String bodyText="Основание: "+event.optString("basis")+"\nНе подтверждено: "+event.optString("unknown")
+                    +"\nИсточник: "+event.optString("origin","LIVE")+", "+HumanReport.humanDate(event.optLong("at",0))+".";
+            note(title.isEmpty()?"Событие":title, bodyText);
+            String url=event.optString("url");
+            if(url.startsWith("https://github.com/")) technical("Ссылка\n"+url+"\nИдентификатор\n"+event.optString("id"));
+        }
+        if(shown==0) note("Событий нет", "В этой ленте нет записей выбранного вида. Это не значит, что проект не менялся и что проблем нет.");
+    }
+    private void filterChip(String label, String id, String currentFilter) {
+        Button b=new Button(this);
+        b.setAllCaps(false);
+        b.setText(label+(id.equals(currentFilter)?" · сейчас":""));
+        b.setTextColor(ink);
+        b.setBackground(background(id.equals(currentFilter)?accent:panel));
+        b.setContentDescription("Фильтр "+label);
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(6);
+        b.setMinHeight(dp(48));
+        b.setPadding(dp(12),dp(8),dp(12),dp(8));
+        body.addView(b,p);
+        b.setOnClickListener(v->{
+            Intent i=new Intent(this, SectionActivity.class);
+            i.putExtra("page","changes");
+            i.putExtra("filter", id);
+            startActivity(i);
+            finish();
+        });
+    }
+    private static boolean matches(String filter, String kind) {
+        if(filter==null || "all".equals(filter)) return true;
+        if("new".equals(filter)) return kind.endsWith("_new") || "branch_seen".equals(kind);
+        if("checks".equals(filter)) return kind.startsWith("check");
+        if("tasks".equals(filter)) return kind.startsWith("issue");
+        if("merges".equals(filter)) return "pull_merged".equals(kind);
+        return true;
+    }
+    private JSONArray parseFeed() {
+        try {
+            String raw=prefs.getString(key(repo,"feed"),"");
+            return raw==null || raw.isEmpty() ? new JSONArray() : new JSONArray(raw);
+        } catch (Exception e) { return new JSONArray(); }
     }
     private void loadBranchStory(String branch) {
         final int epoch = ++detailEpoch;
@@ -365,7 +464,10 @@ public final class SectionActivity extends Activity {
     }
     private String sourceLine(){
         if(current==null) return "Источник ещё не получен.";
-        String kind=current.optBoolean("restoredFromBackup", false)?"Импортированный файл, не свежий запрос GitHub.":"GitHub, только чтение.";
+        String kind=current.optBoolean("restoredFromBackup", false)?"Импортированный файл, не свежий запрос GitHub."
+                :"PARTIAL".equals(current.optString("origin"))?"Частичный ответ GitHub, не полная проверка."
+                :"CACHED".equals(current.optString("origin"))?"GitHub подтвердил прежние списки. История при этом не проверена целиком."
+                :"GitHub, только чтение.";
         return kind+" Проект: "+repo+". Загрузка: "+HumanReport.humanDate(current.optLong("capturedAt",0))+".";
     }
     private void technical(String value){
@@ -381,16 +483,19 @@ public final class SectionActivity extends Activity {
     private void accuracy(){
         if(current==null){note("Нет данных","Ещё не было проверки GitHub.");return;}
         note("Источник", sourceLine());
-        note("Направления", current.optBoolean("branchesStale", false)
+        note("Направления", (current.optBoolean("branchesStale", false)
                 ? "Показан прошлый список. Свежие указатели не получены."
                 : (current.optBoolean("branchesComplete", false)
                     ? "Указатели веток проверены полностью."
-                    : "Указатели веток проверены не полностью."));
-        note("История", "История изучена лишь частично. На главном снимке только последние записи основной ветки. История другого направления запрашивается, когда его открывают.");
-        note("Задачи", current.optBoolean("issuesStale", false) ? "Показан прошлый список задач."
-                : (current.optBoolean("issuesComplete", false) ? "Список задач в пределах запроса загружен." : "Список задач неполный или недоступен. Это не ноль задач."));
-        note("Предложения", current.optBoolean("pullsStale", false) ? "Показан прошлый список предложений."
-                : (current.optBoolean("pullsComplete", false) ? "Список предложений в пределах запроса загружен." : "Список предложений неполный или недоступен."));
+                    : "Указатели веток проверены не полностью.")) + sectionTime("branchesCached", "branchesFetchedAt"));
+        note("История", "История изучена лишь частично. На главном снимке только последние записи основной ветки. История другого направления запрашивается, когда его открывают."
+                + sectionTime("commitsCached", "commitsFetchedAt"));
+        note("Задачи", (current.optBoolean("issuesStale", false) ? "Показан прошлый список задач."
+                : (current.optBoolean("issuesComplete", false) ? "Список задач в пределах запроса загружен." : "Список задач неполный или недоступен. Это не ноль задач."))
+                + sectionTime("issuesCached", "issuesFetchedAt"));
+        note("Предложения", (current.optBoolean("pullsStale", false) ? "Показан прошлый список предложений."
+                : (current.optBoolean("pullsComplete", false) ? "Список предложений в пределах запроса загружен." : "Список предложений неполный или недоступен."))
+                + sectionTime("pullsCached", "pullsFetchedAt"));
         note("Проверки", "Результаты автоматических проверок запрашиваются при открытии записи. Если GitHub их не отдал, это не успех. Обычный токен может не иметь права Checks: read; тогда используются статусы коммита или GitHub Actions, если они доступны.");
         JSONArray warnings=current.optJSONArray("warnings");
         if(warnings==null||warnings.length()==0) note("Замечания загрузки","Отдельных ошибок при последней загрузке не записано. Это не значит, что проект проверен.");
@@ -403,7 +508,7 @@ public final class SectionActivity extends Activity {
         EditText repoField=new EditText(this);repoField.setSingleLine(true);repoField.setText(repo);
         repoField.setTextColor(ink);form.addView(repoField,lp(-1,-2));gap(form,15);
         String status;
-        try{status=vault.hasToken(repo)?"Доступ сохранён на устройстве. Секрет не показывается.":"Токен для текущего проекта не найден.";}
+        try{status=vault.hasToken(repo)?"На устройстве есть запись доступа. Она ещё не проверена расшифровкой, и секрет не показывается.":"Токен для текущего проекта не найден.";}
         catch(Exception e){status="Статус хранилища недоступен.";}
         line(form,status,14,false,muted);gap(form,12);
         line(form,"Токен. Пустое поле не удаляет сохранённый доступ.",13,false,muted);
@@ -437,16 +542,55 @@ public final class SectionActivity extends Activity {
     }
     private void button(LinearLayout box,String label,Runnable action){
         Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextColor(ink);b.setBackground(background(panel));
-        LinearLayout.LayoutParams params=lp(-1,53);params.topMargin=dp(9);box.addView(b,params);b.setOnClickListener(v->action.run());
+        LinearLayout.LayoutParams params=lp(-1,-2);params.topMargin=dp(9);
+        b.setMinHeight(dp(48));
+        b.setPadding(dp(12),dp(10),dp(12),dp(10));
+        box.addView(b,params);b.setOnClickListener(v->action.run());
+    }
+    private String sectionTime(String cacheFlag, String atKey) {
+        String when = HumanReport.humanDate(current.optLong(atKey, 0));
+        String cache = current.optBoolean(cacheFlag, false)
+                ? " Первая страница не изменилась, показан прошлый список." : "";
+        return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.7-dev", "Объясняет историю GitHub человеку без разработки. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.8-dev", "Объясняет историю GitHub человеку без разработки. Это не коммерческий релиз и не проверка готовности программы.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
         note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");
         action("Сохранить копию проекта","Создать JSON без токена",()->requestData("export"));
         action("Восстановить из JSON","Заменяет данные выбранного репозитория только после подтверждения",()->requestData("import"));
+        action("Поделиться кратким отчётом","Текст для себя. Токен и тела записей не входят", this::shareReport);
+        action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
+        note("Проекты на этом телефоне","Данные и токены не смешиваются. Выбор проекта не удаляет остальные.");
+        for (String stored : prefs.getAll().keySet()) {
+            if (!stored.endsWith(":current")) continue;
+            String name = stored.substring(0, stored.length() - ":current".length());
+            if (name.isEmpty()) continue;
+            action(name, name.equalsIgnoreCase(repo) ? "Сейчас открыт" : "Переключить на этот проект", () -> {
+                if (!prefs.edit().putString("repo", name).commit()) { toast("Не удалось выбрать проект"); return; }
+                setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
+                finish();
+            });
+        }
         note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
+    }
+    private void why(){
+        note("Событие", "Коммит, задача или сдвиг ветки говорят только о том, что запись появилась в GitHub.");
+        note("Основание", "Основанием служит поле источника: state, merged_at, SHA или список файлов, если он загружен.");
+        note("Не подтверждено", "Название ветки, префикс fix: и пометка skip ci не доказывают, что функция работает и что приёмка на телефоне пройдена.");
+        note("Подробнее", "Технические поля и ссылка на github.com этого репозитория лежат внизу карточки. Их отсутствие означает «не проверено», а не «всё хорошо».");
+    }
+    private void shareReport(){
+        Summary s=Summary.of(current, previous);
+        String text="GitTeller\n"+repo+"\n"+HumanReport.syncStatus(current)+"\n\nЧто изменилось:\n"
+                +HumanReport.whatChanged(current, previous, s)+"\n\nЧто требует внимания:\n"
+                +HumanReport.needsAttention(current, s)+"\n\n"+HumanReport.coverageLine(current)
+                +"\n\nЭто не проверка работоспособности и не отчёт о готовности.";
+        Intent send=new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_TEXT, text);
+        startActivity(Intent.createChooser(send, "Краткий отчёт"));
     }
     private void requestData(String actionName){setResult(RESULT_OK,new Intent().putExtra("action",actionName));finish();}
     private void toast(String msg){Toast.makeText(this,msg,Toast.LENGTH_SHORT).show();}

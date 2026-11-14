@@ -33,6 +33,18 @@ final class SnapshotCodec {
         out.put("issuesComplete", raw.optBoolean("issuesComplete", false));
         out.put("pullsComplete", raw.optBoolean("pullsComplete", false));
         out.put("restoredFromBackup", raw.optBoolean("restoredFromBackup", false));
+        String origin = raw.optString("origin");
+        if ("LIVE".equals(origin) || "CACHED".equals(origin) || "PARTIAL".equals(origin) || "IMPORTED".equals(origin))
+            out.put("origin", origin);
+        if (raw.optBoolean("restoredFromBackup", false)) out.put("origin", "IMPORTED");
+        copyTime(raw, out, "branchesFetchedAt");
+        copyTime(raw, out, "issuesFetchedAt");
+        copyTime(raw, out, "pullsFetchedAt");
+        copyTime(raw, out, "commitsFetchedAt");
+        out.put("branchesStale", raw.optBoolean("branchesStale", false));
+        out.put("issuesStale", raw.optBoolean("issuesStale", false));
+        out.put("pullsStale", raw.optBoolean("pullsStale", false));
+        out.put("commitsStale", raw.optBoolean("commitsStale", false));
         JSONArray branches = new JSONArray();
         JSONArray source = raw.optJSONArray("branches");
         for (int i = 0; i < source.length(); i++) {
@@ -52,13 +64,23 @@ final class SnapshotCodec {
                     JSONObject row = rawArr.optJSONObject(i);
                     if (row == null) continue;
                     JSONObject item = new JSONObject();
-                    for (String name : ("commits".equals(k) ? new String[]{"sha", "message", "date"}
-                            : new String[]{"number", "title", "state"})) {
+                    String[] names = "commits".equals(k) ? new String[]{"sha", "message", "date"}
+                            : new String[]{"number", "title", "state", "updated_at"};
+                    for (String name : names) {
                         if ("number".equals(name)) item.put(name, row.optInt(name));
                         else {
                             String v = row.optString(name);
+                            if (v.isEmpty() || "null".equals(v)) continue;
                             item.put(name, v.length() > 500 ? v.substring(0, 500) : v);
                         }
+                    }
+                    if ("pulls".equals(k)) {
+                        String mergedAt = row.optString("merged_at");
+                        boolean merged = row.optBoolean("merged", false)
+                                || (!mergedAt.isEmpty() && !"null".equals(mergedAt));
+                        item.put("merged", merged);
+                        if (!mergedAt.isEmpty() && !"null".equals(mergedAt))
+                            item.put("merged_at", mergedAt.length() > 80 ? mergedAt.substring(0, 80) : mergedAt);
                     }
                     clean.put(item);
                 }
@@ -66,5 +88,10 @@ final class SnapshotCodec {
             out.put(k, clean);
         }
         return out;
+    }
+
+    private static void copyTime(JSONObject raw, JSONObject out, String key) throws Exception {
+        long value = raw.optLong(key, 0);
+        if (value > 0) out.put(key, value);
     }
 }

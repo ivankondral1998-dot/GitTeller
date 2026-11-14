@@ -63,6 +63,7 @@ public final class MainActivity extends Activity {
     private volatile GithubClient inflight;
     private boolean loading;
     private String lastError;
+    private JSONArray feed = new JSONArray();
     private LinearLayout content;
     private Button refresh;
 
@@ -78,6 +79,7 @@ public final class MainActivity extends Activity {
         previous = parse(prefs.getString(key(repo, "previous"), ""));
         lastError = prefs.getString(key(repo, "lastError"), "");
         if (lastError != null && lastError.isEmpty()) lastError = null;
+        feed = parseArray(prefs.getString(key(repo, "feed"), ""));
         draw();
     }
 
@@ -86,6 +88,43 @@ public final class MainActivity extends Activity {
     private static JSONObject parse(String s) {
         try { return s == null || s.isEmpty() ? null : new JSONObject(s); }
         catch (Exception ignored) { return null; }
+    }
+
+    private static JSONArray parseArray(String s) {
+        try { return s == null || s.isEmpty() ? new JSONArray() : new JSONArray(s); }
+        catch (Exception ignored) { return new JSONArray(); }
+    }
+
+    private void rememberFeed(JSONObject older, JSONObject newer) {
+        try {
+            JSONArray prior = parseArray(prefs.getString(key(repo, "feed"), ""));
+            JSONArray news = ChangeSet.between(older, newer);
+            JSONArray merged = new JSONArray();
+            for (int i = 0; i < news.length() && merged.length() < 30; i++) {
+                JSONObject event = news.optJSONObject(i);
+                if (event == null) continue;
+                event.put("at", newer.optLong("capturedAt", System.currentTimeMillis()));
+                if (!seen(prior, event)) merged.put(event);
+            }
+            for (int i = 0; i < prior.length() && merged.length() < 30; i++) {
+                JSONObject event = prior.optJSONObject(i);
+                if (event != null) merged.put(event);
+            }
+            feed = merged;
+        } catch (Exception ignored) {
+            // A broken local feed must not discard the fresh snapshot.
+        }
+    }
+
+    private static boolean seen(JSONArray prior, JSONObject event) {
+        String key = event.optString("kind") + "|" + event.optString("id") + "|" + event.optString("event");
+        for (int i = 0; i < prior.length(); i++) {
+            JSONObject old = prior.optJSONObject(i);
+            if (old == null) continue;
+            String other = old.optString("kind") + "|" + old.optString("id") + "|" + old.optString("event");
+            if (key.equals(other)) return true;
+        }
+        return false;
     }
 
     private void applyPalette() {
@@ -185,7 +224,7 @@ public final class MainActivity extends Activity {
         space(wrap,12);
 
         if (current != null && !loading) {
-            addLine(wrap,"Последняя удачная загрузка: "+formatTime(current.optLong("capturedAt",0)),12,MUTED,false,0);
+            addLine(wrap,HumanReport.syncStatus(current),12,MUTED,false,0);
             addLine(wrap,HumanReport.coverageLine(current),12,MUTED,false,4);
             space(wrap,12);
         }
@@ -232,7 +271,8 @@ public final class MainActivity extends Activity {
             next.setOnClickListener(v->{
                 if ("Посмотреть задачу".equals(step)) openPage("tasks");
                 else if ("Проверить доступ".equals(step)) openPage("access");
-                else if ("Открыть изменения".equals(step) || "Открыть направления".equals(step)) openPage("branches");
+                else if ("Открыть изменения".equals(step)) openPage("changes");
+                else if ("Открыть направления".equals(step)) openPage("branches");
                 else sync();
             });
         }
@@ -280,6 +320,7 @@ public final class MainActivity extends Activity {
             repo = selected;
             current = parse(prefs.getString(key(repo,"current"),""));
             previous = parse(prefs.getString(key(repo,"previous"),""));
+            feed = parseArray(prefs.getString(key(repo,"feed"),""));
             lastError = prefs.getString(key(repo,"lastError"), "");
             if (lastError != null && lastError.isEmpty()) lastError = null;
             draw();
@@ -289,7 +330,7 @@ public final class MainActivity extends Activity {
     private String accessStatus() {
         try {
             if (vault != null && vault.hasToken(repo))
-                return "Доступ: сохранён на устройстве. Секрет не показывается.";
+                return "Доступ: на устройстве есть запись. Расшифровка ещё не доказана, секрет не показывается.";
             return "Доступ: токен не сохранён. Публичный проект читается без него.";
         } catch (RuntimeException e) {
             return "Доступ: хранилище Android недоступно. Введите токен заново.";
@@ -330,8 +371,10 @@ public final class MainActivity extends Activity {
                     previous=current;
                     current=fresh;
                     lastError=null;
+                    rememberFeed(previous, current);
                     prefs.edit().putString(key(repo,"previous"),previous==null?"":previous.toString())
                             .putString(key(repo,"current"),current.toString())
+                            .putString(key(repo,"feed"), feed.toString())
                             .remove(key(repo,"lastError")).apply();
                     loading=false;draw();toast("Данные обновлены");
                 });
@@ -391,7 +434,8 @@ public final class MainActivity extends Activity {
             fresh=SnapshotCodec.sanitizeSnapshot(fresh,restoredRepo);
             // Imported snapshots are user-provided evidence, not authenticated live data.
             fresh.put("restoredFromBackup",true);
-            if(old!=null){old=SnapshotCodec.sanitizeSnapshot(old,restoredRepo);old.put("restoredFromBackup",true);}
+            fresh.put("origin","IMPORTED");
+            if(old!=null){old=SnapshotCodec.sanitizeSnapshot(old,restoredRepo);old.put("restoredFromBackup",true);old.put("origin","IMPORTED");}
         }catch(Exception e){throw new IllegalArgumentException("Некорректный архив: "+GithubClient.safeMessage(e));}
         final JSONObject finalFresh=fresh, finalOld=old;
         new AlertDialog.Builder(this).setTitle("Восстановить из архива?")
@@ -401,10 +445,11 @@ public final class MainActivity extends Activity {
                     if(loading){toast("Дождитесь завершения синхронизации");return;}
                     if(!prefs.edit().putString(key(restoredRepo,"current"),finalFresh.toString())
                             .putString(key(restoredRepo,"previous"),finalOld==null?"":finalOld.toString())
+                            .remove(key(restoredRepo,"feed"))
                             .putString("repo",restoredRepo).commit()){
                         toast("Не удалось сохранить архив");return;
                     }
-                    repo=restoredRepo;current=finalFresh;previous=finalOld;draw();toast("Данные восстановлены из архива");
+                    repo=restoredRepo;current=finalFresh;previous=finalOld;feed=new JSONArray();draw();toast("Данные восстановлены из архива");
                 }).show();
     }
 
@@ -428,6 +473,7 @@ public final class MainActivity extends Activity {
                     repo=selected;
                     current=parse(prefs.getString(key(repo,"current"),""));
                     previous=parse(prefs.getString(key(repo,"previous"),""));
+                    feed=parseArray(prefs.getString(key(repo,"feed"),""));
                     lastError=prefs.getString(key(repo,"lastError"), "");
                     if (lastError != null && lastError.isEmpty()) lastError = null;
                     draw();return;

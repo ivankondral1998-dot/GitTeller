@@ -63,10 +63,8 @@ final class Summary {
                 && current.optBoolean("issuesComplete", false);
         boolean pullScopeComplete = previous.optBoolean("pullsComplete", false)
                 && current.optBoolean("pullsComplete", false);
-        int issueChanges = issueScopeComplete
-                ? stateChanges(previous.optJSONArray("issues"), current.optJSONArray("issues")) : 0;
-        int pullChanges = pullScopeComplete
-                ? stateChanges(previous.optJSONArray("pulls"), current.optJSONArray("pulls")) : 0;
+        int issueChanges = ChangeSet.issueChanges(previous, current);
+        int pullChanges = ChangeSet.pullChanges(previous, current);
         String headline = (moved+added+removed)==0 ?
                 (complete ? "SHA веток не изменились" : "Сравнение неполное") : "В истории проекта есть изменения";
         String desc = moved + " веток изменили указатель, " + added + " появились в сравнении с полностью загруженным списком.";

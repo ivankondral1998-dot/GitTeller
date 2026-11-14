@@ -1,0 +1,53 @@
+GET https://api.github.com/repos/octocat/Hello-World
+HTTP/2 200 
+date: Sat, 14 Nov 2026 03:31:09 GMT
+content-type: application/json; charset=utf-8
+cache-control: public, max-age=60, s-maxage=60
+vary: Accept,Accept-Encoding, Accept, X-Requested-With
+etag: W/"fee0f89b57d9e2fef158abc97d68e8df3a1ef6c74ae181cdbdace0408a0c7f40"
+last-modified: Sat, 14 Nov 2026 01:54:30 GMT
+x-github-media-type: github.v3; format=json
+x-github-api-version-selected: 2022-11-28
+access-control-expose-headers: ETag, Link, Location, Retry-After, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval, X-GitHub-Media-Type, X-GitHub-SSO, X-GitHub-Request-Id, Deprecation, Sunset, Warning
+access-control-allow-origin: *
+strict-transport-security: max-age=31536000; includeSubdomains; preload
+x-frame-options: deny
+x-content-type-options: nosniff
+x-xss-protection: 0
+referrer-policy: origin-when-cross-origin, strict-origin-when-cross-origin
+content-security-policy: default-src 'none'
+server: github.com
+accept-ranges: bytes
+x-ratelimit-limit: 60
+full_name octocat/Hello-World
+default_branch master
+private False
+GET branches page1
+branch_count 3
+master 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+octocat-patch-1 b1b3f9723831141a31a1a7252a213e216ea76e56
+test b3cbd5bbd7e81436d2eee04537ea2b4c0cad4cdf
+--- etag header ---
+HTTP/2 200 
+etag: W/"97d45c23346b0852f05a0964147f0b392a3cc585a01082bbd6ba4a24a3fcafae"
+x-ratelimit-remaining: 55
+
+GET compare master...octocat-patch-1
+HTTP/2 200 
+date: Sat, 14 Nov 2026 03:31:18 GMT
+content-type: application/json; charset=utf-8
+cache-control: public, max-age=60, s-maxage=60
+vary: Accept,Accept-Encoding, Accept, X-Requested-With
+etag: W/"4eac480802abf3bcb4a835a8dfb081d432bd041c6a3db37abe39f2f9ad89b21c"
+last-modified: Thu, 10 May 2018 17:55:19 GMT
+x-github-media-type: github.v3; format=json
+x-github-api-version-selected: 2022-11-28
+access-control-expose-headers: ETag, Link, Location, Retry-After, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval, X-GitHub-Media-Type, X-GitHub-SSO, X-GitHub-Request-Id, Deprecation, Sunset, Warning
+access-control-allow-origin: *
+strict-transport-security: max-age=31536000; includeSubdomains; preload
+status ahead
+ahead_by 1
+behind_by 0
+commits 1
+files 1
+keys_sample ['ahead_by', 'base_commit', 'behind_by', 'commits', 'diff_url', 'files', 'html_url', 'merge_base_commit', 'patch_url', 'permalink_url', 'status', 'total_commits']

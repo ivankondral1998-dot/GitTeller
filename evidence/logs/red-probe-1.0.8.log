@@ -1,0 +1,6 @@
+PASS | new issue is a change | observed issueChanges=1
+PASS | PR merge is a change despite closed->closed | observed pullChanges=1
+PASS | issue title change is a change | observed issueChanges=1
+PASS | backup preserves merged state | observed merged=true
+Known defects reproduced: 0/4 (expected 4 RED on 1.0.7 patch)
+RED_EXIT:0

@@ -63,8 +63,13 @@ final class HumanReport {
                 return "В исследовательском направлении появились новые изменения. Их работоспособность не проверена.";
             return "В направлениях разработки появились изменения. Их работоспособность не проверена.";
         }
-        if (s.issueChanges + s.pullChanges > 0)
+        if (s.issueChanges + s.pullChanges > 0) {
+            String lead = ChangeSet.homeLine(previous, current);
+            if (lead != null && !lead.toLowerCase(java.util.Locale.ROOT).contains("sha")) return lead;
             return "Указатели направлений те же, но изменились статусы задач или предложений. Это не доказательство готовности.";
+        }
+        String quiet = ChangeSet.homeLine(previous, current);
+        if (quiet != null && !quiet.toLowerCase(java.util.Locale.ROOT).contains("sha")) return quiet;
         if (!branchesKnown)
             return "Полного сравнения направлений нет. Нельзя утверждать, что ничего не менялось.";
         return "С прошлой полной проверки указатели направлений не сдвинулись. Это не значит, что работа закончена.";
@@ -119,7 +124,7 @@ final class HumanReport {
         }
         if (current == null || current.optBoolean("restoredFromBackup", false)) return "Повторить загрузку";
         if (previous == null) return "Открыть направления";
-        if (s.advanced + s.added + s.missing > 0) return "Открыть изменения";
+        if (s.advanced + s.added + s.missing > 0 || s.issueChanges + s.pullChanges > 0) return "Открыть изменения";
         if (current.optBoolean("issuesComplete", false) && countState(current.optJSONArray("issues"), "open") > 0)
             return "Посмотреть задачу";
         if (!current.optBoolean("issuesComplete", false) && countState(current.optJSONArray("issues"), "open") > 0)
@@ -230,6 +235,25 @@ final class HumanReport {
         String defaultBranch=snapshot.optString("defaultBranch");
         if(defaultBranch.isEmpty())defaultBranch="main";
         return "ветки «"+defaultBranch+"»";
+    }
+
+    static String syncStatus(JSONObject current) {
+        if (current == null) return "Синхронизации ещё не было.";
+        String when = humanDate(current.optLong("capturedAt", 0));
+        if (current.optBoolean("restoredFromBackup", false))
+            return "Это импорт, не свежая проверка GitHub. Дата файла: " + when + ".";
+        boolean partial = !current.optBoolean("branchesComplete", false)
+                || !current.optBoolean("issuesComplete", false)
+                || !current.optBoolean("pullsComplete", false)
+                || current.optBoolean("branchesStale", false)
+                || current.optBoolean("issuesStale", false)
+                || current.optBoolean("pullsStale", false)
+                || current.optBoolean("commitsStale", false);
+        if (partial) return "Проверка частичная, не полная. Ответ GitHub: " + when + ".";
+        if (current.optBoolean("branchesCached", false) || current.optBoolean("issuesCached", false)
+                || current.optBoolean("pullsCached", false))
+            return "GitHub подтвердил, что часть списков не изменилась. Ответ: " + when + ". История изучена лишь частично, это не полная приёмка.";
+        return "Ответ GitHub: " + when + ". История изучена лишь частично, это не полная приёмка.";
     }
 
     static String coverageLine(JSONObject current) {

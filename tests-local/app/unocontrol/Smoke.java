@@ -9,7 +9,7 @@ public class Smoke {
     return s.put("repo","demo/test").put("branches",a).put("branchesComplete",complete)
         .put("issuesComplete",true).put("pullsComplete",true).put("warnings",new JSONArray());
   }
-  public static void main(String[] args){
+  public static void main(String[] args) throws Exception {
     check(Summary.of(null,null).heading.contains("нет свежей"),"no data");
     check(Summary.of(snapshot(true,"main","1"),null).heading.contains("Первый"),"first snapshot");
     Summary s=Summary.of(snapshot(true,"main","2","new","3"), snapshot(true,"main","1","old","4"));
@@ -52,6 +52,45 @@ public class Smoke {
     closedTask.put("issuesComplete",false);
     check(Summary.of(closedTask,openTask).issueChanges==0,"partial issue responses are not proof of status transition");
     check(HumanReport.homeTitle(closedTask,openTask,Summary.of(closedTask,openTask)).contains("недоступна"),"incomplete issues shown on home");
+    JSONObject emptyIssues=snapshot(true,"main","1");
+    emptyIssues.put("issues",new JSONArray());
+    emptyIssues.put("pulls",new JSONArray());
+    JSONObject newIssue=snapshot(true,"main","1");
+    newIssue.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("title","Fix crash").put("state","open")));
+    newIssue.put("pulls",new JSONArray());
+    Summary created=Summary.of(newIssue,emptyIssues);
+    check(created.issueChanges>0,"new issue is a change");
+    check(HumanReport.whatChanged(newIssue,emptyIssues,created).contains("Появилась задача #7"),"new issue is named");
+    JSONObject closedPull=snapshot(true,"main","1");
+    closedPull.put("issues",new JSONArray());
+    closedPull.put("pulls",new JSONArray().put(new JSONObject().put("number",5).put("title","proposal").put("state","closed").put("merged",false)));
+    JSONObject mergedPull=snapshot(true,"main","1");
+    mergedPull.put("issues",new JSONArray());
+    mergedPull.put("pulls",new JSONArray().put(new JSONObject().put("number",5).put("title","proposal").put("state","closed").put("merged",true)));
+    check(Summary.of(mergedPull,closedPull).pullChanges>0,"merge is a change while state stays closed");
+    JSONObject renamed=snapshot(true,"main","1");
+    renamed.put("issues",new JSONArray().put(new JSONObject().put("number",7).put("title","New title").put("state","open")));
+    renamed.put("pulls",new JSONArray());
+    Summary edit=Summary.of(renamed,newIssue);
+    check(edit.issueChanges>0,"title change is a change");
+    check(HumanReport.whatChanged(renamed,newIssue,edit).contains("название"),"title change is described");
+    JSONObject backup=snapshot(true,"main","0123456789abcdef0123456789abcdef01234567");
+    backup.put("issues",new JSONArray());
+    backup.put("pulls",new JSONArray().put(new JSONObject().put("number",5).put("title","proposal").put("state","closed").put("merged",true).put("token","ghp_SECRET")));
+    JSONObject cleaned=SnapshotCodec.sanitizeSnapshot(backup,"demo/test");
+    check(cleaned.optJSONArray("pulls").optJSONObject(0).optBoolean("merged",false),"backup preserves merged state");
+    check(!cleaned.toString().toLowerCase().contains("ghp_"),"backup has no token marker");
+    String behind=GithubClient.explainCompareStatus("behind",0,2,false);
+    check(behind.contains("откатилась") && behind.contains("не продвижение"),"behind is not progress");
+    check(GithubClient.explainCompareStatus("ahead",2,0,false).contains("новые записи"),"ahead names new records");
+    check(GithubClient.explainCompareStatus("diverged",1,1,false).contains("разошлась"),"diverged is not a straight advance");
+    check(GithubClient.explainCompareStatus("identical",0,0,false).contains("совпадают"),"identical pointers");
+    check(GithubClient.explainCompareStatus("nope",0,0,true).contains("Недостаточно данных"),"unknown compare is insufficient");
+    check(GithubClient.compareFailure(new RuntimeException("HTTP 404")).contains("Недостаточно данных"),"compare failure stays insufficient");
+    JSONObject partialNew=snapshot(true,"main","1");
+    partialNew.put("issuesComplete",false);
+    partialNew.put("issues",new JSONArray().put(new JSONObject().put("number",8).put("state","open")));
+    check(Summary.of(partialNew,emptyIssues).issueChanges==0,"partial list does not prove a new issue");
     System.out.println("PASS: "+passed+" model checks (test doubles for org.json; no Android runtime)");
   }
 }
