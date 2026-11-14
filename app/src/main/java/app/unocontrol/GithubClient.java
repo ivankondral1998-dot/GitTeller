@@ -9,82 +9,201 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
 /** Read-only GitHub access. Never writes, and never persists auth credentials. */
 final class GithubClient {
+    static final int BRANCH_PAGE_CAP = 5;
+    static final int ISSUE_PAGE_CAP = 2;
+    static final int PULL_PAGE_CAP = 2;
+    static final String CI_UNAVAILABLE = "Результаты автоматических проверок получить не удалось.";
+
     static final class Result {
         final JSONObject snapshot;
         Result(JSONObject snapshot) { this.snapshot = snapshot; }
     }
+
+    static final class HttpFailure extends Exception {
+        final int status;
+        HttpFailure(int status, String message) { super(message); this.status = status; }
+    }
+
     private final String token;
     private volatile HttpURLConnection inflight;
+    private volatile boolean halted;
+    private String boundRepo = "";
+    private long boundId;
+
     GithubClient(String token) { this.token = token == null ? "" : token.trim(); }
 
     void cancel() {
+        halted = true;
         HttpURLConnection c = inflight;
         if (c != null) c.disconnect();
     }
 
-    Result load(String repo) throws Exception {
+    Result load(String repo) throws Exception { return load(repo, null); }
+
+    Result load(String repo, JSONObject previous) throws Exception {
         if (!repo.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || repo.contains(".."))
             throw new IllegalArgumentException("Репозиторий укажите в формате владелец/проект.");
+        boundRepo = repo;
+        boundId = 0;
         String root = "https://api.github.com/repos/" + repo;
         JSONObject meta = jsonObject(get(root));
         String actual = meta.optString("full_name", "");
         if (!repo.equalsIgnoreCase(actual))
             throw new IllegalStateException("GitHub вернул другой репозиторий.");
+        boundRepo = actual;
+        boundId = meta.optLong("id", 0);
         String branch = meta.optString("default_branch", "main");
 
         List<String> warnings = new ArrayList<>();
-        JSONArray branches = pages(root + "/branches?per_page=100", 20, warnings, "ветки");
-        boolean branchComplete = true;
-        for (String w : warnings) if (w.startsWith("ветки:")) branchComplete = false;
-        if (branches.length() == 0 && !branchComplete)
-            throw new IllegalStateException("Список веток не получен; старый снимок сохранён.");
+        String firstError = null;
+        boolean anyFresh = false;
 
-        JSONArray commits;
-        try { commits = jsonArray(get(root + "/commits?sha=" + encodePathPart(branch) + "&per_page=12")); }
-        catch (Exception e) { commits = new JSONArray(); warnings.add("История коммитов не загружена: " + safeMessage(e)); }
-        JSONArray issues;
-        boolean issuesComplete;
+        boolean branchesFetched = false;
+        boolean branchComplete = false;
+        JSONArray branches = new JSONArray();
         try {
-            int warningsBefore = warnings.size();
-            issues = pages(root + "/issues?state=all&per_page=100", 4, warnings, "задачи");
-            issuesComplete = warnings.size() == warningsBefore;
+            int before = warnings.size();
+            branches = pages(root + "/branches?per_page=100", BRANCH_PAGE_CAP, warnings, "ветки");
+            branchesFetched = true;
+            anyFresh = true;
+            branchComplete = !coverageBroken(warnings.subList(before, warnings.size()), "ветки");
         } catch (Exception e) {
-            issues = new JSONArray();
-            issuesComplete = false;
-            warnings.add("Задачи недоступны: " + safeMessage(e));
+            firstError = sourceError("ветки", e);
+            warnings.add(firstError);
+            if (isHalt(e)) halted = true;
         }
-        JSONArray pulls;
-        boolean pullsComplete;
-        try {
-            int warningsBefore = warnings.size();
-            pulls = pages(root + "/pulls?state=all&per_page=100", 4, warnings, "запросы изменений");
-            pullsComplete = warnings.size() == warningsBefore;
-        } catch (Exception e) {
-            pulls = new JSONArray();
-            pullsComplete = false;
-            warnings.add("Запросы изменений недоступны: " + safeMessage(e));
+
+        boolean commitsFetched = false;
+        JSONArray commits = new JSONArray();
+        if (!halted) {
+            try {
+                commits = slimCommits(jsonArray(get(root + "/commits?sha=" + encodePathPart(branch) + "&per_page=12")));
+                commitsFetched = true;
+                anyFresh = true;
+            } catch (Exception e) {
+                String message = sourceError("история", e);
+                if (firstError == null) firstError = message;
+                warnings.add(message);
+                if (isHalt(e)) halted = true;
+            }
+        } else warnings.add("история: запрос не отправлялся, лимит GitHub ещё действует");
+
+        JSONArray issues = new JSONArray();
+        boolean issuesFetched = false;
+        boolean issuesComplete = false;
+        if (!halted) {
+            try {
+                int before = warnings.size();
+                issues = pages(root + "/issues?state=all&per_page=100", ISSUE_PAGE_CAP, warnings, "задачи");
+                issuesFetched = true;
+                anyFresh = true;
+                issuesComplete = !coverageBroken(warnings.subList(before, warnings.size()), "задачи");
+            } catch (Exception e) {
+                String message = sourceError("задачи", e);
+                if (firstError == null) firstError = message;
+                warnings.add(message);
+                if (isHalt(e)) halted = true;
+            }
+        } else warnings.add("задачи: запрос не отправлялся, лимит GitHub ещё действует");
+
+        JSONArray pulls = new JSONArray();
+        boolean pullsFetched = false;
+        boolean pullsComplete = false;
+        if (!halted) {
+            try {
+                int before = warnings.size();
+                pulls = pages(root + "/pulls?state=all&per_page=100", PULL_PAGE_CAP, warnings, "предложения");
+                pullsFetched = true;
+                anyFresh = true;
+                pullsComplete = !coverageBroken(warnings.subList(before, warnings.size()), "предложения");
+            } catch (Exception e) {
+                String message = sourceError("предложения", e);
+                if (firstError == null) firstError = message;
+                warnings.add(message);
+            }
+        } else warnings.add("предложения: запрос не отправлялся, лимит GitHub ещё действует");
+
+        if (!anyFresh) {
+            throw new IllegalStateException(firstError == null
+                    ? "GitHub не ответил. Старые данные сохранены." : firstError);
         }
 
         JSONObject out = new JSONObject();
         out.put("repo", actual).put("defaultBranch", branch)
                 .put("capturedAt", System.currentTimeMillis())
-                .put("branches", slimBranches(branches))
-                .put("commits", slimCommits(commits))
-                .put("issues", slimIssues(issues))
-                .put("pulls", slimIssues(pulls))
+                .put("branches", branchesFetched ? slimBranches(branches) : new JSONArray())
+                .put("commits", commits)
+                .put("issues", issuesFetched ? slimIssues(issues) : new JSONArray())
+                .put("pulls", pullsFetched ? slimPulls(pulls) : new JSONArray())
                 .put("branchesComplete", branchComplete)
                 .put("issuesComplete", issuesComplete)
-                .put("pullsComplete", pullsComplete);
+                .put("pullsComplete", pullsComplete)
+                .put("commitsComplete", false)
+                .put("historyPartial", true)
+                .put("branchesFetched", branchesFetched)
+                .put("commitsFetched", commitsFetched)
+                .put("issuesFetched", issuesFetched)
+                .put("pullsFetched", pullsFetched)
+                .put("branchesStale", false)
+                .put("commitsStale", false)
+                .put("issuesStale", false)
+                .put("pullsStale", false);
+        preserveSources(out, previous);
         JSONArray warn = new JSONArray();
         for (String w : warnings) warn.put(w);
+        JSONArray extra = out.optJSONArray("warnings");
+        if (extra != null) for (int i = 0; i < extra.length(); i++) warn.put(extra.optString(i));
         out.put("warnings", warn);
         return new Result(out);
+    }
+
+    /** Keeps the last good list when this refresh did not fetch that source. */
+    static void preserveSources(JSONObject fresh, JSONObject previous) throws Exception {
+        if (fresh == null || previous == null) return;
+        if (!fresh.optString("repo").equalsIgnoreCase(previous.optString("repo"))) return;
+        if (previous.optBoolean("restoredFromBackup", false)) return;
+        keep(fresh, previous, "branches", "branchesFetched", "branchesComplete", "branchesStale", "ветки");
+        keep(fresh, previous, "commits", "commitsFetched", "commitsComplete", "commitsStale", "история");
+        keep(fresh, previous, "issues", "issuesFetched", "issuesComplete", "issuesStale", "задачи");
+        keep(fresh, previous, "pulls", "pullsFetched", "pullsComplete", "pullsStale", "предложения");
+    }
+
+    private static void keep(JSONObject fresh, JSONObject previous, String arrayKey, String fetchedKey,
+                             String completeKey, String staleKey, String label) throws Exception {
+        if (fresh.optBoolean(fetchedKey, true)) return;
+        JSONArray old = previous.optJSONArray(arrayKey);
+        if (old == null) return;
+        fresh.put(arrayKey, old);
+        fresh.put(staleKey, true);
+        fresh.put(completeKey, false);
+        JSONArray warnings = fresh.optJSONArray("warnings");
+        if (warnings == null) {
+            warnings = new JSONArray();
+            fresh.put("warnings", warnings);
+        }
+        warnings.put(label + ": показан прошлый список. Свежие данные этого раздела не получены.");
+    }
+
+    static boolean coverageBroken(List<String> warnings, String label) {
+        if (warnings == null) return false;
+        String prefix = label + ":";
+        for (String w : warnings) if (w != null && w.startsWith(prefix)) return true;
+        return false;
+    }
+
+    private static boolean isHalt(Exception e) {
+        if (e instanceof HttpFailure && ((HttpFailure) e).status == 429) return true;
+        String m = e.getMessage() == null ? "" : e.getMessage();
+        return m.contains("Лимит запросов");
+    }
+
+    private static String sourceError(String label, Exception e) {
+        return label + ": " + safeMessage(e);
     }
 
     private JSONArray pages(String start, int max, List<String> warnings, String label) throws Exception {
@@ -102,7 +221,8 @@ final class GithubClient {
             for (int j = 0; j < current.length(); j++) all.put(current.get(j));
             String next = nextLink(response.link);
             if (next == null) return all;
-            if (!next.startsWith("https://api.github.com/repos/")) {
+            adoptRepositoryId(next);
+            if (!safeContinuation(next, boundRepo, boundId)) {
                 warnings.add(label + ": небезопасная ссылка продолжения отклонена");
                 return all;
             }
@@ -112,7 +232,38 @@ final class GithubClient {
         return all;
     }
 
-    private static String nextLink(String link) {
+    static boolean safeContinuation(String next, String repo, long repoId) {
+        if (next == null) return false;
+        int q = next.indexOf('?');
+        String path = q >= 0 ? next.substring(0, q) : next;
+        String lower = path.toLowerCase(Locale.ROOT);
+        if (!lower.startsWith("https://api.github.com/")) return false;
+        String repoLower = repo == null ? "" : repo.toLowerCase(Locale.ROOT);
+        if (!repoLower.isEmpty()) {
+            String base = "https://api.github.com/repos/" + repoLower;
+            if (lower.equals(base) || lower.startsWith(base + "/")) return true;
+        }
+        if (repoId > 0) {
+            String base = "https://api.github.com/repositories/" + repoId;
+            if (lower.equals(base) || lower.startsWith(base + "/")) return true;
+        }
+        return false;
+    }
+
+    private void adoptRepositoryId(String next) {
+        if (boundId != 0 || next == null) return;
+        String prefix = "https://api.github.com/repositories/";
+        String lower = next.toLowerCase(Locale.ROOT);
+        if (!lower.startsWith(prefix)) return;
+        int start = prefix.length();
+        int end = start;
+        while (end < lower.length() && Character.isDigit(lower.charAt(end))) end++;
+        if (end == start) return;
+        try { boundId = Long.parseLong(lower.substring(start, end)); }
+        catch (NumberFormatException ignored) { boundId = 0; }
+    }
+
+    static String nextLink(String link) {
         if (link == null) return null;
         for (String part : link.split(",")) {
             if (part.contains("rel=\"next\"")) {
@@ -146,8 +297,7 @@ final class GithubClient {
             String date = "";
             if (commit != null && commit.optJSONObject("committer") != null)
                 date = commit.optJSONObject("committer").optString("date", "");
-            out.put(new JSONObject().put("sha", x.optString("sha")).put("message", message)
-                    .put("date", date));
+            out.put(new JSONObject().put("sha", x.optString("sha")).put("message", message).put("date", date));
         }
         return out;
     }
@@ -164,9 +314,64 @@ final class GithubClient {
         return out;
     }
 
+    private static JSONArray slimPulls(JSONArray raw) throws Exception {
+        JSONArray out = new JSONArray();
+        for (int i = 0; i < raw.length(); i++) {
+            JSONObject x = raw.optJSONObject(i);
+            if (x == null) continue;
+            String mergedAt = x.optString("merged_at", "");
+            boolean merged = x.optBoolean("merged", false)
+                    || (mergedAt != null && !mergedAt.isEmpty() && !"null".equals(mergedAt));
+            out.put(new JSONObject().put("number", x.optInt("number"))
+                    .put("title", x.optString("title"))
+                    .put("state", x.optString("state"))
+                    .put("merged", merged));
+        }
+        return out;
+    }
+
+    static boolean mayRetry(int attempt, int status, Throwable error) {
+        if (attempt > 0) return false;
+        if (status == 401 || status == 403 || status == 404 || status == 429) return false;
+        if (status == 408 || status == 502 || status == 503 || status == 504) return true;
+        return status == 0 && retryableFailure(error);
+    }
+
+    static boolean retryableFailure(Throwable e) {
+        String s = e == null || e.getMessage() == null ? "" : e.getMessage().toLowerCase(Locale.ROOT);
+        return e instanceof java.net.SocketTimeoutException || s.contains("timed out") || s.contains("timeout");
+    }
+
     private Response get(String address) throws Exception {
-        // Whitelist prevents redirecting a PAT to an arbitrary host.
-        if (!address.startsWith("https://api.github.com/repos/"))
+        Exception last = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            if (attempt > 0) {
+                try { Thread.sleep(600L); }
+                catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw ie;
+                }
+            }
+            try {
+                return getOnce(address);
+            } catch (HttpFailure e) {
+                last = e;
+                if (e.status == 429 || (e.getMessage() != null && e.getMessage().contains("Лимит запросов"))) halted = true;
+                if (mayRetry(attempt, e.status, e)) continue;
+                throw e;
+            } catch (Exception e) {
+                last = e;
+                if (mayRetry(attempt, 0, e)) continue;
+                throw e;
+            }
+        }
+        throw last == null ? new IllegalStateException("GitHub не ответил. Старые данные сохранены.") : last;
+    }
+
+    private Response getOnce(String address) throws Exception {
+        if (halted) throw new HttpFailure(429, "Лимит запросов GitHub исчерпан. Повторите позже. Старые данные сохранены.");
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Запрос отменён.");
+        if (!safeContinuation(address, boundRepo, boundId))
             throw new SecurityException("Недопустимый адрес GitHub API.");
         HttpURLConnection c = (HttpURLConnection) new URL(address).openConnection();
         c.setInstanceFollowRedirects(false);
@@ -175,13 +380,18 @@ final class GithubClient {
         c.setReadTimeout(14000);
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        c.setRequestProperty("User-Agent", "GitTeller/1.0.6");
+        c.setRequestProperty("User-Agent", "GitTeller/1.0.7-dev");
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         inflight = c;
         try {
             int status = c.getResponseCode();
             if (status != 200) {
-                throw new IllegalStateException(errorForStatus(status, c.getHeaderField("X-RateLimit-Remaining")));
+                String apiMessage = apiMessage(c);
+                throw new HttpFailure(status, errorForStatus(status,
+                        c.getHeaderField("X-RateLimit-Remaining"),
+                        c.getHeaderField("Retry-After"),
+                        c.getHeaderField("X-RateLimit-Reset"),
+                        apiMessage));
             }
             String link = c.getHeaderField("Link");
             ByteArrayOutputStream data = new ByteArrayOutputStream();
@@ -199,46 +409,149 @@ final class GithubClient {
         }
     }
 
+    private static String apiMessage(HttpURLConnection c) {
+        try {
+            InputStream err = c.getErrorStream();
+            if (err == null) return "";
+            ByteArrayOutputStream data = new ByteArrayOutputStream();
+            byte[] buf = new byte[512]; int n; int total = 0;
+            while ((n = err.read(buf)) != -1 && total < 2000) {
+                data.write(buf, 0, n);
+                total += n;
+            }
+            String body = data.toString(StandardCharsets.UTF_8.name());
+            try {
+                return new JSONObject(body).optString("message", "");
+            } catch (Exception ignored) {
+                return body.length() > 180 ? body.substring(0, 180) : body;
+            }
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
     static final class Extra {
         final String text;
         Extra(String text) { this.text = text; }
     }
 
     Extra readIssue(String repo, int number) throws Exception {
+        bind(repo);
         JSONObject issue = jsonObject(get(root(repo) + "/issues/" + number));
         return formatIssue(issue);
     }
 
     Extra readPull(String repo, int number) throws Exception {
+        bind(repo);
         String base = root(repo) + "/pulls/" + number;
         JSONObject pull = jsonObject(get(base));
         JSONArray files = new JSONArray();
         boolean filesCut = false;
         String filesNote = null;
         try {
-            Response page = get(base + "/files?per_page=30");
+            Response page = get(base + "/files?per_page=100");
             files = jsonArray(page);
-            filesCut = nextLink(page.link) != null;
+            String next = nextLink(page.link);
+            adoptRepositoryId(next);
+            if (next != null && safeContinuation(next, boundRepo, boundId)) {
+                Response more = get(next);
+                JSONArray extra = jsonArray(more);
+                for (int i = 0; i < extra.length(); i++) files.put(extra.get(i));
+                filesCut = nextLink(more.link) != null;
+            }
         } catch (Exception e) {
             filesNote = HumanReport.NOT_ENOUGH + ": список файлов не прочитан (" + safeMessage(e) + ").";
         }
-        String checks = HumanReport.NOT_ENOUGH + ": проверки не загружены.";
         String sha = pull.optJSONObject("head") == null ? "" : pull.optJSONObject("head").optString("sha");
-        if (sha.matches("[0-9a-fA-F]{40}")) {
-            try { checks = formatChecks(jsonObject(get(root(repo) + "/commits/" + sha + "/check-runs?per_page=20"))); }
-            catch (Exception e) { checks = HumanReport.NOT_ENOUGH + ": проверки не прочитаны (" + safeMessage(e) + ")."; }
-        }
+        String checks = loadChecks(repo, sha);
         return formatPull(pull, files, filesCut, filesNote, checks);
     }
 
     Extra readCommit(String repo, String sha) throws Exception {
+        bind(repo);
         if (sha == null || !sha.matches("[0-9a-fA-F]{40}"))
             throw new IllegalArgumentException("Нет полного SHA для запроса файлов.");
-        JSONObject commit = jsonObject(get(root(repo) + "/commits/" + sha));
-        String checks;
-        try { checks = formatChecks(jsonObject(get(root(repo) + "/commits/" + sha + "/check-runs?per_page=20"))); }
-        catch (Exception e) { checks = HumanReport.NOT_ENOUGH + ": проверки не прочитаны (" + safeMessage(e) + ")."; }
-        return formatCommit(commit, checks);
+        Response commitResponse = get(root(repo) + "/commits/" + sha + "?per_page=100");
+        JSONObject commit = jsonObject(commitResponse);
+        boolean filesCut = nextLink(commitResponse.link) != null;
+        String next = nextLink(commitResponse.link);
+        adoptRepositoryId(next);
+        if (next != null && safeContinuation(next, boundRepo, boundId)) {
+            try {
+                Response more = get(next);
+                JSONObject extra = jsonObject(more);
+                JSONArray files = commit.optJSONArray("files");
+                if (files == null) {
+                    files = new JSONArray();
+                    commit.put("files", files);
+                }
+                JSONArray moreFiles = extra.optJSONArray("files");
+                if (moreFiles != null) for (int i = 0; i < moreFiles.length(); i++) files.put(moreFiles.get(i));
+                filesCut = nextLink(more.link) != null;
+            } catch (Exception ignored) {
+                filesCut = true;
+            }
+        }
+        return formatCommit(commit, loadChecks(repo, sha), filesCut);
+    }
+
+    JSONArray readBranchCommits(String repo, String branch) throws Exception {
+        bind(repo);
+        if (branch == null || branch.isEmpty() || branch.contains("..") || branch.indexOf(' ') >= 0 || branch.indexOf('\\') >= 0)
+            throw new IllegalArgumentException("Некорректное направление.");
+        if (branch.length() > 200) throw new IllegalArgumentException("Некорректное направление.");
+        return slimCommits(jsonArray(get(root(repo) + "/commits?sha=" + encodePathPart(branch) + "&per_page=8")));
+    }
+
+    private String loadChecks(String repo, String sha) {
+        if (sha == null || !sha.matches("[0-9a-fA-F]{40}")) return CI_UNAVAILABLE;
+        String checks = null;
+        String statuses = null;
+        String actions = null;
+        try {
+            checks = formatChecks(jsonObject(get(root(repo) + "/commits/" + sha + "/check-runs?per_page=20")));
+        } catch (Exception ignored) {
+            checks = null;
+        }
+        boolean checksUseful = checks != null && !checks.contains("Проверок GitHub в ответе нет");
+        if (!checksUseful && !halted) {
+            try {
+                statuses = formatStatuses(jsonObject(get(root(repo) + "/commits/" + sha + "/status")));
+            } catch (Exception ignored) {
+                statuses = null;
+            }
+        }
+        boolean statusUseful = statuses != null && !statuses.contains("получить не удалось");
+        if (!checksUseful && !statusUseful && !halted) {
+            try {
+                actions = formatActions(jsonObject(get(root(repo) + "/actions/runs?head_sha=" + sha + "&per_page=5")));
+            } catch (Exception ignored) {
+                actions = null;
+            }
+        }
+        return describeCi(checks, statuses, actions);
+    }
+
+    static String describeCi(String checks, String statuses, String actions) {
+        boolean checksUseful = checks != null && !checks.contains("Проверок GitHub в ответе нет");
+        boolean statusUseful = statuses != null && !statuses.contains("получить не удалось");
+        boolean actionUseful = actions != null && !actions.contains("в ответе нет");
+        if (!checksUseful && !statusUseful && !actionUseful) {
+            if (checks == null && statuses == null && actions == null) return CI_UNAVAILABLE;
+            return "Автоматических проверок для этого коммита в доступных источниках нет. Это не успех. " + CI_UNAVAILABLE;
+        }
+        StringBuilder b = new StringBuilder();
+        if (checksUseful) b.append(checks).append("\n");
+        else if (checks != null && (statusUseful || actionUseful)) b.append(checks).append("\n");
+        if (statusUseful) b.append(statuses).append("\n");
+        if (actionUseful) b.append(actions).append("\n");
+        b.append("Пропущенные, нейтральные и отсутствующие проверки не означают успех.");
+        return b.toString().trim();
+    }
+
+    private void bind(String repo) {
+        boundRepo = repo == null ? "" : repo;
+        boundId = 0;
     }
 
     private static String root(String repo) {
@@ -250,52 +563,107 @@ final class GithubClient {
     static Extra formatIssue(JSONObject issue) {
         StringBuilder b = new StringBuilder();
         String body = issue == null ? "" : issue.optString("body").trim();
-        b.append(body.isEmpty() ? "Описания в GitHub нет." : clip(body)).append("\n");
-        b.append(labels(issue)).append("\n");
-        b.append(HumanReport.NO_CHECK).append(". Текст записи не доказывает, что работа выполнена.");
+        b.append("Что заявил автор. ").append(body.isEmpty() ? "Описания в GitHub нет." : clip(body)).append("\n");
+        b.append("Что подтверждает GitHub. ").append(labels(issue)).append("\n");
+        b.append("Чего установить нельзя. ").append(HumanReport.NO_CHECK).append(". Текст записи не доказывает, что работа выполнена.");
         return new Extra(b.toString());
     }
 
     static Extra formatPull(JSONObject pull, JSONArray files, boolean filesCut, String filesNote, String checks) {
         StringBuilder b = new StringBuilder();
-        boolean merged = pull != null && pull.optBoolean("merged", false);
+        boolean merged = pull != null && (pull.optBoolean("merged", false)
+                || (!pull.optString("merged_at").isEmpty() && !"null".equals(pull.optString("merged_at"))));
         String mergedAt = pull == null ? "" : pull.optString("merged_at");
+        b.append("Что подтверждает GitHub. ");
         if (merged) b.append("GitHub отмечает, что предложение слито");
         else b.append("GitHub не сообщает, что предложение слито");
-        if (mergedAt != null && !mergedAt.isEmpty() && !"null".equals(mergedAt)) b.append(" (").append(mergedAt).append(")");
-        b.append(". Закрытие без этого признака не означает merge.\n");
+        if (merged && mergedAt != null && !mergedAt.isEmpty() && !"null".equals(mergedAt))
+            b.append(" (").append(HumanReport.humanDate(mergedAt)).append(")");
+        b.append(". Закрытие без этого признака не означает внесение в основную ветку.\n");
         String body = pull == null ? "" : pull.optString("body").trim();
-        b.append(body.isEmpty() ? "Описания нет." : clip(body)).append("\n");
+        b.append("Что заявил автор. ").append(body.isEmpty() ? "Описания нет." : clip(body)).append("\n");
         if (filesNote != null) b.append(filesNote).append("\n");
         else b.append(fileNames(files, filesCut)).append("\n");
         b.append(checks == null ? HumanReport.NOT_ENOUGH + ": проверки не загружены." : checks).append("\n");
-        b.append(HumanReport.NO_CHECK).append(". Даже успешная отметка GitHub не заменяет проверку на устройстве.");
+        b.append("Чего установить нельзя. ").append(HumanReport.NO_CHECK).append(". Даже успешная отметка GitHub не заменяет проверку на устройстве.");
         return new Extra(b.toString());
     }
 
-    static Extra formatCommit(JSONObject commit, String checks) {
+    static Extra formatCommit(JSONObject commit, String checks, boolean filesCut) {
         StringBuilder b = new StringBuilder();
         JSONArray files = commit == null ? null : commit.optJSONArray("files");
-        b.append(fileNames(files, false)).append("\n");
+        String message = "";
+        if (commit != null) {
+            JSONObject inner = commit.optJSONObject("commit");
+            if (inner != null) message = inner.optString("message", "");
+            if (message.isEmpty()) message = commit.optString("message", "");
+        }
+        b.append("Что заявил автор. ").append(HumanReport.explainClaim(message, files)).append("\n");
+        b.append("Что подтверждает GitHub. ").append(fileNames(files, filesCut)).append("\n");
         b.append(checks == null ? HumanReport.NOT_ENOUGH + ": проверки не загружены." : checks).append("\n");
-        b.append(HumanReport.NO_CHECK).append(". Список файлов не объясняет, работает ли программа.");
+        b.append("Чего установить нельзя. ").append(HumanReport.NO_CHECK).append(". Список файлов не объясняет, работает ли программа.");
         return new Extra(b.toString());
+    }
+
+    static String formatStatuses(JSONObject status) {
+        JSONArray list = status == null ? null : status.optJSONArray("statuses");
+        if (list == null || list.length() == 0) return CI_UNAVAILABLE;
+        int ok = 0, bad = 0, pending = 0, other = 0;
+        for (int i = 0; i < list.length(); i++) {
+            JSONObject row = list.optJSONObject(i);
+            String state = row == null ? "" : row.optString("state");
+            if ("success".equals(state)) ok++;
+            else if ("failure".equals(state) || "error".equals(state)) bad++;
+            else if ("pending".equals(state)) pending++;
+            else other++;
+        }
+        return "Статусы коммита: " + ok + " успешных, " + bad + " с ошибкой, " + pending
+                + " ещё идут, " + other + " прочих. Пропущенное и нейтральное не считаются успехом. Это не проверка на телефоне.";
+    }
+
+    static String formatActions(JSONObject payload) {
+        JSONArray list = payload == null ? null : payload.optJSONArray("workflow_runs");
+        if (list == null || list.length() == 0)
+            return "Запусков GitHub Actions для этого коммита в ответе нет. Это не успех.";
+        int success = 0, bad = 0, pending = 0, skipped = 0, other = 0;
+        for (int i = 0; i < list.length(); i++) {
+            JSONObject row = list.optJSONObject(i);
+            String conclusion = row == null ? "" : row.optString("conclusion");
+            String status = row == null ? "" : row.optString("status");
+            if ("success".equals(conclusion)) success++;
+            else if ("failure".equals(conclusion) || "timed_out".equals(conclusion)
+                    || "cancelled".equals(conclusion) || "startup_failure".equals(conclusion)) bad++;
+            else if ("skipped".equals(conclusion) || "neutral".equals(conclusion)) skipped++;
+            else if (!"completed".equals(status)) pending++;
+            else other++;
+        }
+        return "GitHub Actions для этого коммита: " + success + " с результатом success, " + bad
+                + " с ошибкой, " + pending + " ещё идут, " + skipped
+                + " пропущенных или нейтральных, " + other
+                + " прочих. Пропуск и нейтральный итог не считаются успехом. Это не проверка на телефоне.";
     }
 
     static String formatChecks(JSONObject runs) {
         JSONArray list = runs == null ? null : runs.optJSONArray("check_runs");
         int total = runs == null ? 0 : runs.optInt("total_count", list == null ? 0 : list.length());
         if (list == null || list.length() == 0) return "Проверок GitHub в ответе нет. " + HumanReport.NO_CHECK + ".";
-        int ok = 0, bad = 0, other = 0;
+        int success = 0, skippedOrNeutral = 0, bad = 0, other = 0, cancelled = 0, timedOut = 0;
         for (int i = 0; i < list.length(); i++) {
             JSONObject row = list.optJSONObject(i);
             String conclusion = row == null ? "" : row.optString("conclusion");
-            if ("success".equals(conclusion) || "neutral".equals(conclusion) || "skipped".equals(conclusion)) ok++;
-            else if ("failure".equals(conclusion) || "cancelled".equals(conclusion) || "timed_out".equals(conclusion) || "action_required".equals(conclusion)) bad++;
+            if ("success".equals(conclusion)) success++;
+            else if ("neutral".equals(conclusion) || "skipped".equals(conclusion)) skippedOrNeutral++;
+            else if ("cancelled".equals(conclusion)) { bad++; cancelled++; }
+            else if ("timed_out".equals(conclusion)) { bad++; timedOut++; }
+            else if ("failure".equals(conclusion) || "action_required".equals(conclusion)) bad++;
             else other++;
         }
-        String text = "В загруженной части проверок: " + ok + " без замечаний, " + bad + " с ошибкой, " + other + " без итога.";
+        String text = "В загруженной части GitHub-проверок: " + success + " с результатом success, "
+                + skippedOrNeutral + " пропущенных или нейтральных, " + bad
+                + " с ошибкой, " + other + " без итога.";
         if (total > list.length()) text += " Список обрезан.";
+        if (cancelled > 0) text += " Есть отменённые проверки. Это не успех.";
+        if (timedOut > 0) text += " Есть проверки, прерванные по времени. Это не успех.";
         text += " Это отметки GitHub, не проверка на телефоне.";
         return text;
     }
@@ -337,26 +705,64 @@ final class GithubClient {
     }
 
     static String errorForStatus(int status, String rateRemaining) {
-        if (status == 401) return "Токен недействителен или истёк (401). Старые данные сохранены.";
-        if (status == 429 || (status == 403 && "0".equals(rateRemaining)))
-            return "Лимит запросов GitHub исчерпан (429/403). Повторите позже. Старые данные сохранены.";
-        if (status == 403) return "Доступ запрещён (403). Проверьте права токена. Старые данные сохранены.";
-        if (status == 404) return "Репозиторий не найден или закрыт (404). Старые данные сохранены.";
-        return "GitHub вернул ошибку HTTP " + status + ". Старые данные сохранены.";
+        return errorForStatus(status, rateRemaining, null, null, null);
+    }
+
+    static String errorForStatus(int status, String rateRemaining, String retryAfter) {
+        return errorForStatus(status, rateRemaining, retryAfter, null, null);
+    }
+
+    static String errorForStatus(int status, String rateRemaining, String retryAfter, String resetEpoch, String apiMessage) {
+        if (status == 401) return "Токен недействителен или истёк (401). Старые данные сохранены. Токен на устройстве не удалён.";
+        boolean rate = status == 429
+                || (status == 403 && "0".equals(rateRemaining))
+                || (status == 403 && retryAfter != null && retryAfter.matches("\\d+"))
+                || (status == 403 && looksLikeRate(apiMessage));
+        if (rate) {
+            String wait;
+            if (retryAfter != null && retryAfter.matches("\\d+"))
+                wait = " Не повторяйте запрос раньше чем через " + retryAfter + " с.";
+            else if (resetEpoch != null && resetEpoch.matches("\\d{9,12}"))
+                wait = " Повторите после " + HumanReport.humanDate(Long.parseLong(resetEpoch) * 1000L) + ".";
+            else wait = " Повторите позже.";
+            String code = status == 429 ? "429" : "403";
+            return "Лимит запросов GitHub исчерпан (" + code + ")." + wait + " Старые данные сохранены.";
+        }
+        if (status == 403) return "Доступ ограничен (403): не хватает прав или так закрыта эта точка API. Это не автоматически неверный токен. Старые данные сохранены.";
+        if (status == 404) return "Проект не найден или к нему нет доступа (404). Старые данные сохранены.";
+        String extra = apiMessage == null || apiMessage.isEmpty() ? "" : " " + clip(safeMessage(new IllegalStateException(apiMessage)), 140);
+        return "GitHub вернул ошибку HTTP " + status + "." + extra + " Старые данные сохранены.";
+    }
+
+    private static boolean looksLikeRate(String apiMessage) {
+        if (apiMessage == null) return false;
+        String m = apiMessage.toLowerCase(Locale.ROOT);
+        return m.contains("rate limit") || m.contains("secondary rate") || m.contains("abuse detection");
     }
 
     static String encodePathPart(String s) {
         try { return java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20"); }
         catch (Exception e) { throw new IllegalArgumentException(e); }
     }
+
     static String safeMessage(Throwable e) {
-        String s = e.getMessage();
-        if (s == null) return "неизвестная ошибка";
+        String s = e == null ? null : e.getMessage();
+        if (s == null) return "неизвестная ошибка. Старые данные сохранены.";
+        String low = s.toLowerCase(Locale.ROOT);
+        if (low.contains("timed out") || low.contains("timeout"))
+            return "GitHub не ответил вовремя. Старые данные сохранены. Можно повторить загрузку.";
+        if (low.contains("unable to resolve host") || low.contains("network is unreachable")
+                || low.contains("failed to connect") || low.contains("no address associated"))
+            return "Нет соединения с GitHub. Старые данные сохранены. Можно повторить загрузку.";
+        if (low.contains("socket closed") || low.contains("connection reset") || low.contains("connection abort")
+                || low.contains("request canceled") || low.contains("запрос отменён"))
+            return "Запрос отменён или соединение прервалось. Старые данные сохранены.";
         s = s.replaceAll("(?i)bearer\\s+\\S+", "bearer [скрыто]");
         s = s.replaceAll("ghp_[A-Za-z0-9]+", "[скрыто]");
         s = s.replaceAll("github_pat_[A-Za-z0-9_]+", "[скрыто]");
-        return s.length() > 200 ? s.substring(0, 200) : s;
+        return s.length() > 240 ? s.substring(0, 240) : s;
     }
+
     private static JSONArray jsonArray(Response r) throws Exception { return new JSONArray(r.body); }
     private static JSONObject jsonObject(Response r) throws Exception { return new JSONObject(r.body); }
     private static final class Response {

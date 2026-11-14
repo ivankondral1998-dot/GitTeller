@@ -62,6 +62,7 @@ public final class MainActivity extends Activity {
     private int syncEpoch;
     private volatile GithubClient inflight;
     private boolean loading;
+    private String lastError;
     private LinearLayout content;
     private Button refresh;
 
@@ -75,6 +76,8 @@ public final class MainActivity extends Activity {
         repo = prefs.getString("repo", DEFAULT_REPO);
         current = parse(prefs.getString(key(repo, "current"), ""));
         previous = parse(prefs.getString(key(repo, "previous"), ""));
+        lastError = prefs.getString(key(repo, "lastError"), "");
+        if (lastError != null && lastError.isEmpty()) lastError = null;
         draw();
     }
 
@@ -175,40 +178,64 @@ public final class MainActivity extends Activity {
         head.addView(menu,lp(44,44));
         menu.setOnClickListener(v -> showMenu(menu));
         wrap.addView(head,lp(-1,-2));
-        space(wrap,34);
-
-        addLine(wrap,"Что происходит с проектом",26,TEXT,true,0);
+        space(wrap,18);
+        addLine(wrap,"Что происходит с проектом",24,TEXT,true,0);
         String shortRepo=repo.length()>43?repo.substring(0,40)+"…":repo;
-        addLine(wrap,shortRepo,13,MUTED,false,11);
-        space(wrap,22);
+        addLine(wrap,shortRepo,13,MUTED,false,8);
+        space(wrap,12);
 
-        Summary summary=Summary.of(current,previous);
-        boolean stale=false;
-        if(current!=null){
-            long seen=current.optLong("capturedAt",0);
-            stale=current.optBoolean("restoredFromBackup",false)
-                    || seen<=0 || seen>System.currentTimeMillis()+60_000L
-                    || System.currentTimeMillis()-seen>6L*60*60*1000;
+        if (current != null && !loading) {
+            addLine(wrap,"Последняя удачная загрузка: "+formatTime(current.optLong("capturedAt",0)),12,MUTED,false,0);
+            addLine(wrap,HumanReport.coverageLine(current),12,MUTED,false,4);
+            space(wrap,12);
         }
-        LinearLayout hero=panel(wrap);
-        String title = loading ? "Идёт чтение GitHub" : HumanReport.homeTitle(current,previous,summary);
-        String body = loading ? "Подождите. Старые сведения проекта пока не меняются."
-                : HumanReport.homeDescription(current,previous,summary);
-        addLine(hero,title,22,TEXT,true,0);
-        addLine(hero,body,16,TEXT,false,12);
-
-        space(wrap,16);
-        boolean needRefresh = loading || current==null || stale;
         refresh=new Button(this);
-        refresh.setText(loading?"Обновление…" : needRefresh?"Обновить с GitHub":"Разобрать простыми словами");
+        refresh.setText(loading?"Обновление…":"Обновить");
         refresh.setAllCaps(false);
         refresh.setTextSize(16);
         refresh.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        refresh.setTextColor(needRefresh?BG:TEXT);
-        refresh.setBackground(shape(needRefresh?ACCENT:PANEL_2,15,needRefresh?0:STROKE));
+        refresh.setTextColor(BG);
+        refresh.setBackground(shape(ACCENT,15,0));
         refresh.setEnabled(!loading);
+        refresh.setContentDescription("Обновить данные с GitHub");
         wrap.addView(refresh,lp(-1,56));
-        refresh.setOnClickListener(v->{ if(needRefresh) sync(); else openPage("overview"); });
+        refresh.setOnClickListener(v->sync());
+        space(wrap,16);
+
+        Summary summary=Summary.of(current,previous);
+        String step = HumanReport.nextStep(current,previous,summary,lastError);
+        LinearLayout hero=panel(wrap);
+        if (loading) {
+            addLine(hero,"Идёт чтение GitHub",20,TEXT,true,0);
+            addLine(hero,"Подождите. Старые сведения проекта пока не меняются.",16,TEXT,false,10);
+        } else {
+            addLine(hero,"Что изменилось",13,ACCENT,true,0);
+            addLine(hero,HumanReport.whatChanged(current,previous,summary),16,TEXT,false,8);
+            addLine(hero,"Что требует внимания",13,ACCENT,true,14);
+            addLine(hero,HumanReport.needsAttention(current,summary),16,TEXT,false,8);
+            addLine(hero,"Следующий шаг",13,ACCENT,true,14);
+            addLine(hero,step,16,TEXT,false,8);
+            if (lastError != null) addLine(hero,"Последняя попытка не удалась. "+lastError,14,WARN,false,12);
+            if (current != null && (current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
+                    || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
+                    || current.optBoolean("restoredFromBackup", false)))
+                addLine(hero,"Часть сведений с прошлой удачной загрузки.",12,WARN,false,8);
+        }
+        if (!loading && !"Повторить загрузку".equals(step)) {
+            Button next=new Button(this);
+            next.setText(step);
+            next.setAllCaps(false);
+            next.setTextSize(15);
+            next.setTextColor(TEXT);
+            next.setBackground(shape(PANEL_2,15,STROKE));
+            wrap.addView(next,lp(-1,48));
+            next.setOnClickListener(v->{
+                if ("Посмотреть задачу".equals(step)) openPage("tasks");
+                else if ("Проверить доступ".equals(step)) openPage("access");
+                else if ("Открыть изменения".equals(step) || "Открыть направления".equals(step)) openPage("branches");
+                else sync();
+            });
+        }
         space(wrap,14);
         TextView footer=txt("Чтение GitHub. Это не проверка готовности программы.",12,MUTED,false);
         footer.setGravity(Gravity.CENTER);
@@ -229,17 +256,15 @@ public final class MainActivity extends Activity {
     private void showMenu(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
         menu.getMenu().add(0,1,0,"Разделы проекта");
-        menu.getMenu().add(0,5,1,"Обновить с GitHub");
-        menu.getMenu().add(0,2,2,"Подключение и доступ");
-        menu.getMenu().add(0,3,3,"Данные и резервные копии");
-        menu.getMenu().add(0,4,4,"О приложении");
+        menu.getMenu().add(0,5,1,"Обновить");
+        menu.getMenu().add(0,2,2,"Подключение GitHub");
+        menu.getMenu().add(0,3,3,"Настройки");
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 1: openPage("index"); return true;
                 case 5: sync(); return true;
                 case 2: openPage("access"); return true;
-                case 3: openPage("data"); return true;
-                case 4: openPage("about"); return true;
+                case 3: openPage("settings"); return true;
             }
             return false;
         });
@@ -255,6 +280,8 @@ public final class MainActivity extends Activity {
             repo = selected;
             current = parse(prefs.getString(key(repo,"current"),""));
             previous = parse(prefs.getString(key(repo,"previous"),""));
+            lastError = prefs.getString(key(repo,"lastError"), "");
+            if (lastError != null && lastError.isEmpty()) lastError = null;
             draw();
         }
     }
@@ -296,22 +323,27 @@ public final class MainActivity extends Activity {
             GithubClient client=new GithubClient(access);
             inflight=client;
             try{
-                JSONObject fresh=client.load(selected).snapshot;
+                JSONObject fresh=client.load(selected, current).snapshot;
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
-                    if(epoch!=syncEpoch || !selected.equals(repo)) {loading=false;draw();return;}
+                    if(epoch!=syncEpoch || !selected.equals(repo)) return;
                     previous=current;
                     current=fresh;
+                    lastError=null;
                     prefs.edit().putString(key(repo,"previous"),previous==null?"":previous.toString())
-                            .putString(key(repo,"current"),current.toString()).apply();
+                            .putString(key(repo,"current"),current.toString())
+                            .remove(key(repo,"lastError")).apply();
                     loading=false;draw();toast("Данные обновлены");
                 });
             }catch(Exception e){
                 final String message=GithubClient.safeMessage(e);
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
-                    loading=false;draw();
-                    if(epoch!=syncEpoch || !selected.equals(repo))return;
+                    if(epoch!=syncEpoch || !selected.equals(repo)) return;
+                    loading=false;
+                    lastError=message;
+                    prefs.edit().putString(key(repo,"lastError"), message).apply();
+                    draw();
                     new AlertDialog.Builder(this).setTitle("Сверка не выполнена")
                             .setMessage(message+"\n\nПредыдущие данные не изменены.")
                             .setPositiveButton("Закрыть",(d,w)->{}).show();
@@ -393,11 +425,11 @@ public final class MainActivity extends Activity {
                 if("changed".equals(action)) {
                     abandonSync();
                     String selected=prefs.getString("repo",DEFAULT_REPO);
-                    if(!selected.equals(repo)) {
-                        repo=selected;
-                        current=parse(prefs.getString(key(repo,"current"),""));
-                        previous=parse(prefs.getString(key(repo,"previous"),""));
-                    }
+                    repo=selected;
+                    current=parse(prefs.getString(key(repo,"current"),""));
+                    previous=parse(prefs.getString(key(repo,"previous"),""));
+                    lastError=prefs.getString(key(repo,"lastError"), "");
+                    if (lastError != null && lastError.isEmpty()) lastError = null;
                     draw();return;
                 }
             }

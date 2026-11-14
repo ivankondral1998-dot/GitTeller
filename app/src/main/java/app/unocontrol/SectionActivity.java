@@ -2,6 +2,9 @@ package app.unocontrol;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
@@ -12,7 +15,7 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -32,7 +35,7 @@ public final class SectionActivity extends Activity {
     private LinearLayout body;
     private SharedPreferences prefs;
     private JSONObject current, previous;
-    private String repo, page;
+    private String repo, page, seenCurrent;
     private TokenVault vault;
     private int detailEpoch;
 
@@ -40,11 +43,26 @@ public final class SectionActivity extends Activity {
         super.onCreate(state);
         prefs=getSharedPreferences("gitteller_v1",MODE_PRIVATE);
         repo=prefs.getString("repo","octocat/Hello-World");
-        current=parse(prefs.getString(key(repo,"current"),""));
+        seenCurrent=prefs.getString(key(repo,"current"),"");
+        current=parse(seenCurrent);
         previous=parse(prefs.getString(key(repo,"previous"),""));
         vault=new TokenVault(this);
         page=getIntent().getStringExtra("page");
         if(page==null)page="index";
+        if("access".equals(page))
+            getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        paint();render();
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        if(prefs==null) return;
+        String selected=prefs.getString("repo",repo);
+        String raw=prefs.getString(key(selected,"current"),"");
+        if(selected.equals(repo) && raw.equals(seenCurrent==null?"":seenCurrent)) return;
+        repo=selected;
+        seenCurrent=raw;
+        current=parse(raw);
+        previous=parse(prefs.getString(key(repo,"previous"),""));
         paint();render();
     }
     private static String key(String repo,String suffix) {return repo.toLowerCase(java.util.Locale.ROOT)+":"+suffix;}
@@ -93,44 +111,45 @@ public final class SectionActivity extends Activity {
     private void goItem(String name,int idx){Intent i=new Intent(this,SectionActivity.class);i.putExtra("page",name);i.putExtra("idx",idx);startActivity(i);}
     private String title() {
         switch(page){
-            case "overview":return "О проекте простыми словами";
-            case "branches":return "Направления разработки";
-            case "commits":return "История основной ветки";
-            case "tasks":return "Задачи и предложения";
-            case "accuracy":return "Насколько точны данные";
-            case "access":return "GitHub и доступ";
-            case "data":return "Резервные копии";
-            case "about":return "О GitTeller";
-            case "branch-detail":return "Подробности направления";
-            case "issue-detail":return "Задача GitHub";
+            case "overview":return "Обзор";
+            case "branches":return "Направления работы";
+            case "commits":return "История изменений";
+            case "tasks":return "Задачи";
+            case "pulls":return "Предложения изменений";
+            case "accuracy":return "Надёжность сведений";
+            case "access":return "Подключение GitHub";
+            case "settings":return "Настройки";
+            case "data":return "Настройки";
+            case "about":return "Настройки";
+            case "branch-detail":return "Направление работы";
+            case "issue-detail":return "Задача";
             case "pull-detail":return "Предложение изменений";
-            case "commit-detail":return "Подробности изменения";
-            case "task-detail":return "Подробности задачи";
-            default:return "Разделы проекта";
+            case "commit-detail":return "Изменение";
+            default:return "Разделы";
         }
     }
     private void render(){
         LinearLayout root=col();root.setBackgroundColor(bg);
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(18),dp(19),dp(18),dp(18));
+        header.setPadding(dp(12),dp(14),dp(12),dp(12));
         TextView back=text("‹",34,false,ink);back.setGravity(Gravity.CENTER);
         back.setContentDescription("Назад");back.setClickable(true);back.setFocusable(true);
         back.setOnClickListener(v->finish());header.addView(back,lp(48,48));
-        TextView h=text(title(),20,true,ink);h.setPadding(dp(10),0,0,0);
+        TextView h=text(title(),18,true,ink);h.setPadding(dp(8),0,0,0);
         header.addView(h,new LinearLayout.LayoutParams(0,-2,1f));
         root.addView(header,lp(-1,-2));
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
-        body=col();body.setPadding(dp(20),dp(14),dp(20),dp(30));scroll.addView(body);
+        body=col();body.setPadding(dp(18),dp(8),dp(18),dp(28));scroll.addView(body);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));setContentView(root);
         switch(page) {
             case "overview":overview();break;
             case "branches":branches();break;
             case "commits":commits();break;
             case "tasks":tasks();break;
+            case "pulls":pulls();break;
             case "accuracy":accuracy();break;
             case "access":access();break;
-            case "data":data();break;
-            case "about":about();break;
+            case "settings":case "data":case "about":settings();break;
             case "branch-detail":branchDetail();break;
             case "commit-detail":commitDetail();break;
             case "issue-detail":case "pull-detail":taskDetail();break;
@@ -138,113 +157,188 @@ public final class SectionActivity extends Activity {
         }
     }
     private void index(){
-        line(body,"Выберите, что хотите узнать",21,true,ink);gap(body,16);
-        action("Состояние и выводы","Что можно установить по загруженным сведениям",()->go("overview"));
-        action("Направления разработки","Ветки GitHub с объяснением назначения",()->go("branches"));
-        action("История изменений","Коммиты только основной ветки, без выдуманных результатов",()->go("commits"));
-        action("Задачи и предложения","Что обсуждают, что открыто и что закрыто",()->go("tasks"));
-        action("Точность данных","Чего приложение не может знать",()->go("accuracy"));
+        line(body,"Разделы",22,true,ink);gap(body,8);
+        line(body,"Каждый раздел — отдельный экран. Кнопка «Назад» и системная кнопка Back возвращают на предыдущий.",14,false,muted);
+        gap(body,14);
+        action("Обзор","Что изменилось и чего нельзя утверждать",()->go("overview"));
+        action("Направления работы","Все ветки, включая исследовательские",()->go("branches"));
+        action("История изменений","Записи выбранного направления, не весь проект сразу",()->go("commits"));
+        action("Задачи","Открытые и закрытые обсуждения",()->go("tasks"));
+        action("Предложения изменений","Что предлагают внести и внесено ли это",()->go("pulls"));
+        action("Надёжность сведений","Что загружено полностью, а что нет",()->go("accuracy"));
+        action("Подключение GitHub","Репозиторий и доступ только на чтение",()->go("access"));
+        action("Настройки","Копии данных и ограничения приложения",()->go("settings"));
     }
     private void overview(){
-        if(current==null){note("Нет данных","Вернитесь на главный экран и нажмите «Обновить с GitHub».");return;}
+        if(current==null){note("Нет данных","Вернитесь назад и нажмите «Обновить».");return;}
         Summary s=Summary.of(current,previous);
-        note("Что произошло с последней проверки",HumanReport.homeDescription(current,previous,s));
-        JSONArray a=current.optJSONArray("commits");
-        if(a!=null&&a.length()>0){
-            JSONObject c=a.optJSONObject(0);
-            if(c!=null)action("Одна из последних записей в основной ветке",HumanReport.commitSummary(c.optString("message"))+". Это сообщение автора, не результат испытаний.",()->goItem("commit-detail",0));
-        }
-        JSONArray issues=current.optJSONArray("issues"),prs=current.optJSONArray("pulls");
-        note("Что осталось открытым в GitHub",
-                countForHumans(issues, "issuesComplete", "задач") + ", " +
-                countForHumans(prs, "pullsComplete", "предложений изменений") +
-                ". Отсутствие открытых записей не подтверждает готовность программы.");
-        note("Что нужно проверить", HumanReport.NO_CHECK + ". GitTeller не запускает сборку, тесты и телефон. " + HumanReport.NOT_ENOUGH + ": в снимке нет отчётов испытаний.");
-        if (s != null) note("На что смотреть дальше", s.attention);
-        action("Посмотреть задачи","Обсуждения и предложения в GitHub",()->go("tasks"));
-        action("Проверить источник","Дата загрузки, полнота данных и ограничения",()->go("accuracy"));
+        note("Что изменилось", HumanReport.whatChanged(current,previous,s));
+        note("Что требует внимания", HumanReport.needsAttention(current,s));
+        note("Следующий шаг", HumanReport.nextStep(current,previous,s));
+        note("Покрытие", HumanReport.coverageLine(current)+" Последняя удачная загрузка: "+HumanReport.humanDate(current.optLong("capturedAt",0))+".");
+        action("Открыть направления","Посмотреть, где именно сдвинулась работа",()->go("branches"));
+        action("Открыть задачи","Конкретные открытые записи",()->go("tasks"));
     }
     private void branches(){
         if(current==null){note("Нет данных","Сначала обновите проект.");return;}
         JSONArray list=current.optJSONArray("branches");
-        note("Что такое направление разработки?", "Разработчики могут параллельно работать над разными частями проекта. Название ветки лишь подсказывает тему, а не доказывает готовность функции.");
-        if(list==null||list.length()==0){note("Список пуст","GitHub не вернул ветки.");return;}
-        note("Найдено направлений: "+list.length(), current.optBoolean("branchesComplete",false)?
-                "Список веток получен целиком по данным последнего запроса.":"Список может быть неполным.");
+        note("Что это", "Направление — отдельная линия работы. Название только подсказывает тему. Оно не доказывает, что результат готов.");
+        if(!current.optBoolean("branchesComplete",false))
+            note("Покрытие", "Указатели веток проверены не полностью. Нельзя делать вывод о новых или исчезнувших направлениях.");
+        else note("Покрытие", "Указатели веток проверены полностью. История каждого направления при этом изучена лишь частично.");
+        if(list==null||list.length()==0){note("Список пуст","GitHub не вернул направления, либо они не загрузились.");return;}
         for(int i=0;i<list.length();i++){
             JSONObject x=list.optJSONObject(i);if(x==null)continue;final int idx=i;
             String name=x.optString("name");
-            action(HumanReport.branchKind(name)+" · "+(i+1),HumanReport.branchTopic(name)+". Откройте для подробностей.",()->goItem("branch-detail",idx));
+            action(name.isEmpty()?"Без названия":name, HumanReport.branchAssumption(name), ()->goItem("branch-detail",idx));
         }
     }
     private void branchDetail(){
         JSONObject x=at("branches");if(x==null){note("Запись не найдена","Вернитесь к списку.");return;}
         String name=x.optString("name"),sha=x.optString("sha");
-        note(HumanReport.branchKind(name),"Это отдельная линия работы в GitHub. Само существование ветки не означает, что её код готов или проверен.");
-        note("Название в GitHub",name);
-        note("Контрольная версия",sha+"\n\nSHA позволяет однозначно найти состояние этой ветки в GitHub. Для обычного чтения он не нужен.");
-        note("Проверка", "По одному названию и SHA нельзя узнать, прошли ли тесты и можно ли использовать результат.");
+        note("Что произошло", "Открыто направление «"+name+"». "+HumanReport.branchAssumption(name));
+        note("Что известно", branchDelta(name, sha));
+        note("Что остаётся неизвестным", "По названию и указателю нельзя узнать, прошли ли проверки и можно ли этим пользоваться. История ниже — только последние записи, не вся работа.");
+        note("Источник", sourceLine());
+        technical("Направление\n"+name+"\nУказатель\n"+sha);
+        loadBranchStory(name);
+    }
+    private String branchDelta(String name, String sha){
+        if(previous==null || previous.optBoolean("restoredFromBackup", false))
+            return "Сравнивать не с чем: нет предыдущей проверки. Нельзя сказать, что направление новое или что оно стоит на месте.";
+        if(!current.optBoolean("branchesComplete", false) || !previous.optBoolean("branchesComplete", false))
+            return "Один из списков направлений неполный. Если указатель совпал с прошлой проверкой, это видно. Исчезновение или появление направления утверждать нельзя.";
+        String prior=null;
+        JSONArray old=previous.optJSONArray("branches");
+        if(old!=null) for(int i=0;i<old.length();i++){
+            JSONObject b=old.optJSONObject(i);
+            if(b!=null && name.equals(b.optString("name"))) prior=b.optString("sha");
+        }
+        if(prior==null) return "В прошлой полной проверке этого направления не было. Это ещё не доказательство, что его только что создали: название могло измениться.";
+        if(!prior.equals(sha)) return "Указатель этого направления изменился с прошлой проверки. Что именно сделано, видно только в истории ниже. Работоспособность не проверена.";
+        return "Указатель с прошлой полной проверки не изменился. Это не значит, что работа закончена.";
+    }
+    private void loadBranchStory(String branch) {
+        final int epoch = ++detailEpoch;
+        LinearLayout slot = card();
+        TextView status = line(slot, "История этого направления ещё не запрошена. Это не вся история проекта.", 15, false, muted);
+        final String selected = repo;
+        new Thread(() -> {
+            String text;
+            try {
+                String token = vault.load(selected);
+                GithubClient client = new GithubClient(token == null ? "" : token);
+                org.json.JSONArray commits = client.readBranchCommits(selected, branch);
+                if (commits.length() == 0) text = HumanReport.NOT_ENOUGH + ". История этого направления пуста или не прочитана.";
+                else {
+                    StringBuilder b = new StringBuilder("Последние записи только этого направления. История изучена лишь частично.\n");
+                    int n = Math.min(commits.length(), 5);
+                    for (int i = 0; i < n; i++) {
+                        org.json.JSONObject c = commits.optJSONObject(i);
+                        if (c == null) continue;
+                        b.append("\n").append(i + 1).append(". ").append(HumanReport.commitSummary(c.optString("message")));
+                        b.append("\n").append(HumanReport.humanDate(c.optString("date")));
+                        b.append("\nЗаявление автора: ").append(c.optString("message"));
+                    }
+                    b.append("\n\n").append(HumanReport.NO_CHECK);
+                    text = b.toString();
+                }
+            } catch (Exception e) {
+                text = HumanReport.NOT_ENOUGH + ". " + GithubClient.safeMessage(e);
+            }
+            final String shown = text;
+            runOnUiThread(() -> {
+                if (isFinishing() || epoch != detailEpoch) return;
+                status.setText(shown);
+            });
+        }, "gitteller-branch").start();
     }
     private void commits(){
         if(current==null){note("Нет данных","Сначала обновите проект.");return;}
         String branch=current.optString("defaultBranch","main");
-        note("Какие изменения здесь показаны", "Это только последние загруженные записи ветки «"+branch+"». В других ветках изменения могут быть новее. GitTeller пока не строит общую хронологию всех веток.");
-        JSONArray a=current.optJSONArray("commits");if(a==null||a.length()==0){note("Нет записей","Список коммитов не загрузился.");return;}
-        for(int i=0;i<a.length();i++){
+        note("Что здесь", "Ниже — только последние записи основной ветки «"+branch+"». Это не последнее событие всего проекта. Другие направления открываются отдельно.");
+        note("Покрытие", "История изучена лишь частично.");
+        JSONArray a=current.optJSONArray("commits");
+        if(a==null||a.length()==0) note("Нет записей","Список основной ветки не загрузился или пуст. Это не значит, что в других направлениях пусто.");
+        else for(int i=0;i<a.length();i++){
             JSONObject x=a.optJSONObject(i);if(x==null)continue;final int idx=i;
-            action(HumanReport.commitSummary(x.optString("message")),"Запись №"+(i+1)+" из истории «"+branch+"». Результат не проверен.",()->goItem("commit-detail",idx));
+            action(HumanReport.commitSummary(x.optString("message")),
+                    HumanReport.humanDate(x.optString("date"))+". Заявление автора, не проверка.",
+                    ()->goItem("commit-detail",idx));
         }
+        gap(body,8);
+        line(body,"Другие направления",16,true,ink);gap(body,8);
+        action("Все направления","В том числе research и другие линии работы",()->go("branches"));
     }
     private void commitDetail(){
         JSONObject x=at("commits");if(x==null){note("Запись не найдена","Вернитесь к списку.");return;}
-        note(HumanReport.commitSummary(x.optString("message")),"Это классификация по заголовку, а не анализ исходного кода.");
-        note("Что написал автор",x.optString("message","Без описания"));
-        note("Когда запись сохранена",x.optString("date","Дата недоступна"));
-        note("Техническая версия",x.optString("sha","SHA недоступен"));
-        note("Что осталось неизвестным", "Заголовок сам по себе ничего не доказывает. Ниже — отдельный запрос файлов и проверок, если GitHub его отдаст.");
+        String message=x.optString("message","Без описания");
+        note("Что произошло", HumanReport.commitSummary(message)+".");
+        note("Что заявил автор", message.isEmpty()?"Описания нет.":message);
+        note("Что известно до отдельного запроса", "Запись есть в ветке «"+current.optString("defaultBranch","main")+"». Дата для человека: "+HumanReport.humanDate(x.optString("date"))+". Список файлов и проверки подгружаются ниже, если GitHub их отдаёт.");
+        note("Что остаётся неизвестным", "Заголовок не доказывает, что изменение работает. Если ниже нет списка файлов или проверок — этих доказательств нет.");
+        note("Источник", sourceLine());
+        technical("Заголовок\n"+message+"\nКогда сохранено (как прислал GitHub)\n"+x.optString("date","нет")+"\nУказатель\n"+x.optString("sha","нет"));
         loadExtra("commit", 0, x.optString("sha"));
-    }
-    private String countForHumans(JSONArray records, String completenessFlag, String category) {
-        int seen = HumanReport.countState(records, "open");
-        if (current == null || !current.optBoolean(completenessFlag, false))
-            return "список " + category + " неполон (в доступной части открыто: " + seen + ")";
-        return seen + " открытых " + category;
     }
     private void tasks(){
         if(current==null){note("Нет данных","Сначала обновите проект.");return;}
-        JSONArray issues=current.optJSONArray("issues"),pulls=current.optJSONArray("pulls");
-        note("Что означают эти записи", "Задачи — вопросы или работа, которую обсуждают. Запрос изменений — предложение внести код в проект. Закрытие не равно успешному испытанию.");
-        note("Задачи", current.optBoolean("issuesComplete", false)
-                ? HumanReport.countState(issues,"open")+" открыто; "+HumanReport.countState(issues,"closed")+" закрыто."
-                : "Список неполный или не загрузился: нельзя утверждать, сколько всего задач. Открытые в доступной части: " + HumanReport.countState(issues,"open") + ".");
-        if(issues!=null)for(int i=0;i<issues.length();i++){
-            JSONObject x=issues.optJSONObject(i);if(x==null)continue;final int idx=i;
-            action("Задача №"+x.optInt("number")+" · "+("open".equals(x.optString("state"))?"Открыта":"Закрыта"),
-                    HumanReport.NOT_ENOUGH+": текст задачи не загружен. Закрытие не доказывает выполнение.",()->goItem("issue-detail",idx));
+        JSONArray issues=current.optJSONArray("issues");
+        if(!current.optBoolean("issuesComplete", false))
+            note("Покрытие", current.optBoolean("issuesStale", false)
+                    ? "Свежий список задач не получен. Ниже прошлые сведения, если они были. Нельзя сказать, сколько задач всего."
+                    : "Список задач неполный или не загрузился. Нельзя сказать, что открытых задач нет.");
+        else note("Покрытие", "Список задач в пределах запроса загружен. Это не все возможные проблемы программы.");
+        if(issues==null || issues.length()==0){
+            note("Записей в этой выборке нет", current.optBoolean("issuesComplete", false)
+                    ? "GitHub вернул пустой список. Это не доказательство, что программа без дефектов."
+                    : "Пустой ответ при неполной загрузке не означает ноль задач.");
+            return;
         }
-        note("Предложения изменений", current.optBoolean("pullsComplete", false)
-                ? HumanReport.countState(pulls,"open")+" открыто; "+HumanReport.countState(pulls,"closed")+" закрыто."
-                : "Список неполный или не загрузился: общее количество неизвестно. Открытые в доступной части: " + HumanReport.countState(pulls,"open") + ".");
-        if(pulls!=null)for(int i=0;i<pulls.length();i++){
+        for(int i=0;i<issues.length();i++){
+            JSONObject x=issues.optJSONObject(i);if(x==null)continue;final int idx=i;
+            String title=x.optString("title","Без названия");
+            action(title, HumanReport.state(x.optString("state")), ()->goItem("issue-detail",idx));
+        }
+    }
+    private void pulls(){
+        if(current==null){note("Нет данных","Сначала обновите проект.");return;}
+        JSONArray pulls=current.optJSONArray("pulls");
+        if(!current.optBoolean("pullsComplete", false))
+            note("Покрытие", current.optBoolean("pullsStale", false)
+                    ? "Свежий список предложений не получен. Показаны прошлые сведения, если они были."
+                    : "Список предложений неполный. Закрытие в видимой части не описывает весь проект.");
+        else note("Покрытие", "Список предложений в пределах запроса загружен. Закрытие не означает внесение в проект.");
+        if(pulls==null || pulls.length()==0){
+            note("Записей в этой выборке нет", current.optBoolean("pullsComplete", false)
+                    ? "GitHub вернул пустой список предложений."
+                    : "Пустой ответ при неполной загрузке не означает, что предложений нет.");
+            return;
+        }
+        for(int i=0;i<pulls.length();i++){
             JSONObject x=pulls.optJSONObject(i);if(x==null)continue;final int idx=i;
-            action("Предложение №"+x.optInt("number")+" · "+("open".equals(x.optString("state"))?"Открыто":"Закрыто"),
-                    "Закрыто не значит объединено. Слитие и тесты в этот снимок не входят.",()->goItem("pull-detail",idx));
+            action(x.optString("title","Без названия"), HumanReport.pullListLabel(x), ()->goItem("pull-detail",idx));
         }
     }
     private void taskDetail(){
         boolean pr="pull-detail".equals(page);
         JSONObject x=at(pr?"pulls":"issues");if(x==null){note("Запись не найдена","Вернитесь к списку.");return;}
-        note((pr?"Предложение изменений":"Задача")+" №"+x.optInt("number"),HumanReport.state(x.optString("state")));
-        note("Исходный заголовок",x.optString("title","Без названия"));
-        note("Что известно из снимка", pr
-                ? "Закрытие не означает merge. Подробности запрашиваются отдельно и не заменяют проверку на устройстве."
-                : "По заголовку и статусу нельзя установить, выполнена ли работа. Текст запрашивается отдельно.");
+        String title=x.optString("title","Без названия");
+        note("Что произошло", (pr?"Предложение: «":"Задача: «")+title+"».");
+        note("Что известно", pr ? HumanReport.pullListLabel(x) : HumanReport.state(x.optString("state")));
+        note("Что остаётся неизвестным", pr
+                ? "Пока нет отдельного ответа GitHub, нельзя утверждать, что предложение слито, какие файлы затронуты и прошли ли проверки."
+                : "По заголовку нельзя установить, выполнена ли работа.");
+        note("Источник", sourceLine());
+        technical((pr?"Предложение №":"Задача №")+x.optInt("number")+"\nСостояние в GitHub: "+x.optString("state")
+                +(pr?"\nОтметка внесения: "+(x.optBoolean("merged", false)?"есть":"нет"):"")
+                +"\nЗаголовок\n"+title);
         loadExtra(pr ? "pull" : "issue", x.optInt("number"), null);
     }
     private void loadExtra(String kind, int number, String sha) {
         final int epoch = ++detailEpoch;
         LinearLayout slot = card();
-        TextView status = line(slot, HumanReport.NOT_ENOUGH + ". Запрос к GitHub ещё не завершён.", 15, false, muted);
+        TextView status = line(slot, "Подробности ещё читаются из GitHub.", 15, false, muted);
         final String selected = repo;
         new Thread(() -> {
             String text;
@@ -254,7 +348,7 @@ public final class SectionActivity extends Activity {
                 GithubClient.Extra extra = "commit".equals(kind) ? client.readCommit(selected, sha)
                         : "pull".equals(kind) ? client.readPull(selected, number)
                         : client.readIssue(selected, number);
-                text = extra.text;
+                text = "Подтверждения и пробелы\n\n" + extra.text;
             } catch (Exception e) {
                 text = HumanReport.NOT_ENOUGH + ". " + GithubClient.safeMessage(e);
             }
@@ -269,32 +363,50 @@ public final class SectionActivity extends Activity {
         if(current==null)return null;JSONArray list=current.optJSONArray(field);if(list==null)return null;
         return list.optJSONObject(getIntent().getIntExtra("idx",-1));
     }
+    private String sourceLine(){
+        if(current==null) return "Источник ещё не получен.";
+        String kind=current.optBoolean("restoredFromBackup", false)?"Импортированный файл, не свежий запрос GitHub.":"GitHub, только чтение.";
+        return kind+" Проект: "+repo+". Загрузка: "+HumanReport.humanDate(current.optLong("capturedAt",0))+".";
+    }
+    private void technical(String value){
+        LinearLayout card=card();
+        line(card,"Технические детали",13,true,muted);gap(card,8);
+        line(card,value,13,false,muted);gap(card,10);
+        button(card,"Скопировать технические сведения",()->{
+            ClipboardManager clipboard=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
+            if(clipboard!=null) clipboard.setPrimaryClip(ClipData.newPlainText("GitTeller", value));
+            toast("Скопировано");
+        });
+    }
     private void accuracy(){
         if(current==null){note("Нет данных","Ещё не было проверки GitHub.");return;}
-        note("Источник",(current.optBoolean("restoredFromBackup",false)?"Импортированный JSON, не свежий запрос GitHub.":"GitHub API, только чтение.")+"\n\nРепозиторий: "+repo);
-        note("Когда получены сведения",DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(new Date(current.optLong("capturedAt",0))));
-        note("Полнота списка веток",current.optBoolean("branchesComplete",false)?"Ветки загружены полностью по данным запроса.":"Не подтверждена: часть веток может отсутствовать.");
-        note("Полнота задач", current.optBoolean("issuesComplete", false)
-                ? "Загружены все страницы списка задач." : "Список задач загружен не полностью или недоступен.");
-        note("Полнота предложений изменений", current.optBoolean("pullsComplete", false)
-                ? "Загружены все страницы запросов изменений." : "Запросы изменений загружены не полностью или недоступны.");
-        note("Ограничение истории", "Загружаются последние записи только основной ветки. GitTeller не анализирует все коммиты других веток.");
+        note("Источник", sourceLine());
+        note("Направления", current.optBoolean("branchesStale", false)
+                ? "Показан прошлый список. Свежие указатели не получены."
+                : (current.optBoolean("branchesComplete", false)
+                    ? "Указатели веток проверены полностью."
+                    : "Указатели веток проверены не полностью."));
+        note("История", "История изучена лишь частично. На главном снимке только последние записи основной ветки. История другого направления запрашивается, когда его открывают.");
+        note("Задачи", current.optBoolean("issuesStale", false) ? "Показан прошлый список задач."
+                : (current.optBoolean("issuesComplete", false) ? "Список задач в пределах запроса загружен." : "Список задач неполный или недоступен. Это не ноль задач."));
+        note("Предложения", current.optBoolean("pullsStale", false) ? "Показан прошлый список предложений."
+                : (current.optBoolean("pullsComplete", false) ? "Список предложений в пределах запроса загружен." : "Список предложений неполный или недоступен."));
+        note("Проверки", "Результаты автоматических проверок запрашиваются при открытии записи. Если GitHub их не отдал, это не успех. Обычный токен может не иметь права Checks: read; тогда используются статусы коммита или GitHub Actions, если они доступны.");
         JSONArray warnings=current.optJSONArray("warnings");
-        if(warnings==null||warnings.length()==0)note("Ошибки загрузки","Во время последнего получения снимка ошибок не зарегистрировано. Это не означает, что вся разработка проверена.");
-        else for(int i=0;i<warnings.length();i++)note("Частично не загружено",warnings.optString(i));
-        note("Чего GitTeller пока не знает", HumanReport.NO_CHECK + ". Не присваивает PASS. " + HumanReport.NOT_ENOUGH + " для текста задач, файлов коммита и проверок GitHub.");
+        if(warnings==null||warnings.length()==0) note("Замечания загрузки","Отдельных ошибок при последней загрузке не записано. Это не значит, что проект проверен.");
+        else for(int i=0;i<warnings.length();i++) note("Почему данные неполные", warnings.optString(i));
     }
     private void access(){
-        note("Безопасное подключение","Для публичного репозитория токен не нужен. Для приватного создайте токен GitHub только на чтение. Он сохраняется через Android Keystore отдельно для каждого проекта.");
+        note("Безопасное подключение","Для публичного репозитория токен не нужен. Для приватного нужен токен GitHub только на чтение. Он хранится в Android Keystore отдельно для каждого проекта. Токен с правом записи не нужен и здесь не запрашивается.");
         LinearLayout form=card();
         line(form,"Репозиторий GitHub",14,true,ink);gap(form,8);
         EditText repoField=new EditText(this);repoField.setSingleLine(true);repoField.setText(repo);
         repoField.setTextColor(ink);form.addView(repoField,lp(-1,-2));gap(form,15);
         String status;
-        try{status=vault.hasToken(repo)?"Доступ сохранён на устройстве.":"Токен для текущего проекта не найден.";}
+        try{status=vault.hasToken(repo)?"Доступ сохранён на устройстве. Секрет не показывается.":"Токен для текущего проекта не найден.";}
         catch(Exception e){status="Статус хранилища недоступен.";}
         line(form,status,14,false,muted);gap(form,12);
-        line(form,"Токен (оставьте пустым, чтобы сохранить существующий)",13,false,muted);
+        line(form,"Токен. Пустое поле не удаляет сохранённый доступ.",13,false,muted);
         EditText tokenField=new EditText(this);tokenField.setSingleLine(true);tokenField.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         tokenField.setTextColor(ink);tokenField.setHint("Вставьте токен вручную");tokenField.setHintTextColor(muted);
         form.addView(tokenField,lp(-1,-2));gap(form,14);
@@ -327,16 +439,15 @@ public final class SectionActivity extends Activity {
         Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextColor(ink);b.setBackground(background(panel));
         LinearLayout.LayoutParams params=lp(-1,53);params.topMargin=dp(9);box.addView(b,params);b.setOnClickListener(v->action.run());
     }
-    private void data(){
-        note("Резервные копии","В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать достоверной текущей проверкой GitHub.");
+    private void settings(){
+        note("GitTeller 1.0.7-dev", "Объясняет историю GitHub человеку без разработки. Это не коммерческий релиз и не проверка готовности программы.");
+        note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
+        note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
+        note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");
         action("Сохранить копию проекта","Создать JSON без токена",()->requestData("export"));
-        action("Восстановить из JSON","Импорт заменяет данные выбранного репозитория только после подтверждения",()->requestData("import"));
+        action("Восстановить из JSON","Заменяет данные выбранного репозитория только после подтверждения",()->requestData("import"));
+        note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
     }
-    private void requestData(String action){setResult(RESULT_OK,new Intent().putExtra("action",action));finish();}
-    private void about(){
-        note("GitTeller 1.0.6", "Объясняет историю GitHub человеку без разработки. Это не коммерческий релиз и не проверка готовности программы.");
-        note("Безопасность", "Чтение GitHub только через HTTPS. Приватные токены сохраняются в Android Keystore и не включаются в JSON-архив.");
-        note("Ограничения", "Не проверяет фактическую работу кода на телефоне. Без отдельного источника подтверждения готовность проекта остаётся неизвестной.");
-    }
+    private void requestData(String actionName){setResult(RESULT_OK,new Intent().putExtra("action",actionName));finish();}
     private void toast(String msg){Toast.makeText(this,msg,Toast.LENGTH_SHORT).show();}
 }
