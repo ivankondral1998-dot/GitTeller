@@ -50,7 +50,7 @@ public final class SectionActivity extends Activity {
         vault=new TokenVault(this);
         page=getIntent().getStringExtra("page");
         if(page==null)page="index";
-        if("access".equals(page))
+        if("access".equals(page) || "search".equals(page))
             getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         paint();render();
     }
@@ -122,8 +122,11 @@ public final class SectionActivity extends Activity {
             case "access":return "Подключение GitHub";
             case "settings":return "Настройки";
             case "why":return "Почему это не доказательство";
+            case "incomplete":return "Почему данные неполные?";
+            case "search":return "Поиск";
+            case "projects":return "Сменить проект";
+            case "about":return "О приложении";
             case "data":return "Настройки";
-            case "about":return "Настройки";
             case "branch-detail":return "Направление работы";
             case "issue-detail":return "Задача";
             case "pull-detail":return "Предложение изменений";
@@ -155,8 +158,12 @@ public final class SectionActivity extends Activity {
             case "pulls":pulls();break;
             case "accuracy":accuracy();break;
             case "access":access();break;
-            case "settings":case "data":case "about":settings();break;
+            case "settings":case "data":settings();break;
+            case "about":about();break;
             case "why":why();break;
+            case "search":search();break;
+            case "incomplete":incomplete();break;
+            case "projects":projects();break;
             case "branch-detail":branchDetail();break;
             case "commit-detail":commitDetail();break;
             case "issue-detail":case "pull-detail":taskDetail();break;
@@ -179,6 +186,8 @@ public final class SectionActivity extends Activity {
         action("Надёжность сведений","Что загружено полностью, а что нет",()->go("accuracy"));
         action("Подключение GitHub","Репозиторий и доступ только на чтение",()->go("access"));
         action("Настройки","Копии данных и ограничения приложения",()->go("settings"));
+        action("Поиск","По сохранённым данным этого проекта",()->go("search"));
+        action("Почему данные неполные?","Причина по каждому списку, без ложного успеха",()->go("incomplete"));
     }
     private void overview(){
         if(current==null){note("Нет данных","Вернитесь назад и нажмите «Обновить».");return;}
@@ -268,7 +277,10 @@ public final class SectionActivity extends Activity {
                     +". "+event.optString("basis")
                     +"\nЧто это значит: "+HumanReport.eventMeaning(event.optString("kind"))
                     +"\n"+HumanReport.unknownOnce(event.optString("unknown"));
-            note(happened, bodyText);
+            String focus=getIntent().getStringExtra("eventId");
+            if(focus!=null && !focus.isEmpty() && focus.equals(event.optString("id")))
+                note("Открыто из поиска", bodyText);
+            else note(happened, bodyText);
             String url=event.optString("url");
             if(url.startsWith("https://github.com/")) technical("Ссылка\n"+url+"\nИдентификатор\n"+event.optString("id"));
         }
@@ -456,7 +468,18 @@ public final class SectionActivity extends Activity {
         }, "gitteller-detail").start();
     }
     private JSONObject at(String field){
-        if(current==null)return null;JSONArray list=current.optJSONArray(field);if(list==null)return null;
+        JSONArray list=current==null?null:current.optJSONArray(field);
+        if(list==null) return null;
+        String key=getIntent().getStringExtra("key");
+        if(key!=null && !key.isEmpty()){
+            for(int i=0;i<list.length();i++){
+                JSONObject row=list.optJSONObject(i);
+                if(row==null) continue;
+                if(key.equals(row.optString("name")) || key.equalsIgnoreCase(row.optString("sha"))
+                        || key.equals(String.valueOf(row.optInt("number",-1)))) return row;
+            }
+            return null;
+        }
         return list.optJSONObject(getIntent().getIntExtra("idx",-1));
     }
     private String sourceLine(){
@@ -523,23 +546,15 @@ public final class SectionActivity extends Activity {
     private void accuracy(){
         if(current==null){note("Нет данных","Ещё не было проверки GitHub.");return;}
         note("Источник", sourceLine());
-        note("Направления", (current.optBoolean("branchesStale", false)
-                ? "Показан прошлый список. Свежие указатели не получены."
-                : (current.optBoolean("branchesComplete", false)
-                    ? "Указатели веток проверены полностью."
-                    : "Указатели веток проверены не полностью.")) + sectionTime("branchesCached", "branchesFetchedAt"));
-        note("История", "История изучена лишь частично. На главном снимке только последние записи основной ветки. История другого направления запрашивается, когда его открывают."
-                + sectionTime("commitsCached", "commitsFetchedAt"));
-        note("Задачи", (current.optBoolean("issuesStale", false) ? "Показан прошлый список задач."
-                : (current.optBoolean("issuesComplete", false) ? "Список задач в пределах запроса загружен." : "Список задач неполный или недоступен. Это не ноль задач."))
-                + sectionTime("issuesCached", "issuesFetchedAt"));
-        note("Предложения", (current.optBoolean("pullsStale", false) ? "Показан прошлый список предложений."
-                : (current.optBoolean("pullsComplete", false) ? "Список предложений в пределах запроса загружен." : "Список предложений неполный или недоступен."))
-                + sectionTime("pullsCached", "pullsFetchedAt"));
-        note("Проверки", "Результаты автоматических проверок запрашиваются при открытии записи. Если GitHub их не отдал, это не успех. Обычный токен может не иметь права Checks: read; тогда используются статусы коммита или GitHub Actions, если они доступны.");
+        boolean developer=UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF, UiMode.NOVICE)));
+        for (Coverage.Row row : Coverage.explain(current)) {
+            if ("snapshot".equals(row.area)) continue;
+            note(row.title, row.shown(developer) + "\n" + row.meaning);
+        }
+        action("Почему данные неполные?","Статус, причина и следующее действие по каждому списку",()->go("incomplete"));
         JSONArray warnings=current.optJSONArray("warnings");
         if(warnings==null||warnings.length()==0) note("Замечания загрузки","Отдельных ошибок при последней загрузке не записано. Это не значит, что проект проверен.");
-        else for(int i=0;i<warnings.length();i++) note("Почему данные неполные", warnings.optString(i));
+        else for(int i=0;i<warnings.length();i++) note("Записано при загрузке", warnings.optString(i));
     }
     private void access(){
         note("Безопасное подключение","Для публичного репозитория токен не нужен. Для приватного нужен токен GitHub только на чтение. Он хранится в Android Keystore отдельно для каждого проекта. Токен с правом записи не нужен и здесь не запрашивается.");
@@ -594,7 +609,7 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.12-dev", "Два режима представления одних данных GitHub. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.13-dev", "Два режима, поиск по сохранённым данным и правая панель. Это не коммерческий релиз и не проверка готовности программы.");
         note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются на главном экране. Выбор сохраняется на устройстве. Права GitHub не меняются.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
@@ -604,17 +619,152 @@ public final class SectionActivity extends Activity {
         action("Поделиться кратким отчётом","Текст для себя. Токен и тела записей не входят", this::shareReport);
         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
         note("Проекты на этом телефоне","Данные и токены не смешиваются. Выбор проекта не удаляет остальные.");
+        projectChoices();
+        note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
+    }
+    private void about(){
+        note("GitTeller 1.0.13-dev", "Нативное чтение GitHub. versionCode 28. Это не коммерческий релиз и не приёмка на телефоне.");
+        note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
+        note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
+        action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
+    }
+    private void projects(){
+        note("Проекты на этом телефоне","Список берётся из уже сохранённых снимков. Новый проект отсюда не придумывается.");
+        projectChoices();
+        action("Подключить другой адрес","Репозиторий и токен только на чтение",()->go("access"));
+    }
+    private void projectChoices(){
+        boolean any=false;
         for (String stored : prefs.getAll().keySet()) {
             if (!stored.endsWith(":current")) continue;
             String name = stored.substring(0, stored.length() - ":current".length());
             if (name.isEmpty()) continue;
-            action(name, name.equalsIgnoreCase(repo) ? "Сейчас открыт" : "Переключить на этот проект", () -> {
-                if (!prefs.edit().putString("repo", name).commit()) { toast("Не удалось выбрать проект"); return; }
-                setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
-                finish();
-            });
+            any=true;
+            action(name, name.equalsIgnoreCase(repo) ? "Сейчас открыт" : "Переключить на этот проект", () -> selectRepo(name));
         }
-        note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
+        if(!any) note("Список пуст","На устройстве ещё нет сохранённого снимка. Это не значит, что проектов нет на GitHub.");
+    }
+    private void selectRepo(String name){
+        if (!prefs.edit().putString("repo", name).commit()) { toast("Не удалось выбрать проект"); return; }
+        setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
+        finish();
+    }
+    private void incomplete(){
+        boolean developer=UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF, UiMode.NOVICE)));
+        line(body, developer ? "Покрытие по полям снимка" : "Почему данные выглядят неполными", 18, true, ink);
+        gap(body, 8);
+        line(body, "Обновление не запускается само. Кнопка ниже только открывает действие, запрос уйдёт после «Обновить».", 14, false, muted);
+        gap(body, 12);
+        if(current==null){
+            note("Снимка нет","Нажмите «Обновить» на главном экране. Пустой экран не означает пустой проект.");
+            button(card(), "Обновить", () -> { setResult(RESULT_OK, new Intent().putExtra("action","sync")); finish(); });
+            return;
+        }
+        note("Проект", repo + " · " + (SnapshotCodec.isImported(current) ? "IMPORTED" : current.optString("origin","не определён"))
+                + " · " + HumanReport.humanDate(current.optLong("capturedAt",0)));
+        for (Coverage.Row row : Coverage.explain(current)) {
+            LinearLayout card=card();
+            line(card, row.title, 17, true, ink); gap(card, 8);
+            line(card, row.shown(developer), 15, false, ink); gap(card, 8);
+            line(card, "Что известно: " + row.fact, 14, false, muted); gap(card, 6);
+            line(card, "Что это значит: " + row.meaning, 14, false, muted);
+            if (developer) {
+                gap(card, 6);
+                line(card, row.code + " · записей " + (row.count < 0 ? "нет массива" : String.valueOf(row.count))
+                        + " · " + HumanReport.humanDate(row.at), 13, false, muted);
+            }
+            if ("refresh".equals(row.action))
+                button(card, "Обновить", () -> { setResult(RESULT_OK, new Intent().putExtra("action","sync")); finish(); });
+            else if ("access".equals(row.action))
+                button(card, "Проверить доступ", () -> go("access"));
+            else if ("commits".equals(row.action))
+                button(card, "Открыть коммит", () -> go("commits"));
+            else if (Coverage.SAMPLED_BY_DESIGN.equals(row.code))
+                line(card, "Не требуется, это выборка.", 14, false, muted);
+            else if (Coverage.NOT_VERIFIED.equals(row.code))
+                line(card, "Отдельный запрос отсюда не докажет проверки. Откройте конкретную запись.", 14, false, muted);
+            else line(card, "Дополнительный запрос для этого пункта не требуется.", 14, false, muted);
+        }
+    }
+    private void search(){
+        line(body, "Поиск по сохранённым данным", 18, true, ink); gap(body, 6);
+        line(body, ProjectSearch.scope(current), 14, false, muted); gap(body, 10);
+        LinearLayout bar=card();
+        EditText field=new EditText(this);
+        field.setSingleLine(true);
+        field.setTextColor(ink);
+        field.setHint("Ветка, #номер, SHA, текст");
+        field.setHintTextColor(muted);
+        String restored=getIntent().getStringExtra("query");
+        if(restored!=null) field.setText(restored);
+        field.setContentDescription("Строка поиска");
+        bar.addView(field, lp(-1,-2));
+        button(bar, "Очистить", () -> field.setText(""));
+        LinearLayout results=col();
+        body.addView(results, lp(-1,-2));
+        Runnable apply=() -> {
+            results.removeAllViews();
+            String raw=field.getText()==null ? "" : field.getText().toString();
+            getIntent().putExtra("query", raw);
+            ProjectSearch.Report report=ProjectSearch.find(current, parseFeed(), raw, localRepos());
+            if(report.emptyQuery){
+                TextView hint=line(results, ProjectSearch.emptyHint(), 15, false, muted);
+                hint.setPadding(0, dp(8), 0, 0);
+                return;
+            }
+            if(report.hits.isEmpty()){
+                line(results, ProjectSearch.noMatch(), 15, false, ink);
+                return;
+            }
+            String group="";
+            for (ProjectSearch.Hit hit : report.hits) {
+                if(!hit.group.equals(group)){
+                    group=hit.group;
+                    gap(results, 8);
+                    line(results, group, 13, true, muted);
+                    gap(results, 6);
+                }
+                choice(results, hit.title, hit.detail.isEmpty() ? hit.group : hit.detail, () -> openHit(hit));
+            }
+            if(report.omitted>0){
+                gap(results, 8);
+                line(results, "Ещё "+report.omitted+" совпадений не показаны. Уточните запрос. Это не потерянные данные GitHub.", 14, false, muted);
+            }
+        };
+        field.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) { apply.run(); }
+            public void afterTextChanged(android.text.Editable s) {}
+        });
+        apply.run();
+    }
+    private void choice(LinearLayout host, String title, String subtitle, Runnable run) {
+        LinearLayout b=col();
+        b.setPadding(dp(17),dp(14),dp(17),dp(14));
+        b.setBackground(background(panel));
+        b.setMinimumHeight(dp(48));
+        line(b,title+"   ›",17,true,ink);gap(b,7);line(b,subtitle,14,false,muted);
+        b.setContentDescription(title+". "+subtitle);b.setClickable(true);b.setFocusable(true);b.setOnClickListener(v->run.run());
+        LinearLayout.LayoutParams p=lp(-1,-2);p.bottomMargin=dp(10);
+        host.addView(b,p);
+    }
+    private java.util.List<String> localRepos(){
+        java.util.ArrayList<String> out=new java.util.ArrayList<>();
+        for (String stored : prefs.getAll().keySet()) {
+            if (!stored.endsWith(":current")) continue;
+            String name=stored.substring(0, stored.length()-":current".length());
+            if(!name.isEmpty()) out.add(name);
+        }
+        return out;
+    }
+    private void openHit(ProjectSearch.Hit hit){
+        if("switch-repo".equals(hit.page)){ selectRepo(hit.key); return; }
+        Intent i=new Intent(this, SectionActivity.class);
+        i.putExtra("page", hit.page);
+        if(hit.index>=0) i.putExtra("idx", hit.index);
+        if(hit.key!=null && !hit.key.isEmpty()) i.putExtra("key", hit.key);
+        if(hit.marker!=null && !hit.marker.isEmpty()) i.putExtra("eventId", hit.marker);
+        startActivity(i);
     }
     private void why(){
         note("Событие", "Коммит, задача или сдвиг ветки говорят только о том, что запись появилась в GitHub.");

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.unocontrol.GitTeller111RegressionTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-15T21:06:25" hostname="hds-ofcla9gesomd" time="0.018">
+  <properties/>
+  <testcase name="ownerWhereRejectsImportedBaseline" classname="app.unocontrol.GitTeller111RegressionTest" time="0.0"/>
+  <testcase name="failedCommitFetchIsPartialInReportsEvenForOldLiveOrigin" classname="app.unocontrol.GitTeller111RegressionTest" time="0.0"/>
+  <testcase name="ownerWhereRejectsOtherReposAndKeepsLiveComparisons" classname="app.unocontrol.GitTeller111RegressionTest" time="0.0"/>
+  <testcase name="ownerWhereLabelsImportedCurrent" classname="app.unocontrol.GitTeller111RegressionTest" time="0.0"/>
+  <testcase name="branchDetailsShowKnownPointerMoveEvenWithPartialLists" classname="app.unocontrol.GitTeller111RegressionTest" time="0.014"/>
+  <testcase name="unknownCommitFetchIsPartialInLegacyReports" classname="app.unocontrol.GitTeller111RegressionTest" time="0.0"/>
+  <testcase name="originAloneIdentifiesAnImportedSnapshot" classname="app.unocontrol.GitTeller111RegressionTest" time="0.0"/>
+  <testcase name="recentHistoryResponseAndCachedListsAreNotFetchFailures" classname="app.unocontrol.GitTeller111RegressionTest" time="0.001"/>
+  <testcase name="branchSeenExplainsWhichSnapshotHadTheBranch" classname="app.unocontrol.GitTeller111RegressionTest" time="0.0"/>
+  <testcase name="partialListsSupportNeitherDeletionNorCreationFromAbsence" classname="app.unocontrol.GitTeller111RegressionTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

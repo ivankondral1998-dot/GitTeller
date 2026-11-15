@@ -1,4 +1,22 @@
+# Проверки 1.0.13-dev
+
+`applicationId` `app.gitteller.mobile`, `versionCode` 28, `versionName` 1.0.13-dev. Подпись сверяется `apksigner` по готовому APK. Ожидаемый сертификат `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`.
+
+`tests-local/run.sh`: exit 0. `CoverageSearchSmoke` PASS, `UiModeSmoke` 9 PASS, прежние 46 + 8 + 14 + зонд 8 PASS, `PARSE OK`. Лог: `evidence/logs/tests-local-1.0.13.log`.
+
+Gradle:
+
+- try1 exit 1: компиляция `duplicate case about` и шум `type tag 71`. Лог `evidence/logs/gradle-1.0.13-try1.log`.
+- try2 exit 1: `CoverageTest` 1 падение, формулировка «не весь» была только в `fact`. Остальные новые тесты зелёные. Плюс шум `type tag 71`.
+- try3 exit 1: `Gradle Test Executor` оборвался (`type tag 71`), XML не обновлён.
+- try4 exit 0, `BUILD SUCCESSFUL`. **110 тестов, 0 failures, 0 errors.** XML `evidence/unit-xml-1.0.13/`. Лог `evidence/logs/gradle-1.0.13-try4.log`. Шум `type tag 71` в логе есть, на итог не повлиял.
+
+Эмулятор и Samsung A52 для 1.0.13: **NOT_RUN**. Это не `DEVICE_VERIFIED`. На A52 статус `OWNER_PENDING`.
+
+Ниже — запись 1.0.12, она не является прогоном 1.0.13.
+
 # Проверки 1.0.12-dev
+
 
 `applicationId` `app.gitteller.mobile`, `versionCode` 27, `versionName` 1.0.12-dev. Подпись debug та же, что у 1.0.6–1.0.11: SHA-256 `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`. Только `INTERNET`. `allowBackup=false`. `usesCleartextTraffic=false`.
 

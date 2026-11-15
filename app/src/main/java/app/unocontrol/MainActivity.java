@@ -1,5 +1,6 @@
 package app.unocontrol;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
@@ -9,20 +10,24 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
-import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -66,6 +71,13 @@ public final class MainActivity extends Activity {
     private JSONArray feed = new JSONArray();
     private LinearLayout content;
     private Button refresh;
+    private FrameLayout homeRoot;
+    private ScrollView homeScroll;
+    private int savedScroll;
+    private boolean reopenDrawer;
+    private final DrawerMotion drawer = new DrawerMotion();
+    private View drawerLayer;
+    private float dragX;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -80,7 +92,26 @@ public final class MainActivity extends Activity {
         lastError = prefs.getString(key(repo, "lastError"), "");
         if (lastError != null && lastError.isEmpty()) lastError = null;
         feed = parseArray(prefs.getString(key(repo, "feed"), ""));
+        if (savedInstanceState != null) {
+            savedScroll = savedInstanceState.getInt("scroll", 0);
+            reopenDrawer = savedInstanceState.getBoolean("drawer", false);
+        }
         draw();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        if (homeScroll != null) savedScroll = homeScroll.getScrollY();
+        out.putInt("scroll", savedScroll);
+        out.putBoolean("drawer", drawer.open);
+    }
+
+    @Override public void onBackPressed() {
+        if (drawer.consumeBack()) {
+            closeDrawer(motionMs() > 0);
+            return;
+        }
+        super.onBackPressed();
     }
 
     private static String key(String repo, String suffix) { return repo.toLowerCase(java.util.Locale.ROOT) + ":" + suffix; }
@@ -248,12 +279,7 @@ public final class MainActivity extends Activity {
     }
 
     private String collectionCoverage(String field) {
-        if (current == null) return "Снимок отсутствует";
-        if (SnapshotCodec.isImported(current)) return "Импортированный снимок: не живые данные";
-        if (current.optBoolean(field + "Stale", false)) return "Показаны старые данные: новое чтение не удалось";
-        return current.optBoolean(field + "Complete", false)
-                ? "Список получен полностью в пределах запроса"
-                : "Частичный или недоступный список";
+        return Coverage.one(current, field).shown(developerMode());
     }
 
     private void developerDashboard(LinearLayout parent) {
@@ -283,12 +309,17 @@ public final class MainActivity extends Activity {
                 () -> openPage("pulls"));
         developerCard(parent, "Проверки и диагностика", "Охват запросов, ограничения API и неизвестные результаты тестов",
                 () -> openPage("accuracy"));
-        developerCard(parent, "Коммиты", "Последняя доступная история; не все ветки и не вся история",
+        developerCard(parent, "Коммиты: " + count(current, "commits"),
+                Coverage.one(current, "commits").shown(true),
                 () -> openPage("commits"));
     }
 
     private void draw() {
         applyPalette();
+        boolean keepDrawer = drawer.open || reopenDrawer;
+        if (homeScroll != null) savedScroll = homeScroll.getScrollY();
+        drawer.markClosed();
+        drawerLayer = null;
         FrameLayout root=new FrameLayout(this);
         root.setBackgroundColor(BG);
         ScrollView scroll=new ScrollView(this);
@@ -298,7 +329,11 @@ public final class MainActivity extends Activity {
         scroll.addView(wrap);
         root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
         setContentView(root);
+        homeRoot = root;
+        homeScroll = scroll;
         content=wrap;
+        final int restore = savedScroll;
+        homeScroll.post(() -> homeScroll.scrollTo(0, restore));
 
         LinearLayout head=new LinearLayout(this);
         head.setGravity(Gravity.CENTER_VERTICAL);
@@ -306,11 +341,23 @@ public final class MainActivity extends Activity {
         brand.addView(txt("GitTeller",17,TEXT,true));
         addLine(brand,developerMode() ? "Анализ GitHub" : "GitHub простыми словами",12,MUTED,false,5);
         head.addView(brand,new LinearLayout.LayoutParams(0,-2,1f));
+        TextView search=txt("⌕",22,TEXT,false);
+        search.setGravity(Gravity.CENTER);
+        search.setContentDescription("Поиск по сохранённым данным проекта");
+        search.setBackground(shape(PANEL,14,STROKE));
+        search.setClickable(true);
+        search.setFocusable(true);
+        LinearLayout.LayoutParams searchBox=lp(48,48);
+        searchBox.rightMargin=dp(8);
+        head.addView(search,searchBox);
+        search.setOnClickListener(v -> openPage("search"));
         TextView menu=txt("⋮",27,TEXT,false);
-        menu.setGravity(Gravity.CENTER);menu.setContentDescription("Дополнительные разделы и настройки");
+        menu.setGravity(Gravity.CENTER);menu.setContentDescription("Открыть панель разделов");
         menu.setBackground(shape(PANEL,14,STROKE));
-        head.addView(menu,lp(44,44));
-        menu.setOnClickListener(v -> showMenu(menu));
+        menu.setClickable(true);
+        menu.setFocusable(true);
+        head.addView(menu,lp(48,48));
+        menu.setOnClickListener(v -> toggleDrawer());
         wrap.addView(head,lp(-1,-2));
         space(wrap,16);
         modePicker(wrap);
@@ -319,6 +366,7 @@ public final class MainActivity extends Activity {
         String shortRepo=repo.length()>48?repo.substring(0,45)+"…":repo;
         addLine(wrap,"Проект: "+shortRepo,18,TEXT,true,6);
         space(wrap,8);
+        coverageStrip(wrap);
 
         Summary summary=Summary.of(current,previous);
         if (current != null && !loading) {
@@ -382,7 +430,14 @@ public final class MainActivity extends Activity {
                     || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
                     || SnapshotCodec.isImported(current))) {
                 LinearLayout stale=panel(wrap);
-                addLine(stale,"Часть сведений с прошлой удачной загрузки.",14,WARN,false,0);
+                addLine(stale,"Часть сведений с прошлой удачной загрузки или из файла.",14,WARN,false,0);
+                TextView why=txt("Почему данные неполные?",14,ACCENT,true);
+                why.setMinHeight(dp(48));
+                why.setGravity(Gravity.CENTER_VERTICAL);
+                why.setContentDescription("Почему данные неполные");
+                why.setOnClickListener(v -> openPage("incomplete"));
+                space(stale,6);
+                stale.addView(why,lp(-1,-2));
             }
         }
         if (!loading && !"Повторить загрузку".equals(step)) {
@@ -405,6 +460,25 @@ public final class MainActivity extends Activity {
         TextView footer=txt("Чтение GitHub. Это не проверка готовности программы.",12,MUTED,false);
         footer.setGravity(Gravity.CENTER);
         wrap.addView(footer,lp(-1,-2));
+        reopenDrawer = false;
+        if (keepDrawer) openDrawer(false);
+    }
+
+    private void coverageStrip(LinearLayout parent) {
+        LinearLayout card = panel(parent);
+        addLine(card, "Что известно", 16, TEXT, true, 0);
+        addLine(card, Coverage.compact(current, developerMode()), 14, MUTED, false, 8);
+        if (current != null) {
+            addLine(card, "Последняя запись снимка: " + formatTime(current.optLong("capturedAt", 0))
+                    + ". Само обновление не запускается.", 13, MUTED, false, 8);
+        }
+        TextView link = txt("Почему данные неполные?", 15, ACCENT, true);
+        link.setMinHeight(dp(48));
+        link.setGravity(Gravity.CENTER_VERTICAL);
+        link.setContentDescription("Почему данные неполные");
+        link.setOnClickListener(v -> openPage("incomplete"));
+        space(card, 4);
+        card.addView(link, lp(-1, -2));
     }
 
     private static String formatTime(long millis){
@@ -418,22 +492,161 @@ public final class MainActivity extends Activity {
         startActivityForResult(intent, REQUEST_SECTION);
     }
 
-    private void showMenu(View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
-        menu.getMenu().add(0,1,0,"Разделы проекта");
-        menu.getMenu().add(0,5,1,"Обновить");
-        menu.getMenu().add(0,2,2,"Подключение GitHub");
-        menu.getMenu().add(0,3,3,"Настройки");
-        menu.setOnMenuItemClickListener(item -> {
-            switch (item.getItemId()) {
-                case 1: openPage("index"); return true;
-                case 5: sync(); return true;
-                case 2: openPage("access"); return true;
-                case 3: openPage("settings"); return true;
+    private void toggleDrawer() {
+        if (drawer.open || drawer.busy) closeDrawer(motionMs() > 0);
+        else openDrawer(motionMs() > 0);
+    }
+
+    private void openDrawer(boolean animate) {
+        if (homeRoot == null || !drawer.requestOpen()) return;
+        if (drawerLayer != null) homeRoot.removeView(drawerLayer);
+        int screen = getResources().getDisplayMetrics().widthPixels;
+        int panelWidth = Math.min(dp(320), Math.max(dp(220), screen - dp(56)));
+        FrameLayout layer = new FrameLayout(this);
+        layer.setClickable(true);
+        layer.setFocusable(true);
+        View scrim = new View(this);
+        scrim.setBackgroundColor(0x99000000);
+        scrim.setAlpha(animate ? 0f : 1f);
+        scrim.setContentDescription("Закрыть панель");
+        scrim.setOnClickListener(v -> closeDrawer(motionMs() > 0));
+        layer.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout panel = vertical();
+        panel.setClickable(true);
+        panel.setBackground(drawerShape());
+        int bar = systemBar("status_bar_height");
+        int nav = systemBar("navigation_bar_height");
+        panel.setPadding(dp(16), dp(12) + bar, dp(16), dp(16) + nav);
+        TextView close = txt("Закрыть", 15, ACCENT, true);
+        close.setMinHeight(dp(48));
+        close.setGravity(Gravity.CENTER_VERTICAL);
+        close.setContentDescription("Закрыть панель");
+        close.setOnClickListener(v -> closeDrawer(motionMs() > 0));
+        panel.addView(close, lp(-1, 48));
+        addLine(panel, "GitTeller", 13, MUTED, false, 0);
+        space(panel, 8);
+        ScrollView list = new ScrollView(this);
+        LinearLayout items = vertical();
+        list.addView(items);
+        panel.addView(list, new LinearLayout.LayoutParams(-1, 0, 1f));
+        drawerItem(items, "Поиск", () -> { closeDrawer(false); openPage("search"); });
+        drawerItem(items, "Разделы проекта", () -> { closeDrawer(false); openPage("index"); });
+        drawerItem(items, "Обновить", () -> { closeDrawer(false); sync(); });
+        drawerItem(items, "Сменить проект", () -> { closeDrawer(false); openPage("projects"); });
+        drawerItem(items, "Подключение GitHub", () -> { closeDrawer(false); openPage("access"); });
+        drawerItem(items, "Почему данные неполные?", () -> { closeDrawer(false); openPage("incomplete"); });
+        drawerItem(items, "Настройки", () -> { closeDrawer(false); openPage("settings"); });
+        drawerItem(items, "О приложении", () -> { closeDrawer(false); openPage("about"); });
+        View grip = new View(this);
+        grip.setContentDescription("Смахните вправо, чтобы закрыть панель");
+        grip.setOnTouchListener((v, event) -> dragDrawer(panel, event));
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.HORIZONTAL);
+        shell.addView(grip, new LinearLayout.LayoutParams(dp(28), -1));
+        shell.addView(panel, new LinearLayout.LayoutParams(0, -1, 1f));
+        shell.setBackground(drawerShape());
+        panel.setBackgroundColor(0);
+        FrameLayout.LayoutParams panelBox = new FrameLayout.LayoutParams(panelWidth, -1, Gravity.END);
+        layer.addView(shell, panelBox);
+        homeRoot.addView(layer, new FrameLayout.LayoutParams(-1, -1));
+        drawerLayer = layer;
+        if (!animate) {
+            setBlur(18f);
+            drawer.markOpen();
+            return;
+        }
+        shell.setTranslationX(panelWidth);
+        shell.animate().translationX(0f).setDuration(motionMs()).setInterpolator(new DecelerateInterpolator()).start();
+        scrim.animate().alpha(1f).setDuration(motionMs()).start();
+        ValueAnimator blur = ValueAnimator.ofFloat(0f, 18f);
+        blur.setDuration(motionMs());
+        blur.addUpdateListener(a -> setBlur((Float) a.getAnimatedValue()));
+        blur.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (!drawer.closing && drawerLayer != null) drawer.markOpen();
             }
-            return false;
         });
-        menu.show();
+        blur.start();
+    }
+
+    private boolean dragDrawer(View panel, MotionEvent event) {
+        View shell = (View) panel.getParent();
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            dragX = event.getRawX();
+            return true;
+        }
+        if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
+            shell.setTranslationX(Math.max(0f, event.getRawX() - dragX));
+            return true;
+        }
+        if (event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+            if (shell.getTranslationX() > shell.getWidth() * 0.33f) closeDrawer(motionMs() > 0);
+            else shell.animate().translationX(0f).setDuration(motionMs()).start();
+            return true;
+        }
+        return true;
+    }
+
+    private void drawerItem(LinearLayout parent, String label, Runnable action) {
+        TextView item = txt(label, 16, TEXT, false);
+        item.setMinHeight(dp(48));
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(dp(8), 0, dp(8), 0);
+        item.setClickable(true);
+        item.setFocusable(true);
+        item.setContentDescription(label);
+        item.setOnClickListener(v -> action.run());
+        parent.addView(item, lp(-1, -2));
+    }
+
+    private void closeDrawer(boolean animate) {
+        if (drawerLayer == null) {
+            drawer.markClosed();
+            setBlur(0f);
+            return;
+        }
+        if (!drawer.closing && !drawer.requestClose()) return;
+        View layer = drawerLayer;
+        if (!animate) {
+            setBlur(0f);
+            if (homeRoot != null) homeRoot.removeView(layer);
+            if (drawerLayer == layer) drawerLayer = null;
+            drawer.markClosed();
+            return;
+        }
+        layer.animate().alpha(0f).setDuration(motionMs()).withEndAction(() -> {
+            setBlur(0f);
+            if (homeRoot != null) homeRoot.removeView(layer);
+            if (drawerLayer == layer) drawerLayer = null;
+            drawer.markClosed();
+        }).start();
+    }
+
+    private GradientDrawable drawerShape() {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(PANEL);
+        float r = dp(18);
+        d.setCornerRadii(new float[]{r, r, 0f, 0f, 0f, 0f, r, r});
+        return d;
+    }
+
+    private void setBlur(float radius) {
+        if (homeScroll == null || Build.VERSION.SDK_INT < 31) return;
+        if (radius < 0.8f) homeScroll.setRenderEffect(null);
+        else homeScroll.setRenderEffect(RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP));
+    }
+
+    private long motionMs() {
+        try {
+            float scale = Settings.Global.getFloat(getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
+            if (scale == 0f) return 0L;
+        } catch (Exception ignored) { /* keep the normal motion */ }
+        return 240L;
+    }
+
+    private int systemBar(String name) {
+        int id = getResources().getIdentifier(name, "dimen", "android");
+        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
     }
 
     @Override protected void onResume() {
@@ -592,6 +805,7 @@ public final class MainActivity extends Activity {
                 String action=data.getStringExtra("action");
                 if("import".equals(action)) {importLegacy();return;}
                 if("export".equals(action)) {exportBackup();return;}
+                if("sync".equals(action)) {sync();return;}
                 if("changed".equals(action)) {
                     abandonSync();
                     String selected=prefs.getString("repo",DEFAULT_REPO);
