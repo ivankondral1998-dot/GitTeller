@@ -1,0 +1,218 @@
+--- gt113-base/gitteller/app/build.gradle	2026-11-15 21:01:54.000000000 +0000
++++ b/app/build.gradle	2026-11-15 22:49:21.867319725 +0000
+@@ -7,8 +7,8 @@
+         applicationId 'app.gitteller.mobile'
+         minSdk 26
+         targetSdk 35
+-        versionCode 28
+-        versionName '1.0.13-dev'
++        versionCode 29
++        versionName '1.0.13.1-dev'
+         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+     }
+     def originalDebug = file("${System.getProperty('user.home')}/.android/debug.keystore")
+--- a/dev/null	2026-11-15 22:41:05.071693405 +0000
++++ b/app/src/main/java/app/unocontrol/GithubLinks.java	2026-11-15 22:49:11.551319278 +0000
+@@ -0,0 +1,76 @@
++package app.unocontrol;
++
++import java.net.URI;
++
++/** Links open only for the selected repository. Arbitrary or imported URLs stay closed. */
++final class GithubLinks {
++    private GithubLinks() {}
++
++    static String recordUrl(String repo, String type, int number) {
++        if (!validRepo(repo) || number <= 0) return null;
++        if (!"issues".equals(type) && !"pull".equals(type)) return null;
++        return "https://github.com/" + repo + "/" + type + "/" + number;
++    }
++
++    /**
++     * Accept only https://github.com/{selectedRepo}/issues|pull/{n} or /tree/{branch}.
++     * Returns a canonical URL, never the raw candidate. Query, fragment, user-info,
++     * port, percent-encoding and ".." segments are rejected so a browser cannot be
++     * sent to a GitHub search filter or another repository.
++     */
++    static String validatedRepoUrl(String repo, String candidate) {
++        if (!validRepo(repo) || candidate == null) return null;
++        if (hasForbiddenChars(candidate)) return null;
++        try {
++            URI u = new URI(candidate);
++            if (!"https".equalsIgnoreCase(u.getScheme()) || u.getUserInfo() != null || u.getPort() != -1
++                    || u.getRawQuery() != null || u.getRawFragment() != null) return null;
++            String host = u.getHost();
++            if (host == null || !"github.com".equalsIgnoreCase(host)) return null;
++            String raw = u.getRawPath();
++            if (raw == null || raw.indexOf('%') >= 0 || raw.indexOf('\\') >= 0) return null;
++            String prefix = "/" + repo + "/";
++            if (!raw.startsWith(prefix)) return null;
++            String tail = raw.substring(prefix.length());
++            if (tail.matches("(?:issues|pull)/[1-9][0-9]*"))
++                return "https://github.com/" + repo + "/" + tail;
++            if (tail.startsWith("tree/")) {
++                String branch = tail.substring("tree/".length());
++                if (!safeBranch(branch)) return null;
++                return "https://github.com/" + repo + "/tree/" + branch;
++            }
++        } catch (Exception ignored) { /* Never open malformed or untrusted URLs. */ }
++        return null;
++    }
++
++    private static boolean hasForbiddenChars(String value) {
++        for (int i = 0; i < value.length(); i++) {
++            char c = value.charAt(i);
++            if (c <= 0x20 || c == 0x7f || c == '\\') return true;
++        }
++        return false;
++    }
++
++    private static boolean safeBranch(String branch) {
++        if (branch.isEmpty() || branch.startsWith("/") || branch.endsWith("/")
++                || branch.contains("//") || branch.contains("..")
++                || branch.indexOf(' ') >= 0 || branch.indexOf('\\') >= 0
++                || branch.indexOf('?') >= 0 || branch.indexOf('#') >= 0
++                || branch.indexOf('%') >= 0)
++            return false;
++        int start = 0;
++        for (int i = 0; i <= branch.length(); i++) {
++            if (i == branch.length() || branch.charAt(i) == '/') {
++                String segment = branch.substring(start, i);
++                if (segment.isEmpty() || ".".equals(segment) || "..".equals(segment)) return false;
++                start = i + 1;
++            }
++        }
++        return true;
++    }
++
++    private static boolean validRepo(String repo) {
++        return repo != null && repo.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}")
++                && !repo.contains("..");
++    }
++}
+--- gt113-base/gitteller/app/src/main/java/app/unocontrol/SectionActivity.java	2026-11-15 21:05:22.000000000 +0000
++++ b/app/src/main/java/app/unocontrol/SectionActivity.java	2026-11-15 22:49:21.335319702 +0000
+@@ -282,7 +282,7 @@
+                 note("Открыто из поиска", bodyText);
+             else note(happened, bodyText);
+             String url=event.optString("url");
+-            if(url.startsWith("https://github.com/")) technical("Ссылка\n"+url+"\nИдентификатор\n"+event.optString("id"));
++            if(url.startsWith("https://github.com/")) technical("Ссылка\n"+url+"\nИдентификатор\n"+event.optString("id"), url);
+         }
+         if(shown==0) note("Событий нет", "В этой ленте нет записей выбранного вида. Это не значит, что проект не менялся и что проблем нет.");
+     }
+@@ -440,7 +440,8 @@
+         note("Источник", sourceLine());
+         technical((pr?"Предложение №":"Задача №")+x.optInt("number")+"\nСостояние в GitHub: "+x.optString("state")
+                 +(pr?"\nОтметка внесения: "+(x.optBoolean("merged", false)?"есть":"нет"):"")
+-                +"\nЗаголовок\n"+title);
++                +"\nЗаголовок\n"+title,
++                GithubLinks.recordUrl(repo, pr ? "pull" : "issues", x.optInt("number")));
+         loadExtra(pr ? "pull" : "issue", x.optInt("number"), null);
+     }
+     private void loadExtra(String kind, int number, String sha) {
+@@ -490,7 +491,8 @@
+                 :"GitHub, только чтение.";
+         return kind+" Проект: "+repo+". Загрузка: "+HumanReport.humanDate(current.optLong("capturedAt",0))+".";
+     }
+-    private void technical(String value){
++    private void technical(String value){technical(value, null);}
++    private void technical(String value, String externalUrl){
+         LinearLayout card=card();
+         boolean developer=UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF, UiMode.NOVICE)));
+         line(card,developer ? "Технические сведения" : "Технические детали скрыты",13,true,muted);gap(card,8);
+@@ -508,6 +510,22 @@
+             if(clipboard!=null) clipboard.setPrimaryClip(ClipData.newPlainText("GitTeller", value));
+             toast("Скопировано");
+         });
++        String safeUrl=GithubLinks.validatedRepoUrl(repo, externalUrl);
++        if(safeUrl!=null){
++            button(card,"Открыть в GitHub",()->{
++                try {
++                    Intent view=new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(safeUrl));
++                    startActivity(view);
++                } catch (Exception e) { toast("Браузер для ссылки недоступен"); }
++            });
++            button(card,"Копировать только ссылку",()->{
++                ClipboardManager clipboard=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
++                if(clipboard!=null){
++                    clipboard.setPrimaryClip(ClipData.newPlainText("GitHub URL", safeUrl));
++                    toast("Ссылка скопирована");
++                } else toast("Буфер обмена недоступен");
++            });
++        }
+     }
+     private void problems(){
+         if(current==null){note("Нет данных","Сначала обновите проект.");return;}
+@@ -609,7 +627,7 @@
+         return " Время раздела: " + when + "." + cache;
+     }
+     private void settings(){
+-        note("GitTeller 1.0.13-dev", "Два режима, поиск по сохранённым данным и правая панель. Это не коммерческий релиз и не проверка готовности программы.");
++        note("GitTeller 1.0.13.1-dev", "Два режима, поиск по сохранённым данным и правая панель. Ссылка GitHub открывается отдельной кнопкой и только на выбранный проект. Это не коммерческий релиз и не проверка готовности программы.");
+         note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются на главном экране. Выбор сохраняется на устройстве. Права GitHub не меняются.");
+         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
+         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
+@@ -623,7 +641,7 @@
+         note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
+     }
+     private void about(){
+-        note("GitTeller 1.0.13-dev", "Нативное чтение GitHub. versionCode 28. Это не коммерческий релиз и не приёмка на телефоне.");
++        note("GitTeller 1.0.13.1-dev", "Нативное чтение GitHub. versionCode 29. Это не коммерческий релиз и не приёмка на телефоне.");
+         note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
+         note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
+         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
+--- gt113-base/gitteller/tests-local/run.sh	2026-11-15 21:04:40.000000000 +0000
++++ b/tests-local/run.sh	2026-11-15 22:49:37.059320382 +0000
+@@ -5,8 +5,9 @@
+ trap 'rm -rf "$TMP"' EXIT
+ mkdir -p "$TMP"
+ javac -encoding UTF-8 -d "$TMP" "$ROOT"/tests-local/org/json/*.java \
+-  "$ROOT"/app/src/main/java/app/unocontrol/UiMode.java "$ROOT"/app/src/main/java/app/unocontrol/Coverage.java "$ROOT"/app/src/main/java/app/unocontrol/ProjectSearch.java "$ROOT"/app/src/main/java/app/unocontrol/DrawerMotion.java "$ROOT"/app/src/main/java/app/unocontrol/AtomicCipherFile.java "$ROOT"/app/src/main/java/app/unocontrol/EventFeed.java "$ROOT"/app/src/main/java/app/unocontrol/Summary.java "$ROOT"/app/src/main/java/app/unocontrol/ChangeSet.java "$ROOT"/app/src/main/java/app/unocontrol/CommitExplainer.java "$ROOT"/app/src/main/java/app/unocontrol/HumanReport.java "$ROOT"/app/src/main/java/app/unocontrol/GithubClient.java "$ROOT"/app/src/main/java/app/unocontrol/SnapshotCodec.java \
+-  "$ROOT"/tests-local/app/unocontrol/CoverageSearchSmoke.java "$ROOT"/tests-local/app/unocontrol/UiModeSmoke.java "$ROOT"/tests-local/app/unocontrol/Smoke.java "$ROOT"/tests-local/app/unocontrol/GithubAuditSmoke.java "$ROOT"/tests-local/app/unocontrol/AuditRegression1081.java "$ROOT"/tests-local/app/unocontrol/IndependentProbe109.java
++  "$ROOT"/app/src/main/java/app/unocontrol/GithubLinks.java "$ROOT"/app/src/main/java/app/unocontrol/UiMode.java "$ROOT"/app/src/main/java/app/unocontrol/Coverage.java "$ROOT"/app/src/main/java/app/unocontrol/ProjectSearch.java "$ROOT"/app/src/main/java/app/unocontrol/DrawerMotion.java "$ROOT"/app/src/main/java/app/unocontrol/AtomicCipherFile.java "$ROOT"/app/src/main/java/app/unocontrol/EventFeed.java "$ROOT"/app/src/main/java/app/unocontrol/Summary.java "$ROOT"/app/src/main/java/app/unocontrol/ChangeSet.java "$ROOT"/app/src/main/java/app/unocontrol/CommitExplainer.java "$ROOT"/app/src/main/java/app/unocontrol/HumanReport.java "$ROOT"/app/src/main/java/app/unocontrol/GithubClient.java "$ROOT"/app/src/main/java/app/unocontrol/SnapshotCodec.java \
++  "$ROOT"/tests-local/app/unocontrol/GithubLinksSmoke.java "$ROOT"/tests-local/app/unocontrol/CoverageSearchSmoke.java "$ROOT"/tests-local/app/unocontrol/UiModeSmoke.java "$ROOT"/tests-local/app/unocontrol/Smoke.java "$ROOT"/tests-local/app/unocontrol/GithubAuditSmoke.java "$ROOT"/tests-local/app/unocontrol/AuditRegression1081.java "$ROOT"/tests-local/app/unocontrol/IndependentProbe109.java
++java -cp "$TMP" app.unocontrol.GithubLinksSmoke
+ java -cp "$TMP" app.unocontrol.CoverageSearchSmoke
+ java -cp "$TMP" app.unocontrol.UiModeSmoke
+ java -cp "$TMP" app.unocontrol.Smoke
+--- gt113-base/gitteller/tests-local/app/unocontrol/GithubLinksSmoke.java	1970-01-01 00:00:00.000000000 +0000
++++ b/tests-local/app/unocontrol/GithubLinksSmoke.java	2026-11-15 22:49:32.787320197 +0000
+@@ -0,0 +1,37 @@
++package app.unocontrol;
++
++public final class GithubLinksSmoke {
++    private static int count;
++    private static void eq(String expected, String actual){
++        if(expected == null ? actual != null : !expected.equals(actual))
++            throw new AssertionError("expected=" + expected + " actual=" + actual);
++        count++;
++    }
++    public static void main(String[] args){
++        String repo="ivankondral1998-dot/UNO-android-AI-Agent";
++        String issue= "https://github.com/" + repo + "/issues/6";
++        eq(issue, GithubLinks.recordUrl(repo,"issues",6));
++        eq("https://github.com/"+repo+"/pull/7",GithubLinks.recordUrl(repo,"pull",7));
++        eq(null,GithubLinks.recordUrl(repo,"issues",0));
++        eq(null,GithubLinks.recordUrl(repo,"issue",6));
++        eq(null,GithubLinks.recordUrl("bad/../repo","issues",6));
++        eq(issue,GithubLinks.validatedRepoUrl(repo,issue));
++        eq(null,GithubLinks.validatedRepoUrl(repo,issue+"?q=author%3Awrong"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,issue+"#fake"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,"https://github.com.evil.test/"+repo+"/issues/6"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,"http://github.com/"+repo+"/issues/6"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,"https://github.com/other/repo/issues/6"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,"https://github.com/"+repo+"/issues?q=author%3Abad"));
++        eq("https://github.com/"+repo+"/tree/research/uno-train-001",
++            GithubLinks.validatedRepoUrl(repo,"https://github.com/"+repo+"/tree/research/uno-train-001"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,"https://github.com/"+repo+"/tree/../settings"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,"javascript:alert(1)"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,"https://github.com/"+repo+"/tree/%2e%2e/%2e%2e/other/repo"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,"https://user:pass@github.com/"+repo+"/issues/6"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,"https://github.com:443/"+repo+"/issues/6"));
++        eq(null,GithubLinks.validatedRepoUrl(repo,issue+"/"));
++        eq(issue,GithubLinks.validatedRepoUrl(repo,"HTTPS://GitHub.com/"+repo+"/issues/6"));
++        eq(null,GithubLinks.validatedRepoUrl("other/repo",issue));
++        System.out.println("GithubLinksSmoke PASS="+count);
++    }
++}

@@ -1,0 +1,26 @@
+JUnit version 4.13.2
+...........................E.....E..............................................................................
+Time: 0.269
+There were 2 failures:
+1) branchDetailsShowKnownPointerMoveEvenWithPartialLists(app.unocontrol.GitTeller111RegressionTest)
+java.lang.RuntimeException: Stub!
+	at android.content.Context.<init>(Context.java:23)
+	at android.content.ContextWrapper.<init>(ContextWrapper.java:23)
+	at android.view.ContextThemeWrapper.<init>(ContextThemeWrapper.java:23)
+	at android.app.Activity.<init>(Activity.java:23)
+	at app.unocontrol.SectionActivity.<init>(SectionActivity.java:33)
+	at app.unocontrol.GitTeller111RegressionTest.branchDetail(GitTeller111RegressionTest.java:109)
+	at app.unocontrol.GitTeller111RegressionTest.branchDetailsShowKnownPointerMoveEvenWithPartialLists(GitTeller111RegressionTest.java:94)
+2) partialListsSupportNeitherDeletionNorCreationFromAbsence(app.unocontrol.GitTeller111RegressionTest)
+java.lang.RuntimeException: Stub!
+	at android.content.Context.<init>(Context.java:23)
+	at android.content.ContextWrapper.<init>(ContextWrapper.java:23)
+	at android.view.ContextThemeWrapper.<init>(ContextThemeWrapper.java:23)
+	at android.app.Activity.<init>(Activity.java:23)
+	at app.unocontrol.SectionActivity.<init>(SectionActivity.java:33)
+	at app.unocontrol.GitTeller111RegressionTest.branchDetail(GitTeller111RegressionTest.java:109)
+	at app.unocontrol.GitTeller111RegressionTest.partialListsSupportNeitherDeletionNorCreationFromAbsence(GitTeller111RegressionTest.java:104)
+
+FAILURES!!!
+Tests run: 110,  Failures: 2
+

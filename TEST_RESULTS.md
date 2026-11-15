@@ -1,4 +1,27 @@
+# Проверки 1.0.13.1-dev
+
+`applicationId` `app.gitteller.mobile`, `versionCode` 29, `versionName` 1.0.13.1-dev.
+
+Сертификат APK (apksigner): `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`. Совпадает с 1.0.6–1.0.13. Новый keystore не создавался.
+
+`aapt dump badging`: package `app.gitteller.mobile`, versionCode 29, versionName `1.0.13.1-dev`, minSdk 26, targetSdk 35, permission только `android.permission.INTERNET`, debuggable.
+
+В DEX есть строки «Открыть в GitHub», «Копировать только ссылку», «1.0.13.1-dev», `GithubLinks`.
+
+`tests-local/run.sh`: exit 0. `GithubLinksSmoke PASS=21` (15 случаев патча + отказ `%2e%2e`, user-info, порт, хвостовой слэш, чужой репозиторий, канонизация регистра хоста). Остальные host-проверки PASS, `PARSE OK: 33`.
+
+Gradle `:app:assembleDebug` после `clean --rerun-tasks`: **BUILD SUCCESSFUL**, 33 задачи выполнены. Первый прогон без `--rerun-tasks` пометил `compileDebugJavaWithJavac` как UP-TO-DATE при шуме `Unexpected type tag 71` — этот APK не передаётся. Передан только результат чистой пересборки.
+
+Gradle `:app:testDebugUnitTest`: **FAIL**, три прогона. Исполнитель тестов падает с `Unexpected type tag 71` / `Connection refused` до JUnit XML. Это известный сбой Gradle Test Executor в этой среде, не результат тестов.
+
+Прямой `org.junit.runner.JUnitCore` на тех же 15 классах, classpath `org.json` + junit + пустые конструкторы `Activity` (потому что `android.jar` кидает `Stub!`): **OK (110 tests)**. Два теста `GitTeller111RegressionTest`, которые создают `SectionActivity`, без пустого конструктора падают на `Stub!` ещё до `branchDelta`. Это ограничение запасного прогона, не отказ логики ссылок.
+
+Эмулятор и Samsung A52: **NOT_RUN**. Не `DEVICE_VERIFIED`. На A52 — `OWNER_PENDING`.
+
+Ошибка фильтра `author` в поиске GitHub в браузере не воспроизводилась здесь и не объявляется дефектом Intent. Приложение не добавляет query к открываемому URL.
+
 # Проверки 1.0.13-dev
+
 
 `applicationId` `app.gitteller.mobile`, `versionCode` 28, `versionName` 1.0.13-dev. Подпись сверяется `apksigner` по готовому APK. Ожидаемый сертификат `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`.
 

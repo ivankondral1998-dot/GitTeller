@@ -282,7 +282,7 @@ public final class SectionActivity extends Activity {
                 note("Открыто из поиска", bodyText);
             else note(happened, bodyText);
             String url=event.optString("url");
-            if(url.startsWith("https://github.com/")) technical("Ссылка\n"+url+"\nИдентификатор\n"+event.optString("id"));
+            if(url.startsWith("https://github.com/")) technical("Ссылка\n"+url+"\nИдентификатор\n"+event.optString("id"), url);
         }
         if(shown==0) note("Событий нет", "В этой ленте нет записей выбранного вида. Это не значит, что проект не менялся и что проблем нет.");
     }
@@ -440,7 +440,8 @@ public final class SectionActivity extends Activity {
         note("Источник", sourceLine());
         technical((pr?"Предложение №":"Задача №")+x.optInt("number")+"\nСостояние в GitHub: "+x.optString("state")
                 +(pr?"\nОтметка внесения: "+(x.optBoolean("merged", false)?"есть":"нет"):"")
-                +"\nЗаголовок\n"+title);
+                +"\nЗаголовок\n"+title,
+                GithubLinks.recordUrl(repo, pr ? "pull" : "issues", x.optInt("number")));
         loadExtra(pr ? "pull" : "issue", x.optInt("number"), null);
     }
     private void loadExtra(String kind, int number, String sha) {
@@ -490,7 +491,8 @@ public final class SectionActivity extends Activity {
                 :"GitHub, только чтение.";
         return kind+" Проект: "+repo+". Загрузка: "+HumanReport.humanDate(current.optLong("capturedAt",0))+".";
     }
-    private void technical(String value){
+    private void technical(String value){technical(value, null);}
+    private void technical(String value, String externalUrl){
         LinearLayout card=card();
         boolean developer=UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF, UiMode.NOVICE)));
         line(card,developer ? "Технические сведения" : "Технические детали скрыты",13,true,muted);gap(card,8);
@@ -508,6 +510,22 @@ public final class SectionActivity extends Activity {
             if(clipboard!=null) clipboard.setPrimaryClip(ClipData.newPlainText("GitTeller", value));
             toast("Скопировано");
         });
+        String safeUrl=GithubLinks.validatedRepoUrl(repo, externalUrl);
+        if(safeUrl!=null){
+            button(card,"Открыть в GitHub",()->{
+                try {
+                    Intent view=new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(safeUrl));
+                    startActivity(view);
+                } catch (Exception e) { toast("Браузер для ссылки недоступен"); }
+            });
+            button(card,"Копировать только ссылку",()->{
+                ClipboardManager clipboard=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
+                if(clipboard!=null){
+                    clipboard.setPrimaryClip(ClipData.newPlainText("GitHub URL", safeUrl));
+                    toast("Ссылка скопирована");
+                } else toast("Буфер обмена недоступен");
+            });
+        }
     }
     private void problems(){
         if(current==null){note("Нет данных","Сначала обновите проект.");return;}
@@ -609,7 +627,7 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.13-dev", "Два режима, поиск по сохранённым данным и правая панель. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.13.1-dev", "Два режима, поиск по сохранённым данным и правая панель. Ссылка GitHub открывается отдельной кнопкой и только на выбранный проект. Это не коммерческий релиз и не проверка готовности программы.");
         note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются на главном экране. Выбор сохраняется на устройстве. Права GitHub не меняются.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
@@ -623,7 +641,7 @@ public final class SectionActivity extends Activity {
         note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
     }
     private void about(){
-        note("GitTeller 1.0.13-dev", "Нативное чтение GitHub. versionCode 28. Это не коммерческий релиз и не приёмка на телефоне.");
+        note("GitTeller 1.0.13.1-dev", "Нативное чтение GitHub. versionCode 29. Это не коммерческий релиз и не приёмка на телефоне.");
         note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
         note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));

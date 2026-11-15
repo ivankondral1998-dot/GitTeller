@@ -1,4 +1,17 @@
+# 1.0.13.1-dev — требование, код, тест, результат
+
+| Требование | Где | Тест | Результат | Не проверено |
+| --- | --- | --- | --- | --- |
+| Отдельное открытие ссылки, не только текст | `SectionActivity.technical` | строки в APK; сценарий A52 | код и DEX | тап на A52 OWNER_PENDING |
+| URL только выбранного репозитория, без query/fragment/чужого хоста | `GithubLinks.validatedRepoUrl` | `GithubLinksSmoke` 21 PASS | host PASS | живой браузер NOT_RUN |
+| `%2e%2e` и `..` не открывают другой путь | `GithubLinks` | smoke, в том числе encoded traversal | host PASS | — |
+| Прежняя кнопка копирования технических сведений | `SectionActivity.technical` | чтение кода | кнопка осталась | — |
+| Тот же пакет, сертификат, TokenVault, снимки | `app/build.gradle`, Keystore не трогался | apksigner, versionCode 29 | сертификат совпал | установка поверх OWNER_PENDING |
+| Gradle unit tests | `:app:testDebugUnitTest` | штатный Gradle | FAIL: type tag 71, XML нет | — |
+| Те же 110 тестов запасным JUnit | `app/src/test` | JUnitCore + пустой Activity | OK 110 | это не Gradle и не A52 |
+
 # 1.0.13-dev — требование, код, тест, результат
+
 
 | Требование | Где | Тест | Результат | Не проверено |
 | --- | --- | --- | --- | --- |
