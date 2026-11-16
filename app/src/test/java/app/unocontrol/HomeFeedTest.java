@@ -37,6 +37,42 @@ public class HomeFeedTest {
         for (HomeFeed.Row row : rows) assertFalse(row.title.contains("closed one"));
     }
 
+    @Test public void newestPastTheArrayCapIsKept() throws Exception {
+        JSONArray issues = new JSONArray();
+        issues.put(openIssue(1, "old a", "2026-11-01T00:00:00Z"));
+        issues.put(openIssue(2, "old b", "2026-11-02T00:00:00Z"));
+        issues.put(openIssue(3, "old c", "2026-11-03T00:00:00Z"));
+        issues.put(openIssue(8, "fresh later", "2026-11-15T00:00:00Z"));
+        JSONArray pulls = new JSONArray();
+        pulls.put(openPull(10, "early open", "2026-11-01T00:00:00Z"));
+        pulls.put(openPull(11, "second open", "2026-11-02T00:00:00Z"));
+        pulls.put(openPull(12, "third open", "2026-11-03T00:00:00Z"));
+        pulls.put(new JSONObject().put("number", 20).put("title", "just landed").put("state", "closed").put("merged", true)
+                .put("merged_at", "2026-11-14T00:00:00Z").put("updated_at", "2026-11-14T00:00:00Z"));
+        JSONObject snap = new JSONObject().put("issues", issues).put("pulls", pulls);
+        List<HomeFeed.Row> rows = HomeFeed.latest(snap, HomeFeed.parseIso("2026-11-16T00:00:00Z"), 5);
+        boolean sawFresh = false;
+        boolean sawLanded = false;
+        boolean sawOld = false;
+        for (HomeFeed.Row row : rows) {
+            if (row.title.contains("fresh later")) sawFresh = true;
+            if (row.title.contains("just landed")) sawLanded = true;
+            if (row.title.contains("old a") || row.title.contains("early open")) sawOld = true;
+        }
+        assertTrue(sawFresh);
+        assertTrue(sawLanded);
+        assertFalse(sawOld);
+        assertTrue(rows.get(0).title.contains("fresh later"));
+    }
+
+    private static JSONObject openIssue(int number, String title, String updated) throws Exception {
+        return new JSONObject().put("number", number).put("title", title).put("state", "open").put("updated_at", updated);
+    }
+
+    private static JSONObject openPull(int number, String title, String updated) throws Exception {
+        return new JSONObject().put("number", number).put("title", title).put("state", "open").put("merged", false).put("updated_at", updated);
+    }
+
     @Test public void relativeTimeStaysShort() {
         long now = 10_000_000_000L;
         assertEquals("только что", HomeFeed.ago(now - 5_000L, now));

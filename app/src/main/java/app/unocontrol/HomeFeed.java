@@ -59,22 +59,22 @@ final class HomeFeed {
 
     private static void addCommits(List<Row> rows, JSONArray commits, long nowMs) {
         if (commits == null) return;
-        int taken = 0;
-        for (int i = 0; i < commits.length() && taken < 3; i++) {
+        List<Row> found = new ArrayList<>();
+        for (int i = 0; i < commits.length(); i++) {
             JSONObject row = commits.optJSONObject(i);
             if (row == null) continue;
             String message = firstLine(row.optString("message"));
             String title = message.isEmpty() ? "Запись без описания" : clip(message);
             long when = parseIso(row.optString("date"));
-            rows.add(new Row(title, join(who(row.optString("author")), ago(when, nowMs)), "commits", when));
-            taken++;
+            found.add(new Row(title, join(who(row.optString("author")), ago(when, nowMs)), "commits", when));
         }
+        keepNewest(rows, found, 3);
     }
 
     private static void addIssues(List<Row> rows, JSONArray issues, long nowMs) {
         if (issues == null) return;
-        int taken = 0;
-        for (int i = 0; i < issues.length() && taken < 3; i++) {
+        List<Row> found = new ArrayList<>();
+        for (int i = 0; i < issues.length(); i++) {
             JSONObject row = issues.optJSONObject(i);
             if (row == null || !"open".equals(row.optString("state"))) continue;
             String title = clip(row.optString("title").trim());
@@ -82,15 +82,15 @@ final class HomeFeed {
             int number = row.optInt("number", 0);
             String head = number > 0 ? "Задача #" + number + " · " + title : "Задача · " + title;
             long when = parseIso(row.optString("updated_at"));
-            rows.add(new Row(head, join("открыта", ago(when, nowMs)), "tasks", when));
-            taken++;
+            found.add(new Row(head, join("открыта", ago(when, nowMs)), "tasks", when));
         }
+        keepNewest(rows, found, 3);
     }
 
     private static void addPulls(List<Row> rows, JSONArray pulls, long nowMs) {
         if (pulls == null) return;
-        int taken = 0;
-        for (int i = 0; i < pulls.length() && taken < 3; i++) {
+        List<Row> found = new ArrayList<>();
+        for (int i = 0; i < pulls.length(); i++) {
             JSONObject row = pulls.optJSONObject(i);
             if (row == null) continue;
             boolean open = "open".equals(row.optString("state"));
@@ -105,9 +105,16 @@ final class HomeFeed {
                     ? row.optString("merged_at") : row.optString("updated_at");
             long when = parseIso(whenField);
             String state = merged ? "внесение не проверено на устройстве" : "ещё открыто";
-            rows.add(new Row(head, join(state, ago(when, nowMs)), "pulls", when));
-            taken++;
+            found.add(new Row(head, join(state, ago(when, nowMs)), "pulls", when));
         }
+        keepNewest(rows, found, 3);
+    }
+
+    /** Cap after time order. Snapshot arrays keep GitHub page order, which is not "newest first". */
+    private static void keepNewest(List<Row> into, List<Row> found, int cap) {
+        found.sort((a, b) -> Long.compare(b.when, a.when));
+        int n = Math.min(cap, found.size());
+        for (int i = 0; i < n; i++) into.add(found.get(i));
     }
 
     private static String who(String author) {
