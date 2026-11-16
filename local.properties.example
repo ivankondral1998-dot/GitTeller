@@ -1,0 +1,2 @@
+# Copy to local.properties. This file is gitignored.
+sdk.dir=/path/to/android-sdk

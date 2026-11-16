@@ -1,0 +1,6 @@
+*.apk binary
+*.zip binary
+*.png binary
+*.jpeg binary
+*.jpg binary
+gradlew text eol=lf
