@@ -393,6 +393,7 @@ public final class MainActivity extends Activity {
             start.addView(guide,lp(-1,-2));
         } else if (developerMode()) {
             developerDashboard(wrap);
+            recentStrip(wrap);
         } else {
             boolean has = true;
             boolean comparable = previous != null && !SnapshotCodec.isImported(current)
@@ -410,6 +411,7 @@ public final class MainActivity extends Activity {
                     ()->openPage("problems"), UiMode.reason("problems",has,comparable,complete));
             question(wrap,"Кто выполнял", HumanReport.ownerWho(current),
                     ()->openPage("commits"), UiMode.reason("who",has,comparable,complete));
+            recentStrip(wrap);
         }
         if (!loading && current != null) {
             addLine(wrap,HumanReport.ownerStatus(current,previous,summary),14,MUTED,false,0);
@@ -493,6 +495,29 @@ public final class MainActivity extends Activity {
         wrap.addView(footer,lp(-1,-2));
         reopenDrawer = false;
         if (keepDrawer) openDrawer(false);
+    }
+
+    private void recentStrip(LinearLayout parent) {
+        java.util.List<HomeFeed.Row> rows = HomeFeed.latest(current, System.currentTimeMillis(), 5);
+        if (rows.isEmpty()) return;
+        LinearLayout card = panel(parent);
+        addLine(card, "Свежее", 16, TEXT, true, 0);
+        addLine(card, "Из уже загруженного списка. Это не вся история и не проверка, что код работает.", 12, MUTED, false, 4);
+        for (HomeFeed.Row row : rows) {
+            TextView line = txt(row.title, 15, TEXT, false);
+            line.setMinHeight(dp(44));
+            line.setGravity(Gravity.CENTER_VERTICAL);
+            line.setContentDescription(row.title);
+            final String page = row.page;
+            line.setClickable(true);
+            line.setFocusable(true);
+            line.setOnClickListener(v -> openPage(page));
+            space(card, 8);
+            card.addView(line, lp(-1, -2));
+            if (row.meta != null && !row.meta.isEmpty()) {
+                addLine(card, row.meta, 12, MUTED, false, 0);
+            }
+        }
     }
 
     private void coverageStrip(LinearLayout parent) {
