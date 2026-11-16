@@ -349,7 +349,7 @@ public final class MainActivity extends Activity {
         head.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout brand=vertical();
         brand.addView(txt("GitTeller",17,TEXT,true));
-        addLine(brand,developerMode() ? "Анализ GitHub" : "GitHub простыми словами",12,MUTED,false,5);
+        addLine(brand,developerMode() ? "Анализ GitHub" : "Что сделали, без чтения кода",12,MUTED,false,5);
         head.addView(brand,new LinearLayout.LayoutParams(0,-2,1f));
         TextView search=txt("⌕",22,TEXT,false);
         search.setGravity(Gravity.CENTER);
@@ -369,20 +369,71 @@ public final class MainActivity extends Activity {
         head.addView(menu,lp(48,48));
         menu.setOnClickListener(v -> toggleDrawer());
         wrap.addView(head,lp(-1,-2));
-        space(wrap,16);
-        modePicker(wrap);
         space(wrap,18);
         addLine(wrap,developerMode() ? "Панель разработчика" : "Что происходит с проектом",22,TEXT,true,0);
         String shortRepo=repo.length()>48?repo.substring(0,45)+"…":repo;
         addLine(wrap,"Проект: "+shortRepo,18,TEXT,true,6);
         space(wrap,8);
-        coverageStrip(wrap);
 
         Summary summary=Summary.of(current,previous);
-        if (current != null && !loading) {
+        String step = HumanReport.nextStep(current,previous,summary,lastError);
+        if (loading) {
+            LinearLayout hero=panel(wrap);
+            addLine(hero,"Идёт чтение GitHub",20,TEXT,true,0);
+            addLine(hero,"Подождите. Старые сведения проекта пока не меняются.",16,TEXT,false,10);
+        } else if (current == null) {
+            LinearLayout start=panel(wrap);
+            addLine(start,"Здесь видно, что изменилось в проекте. Код читать не нужно. Приложение ничего в проекте не меняет.",15,TEXT,false,0);
+            TextView guide=txt("Как пользоваться",15,ACCENT,true);
+            guide.setMinHeight(dp(48));
+            guide.setGravity(Gravity.CENTER_VERTICAL);
+            guide.setContentDescription("Как пользоваться");
+            guide.setOnClickListener(v -> openPage("guide"));
+            space(start,8);
+            start.addView(guide,lp(-1,-2));
+        } else if (developerMode()) {
+            developerDashboard(wrap);
+        } else {
+            boolean has = true;
+            boolean comparable = previous != null && !SnapshotCodec.isImported(current)
+                    && !SnapshotCodec.isImported(previous)
+                    && current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
+            boolean complete = comparable && current.optBoolean("branchesComplete",false)
+                    && previous.optBoolean("branchesComplete",false)
+                    && current.optBoolean("issuesComplete",false) && previous.optBoolean("issuesComplete",false)
+                    && current.optBoolean("pullsComplete",false) && previous.optBoolean("pullsComplete",false);
+            question(wrap,"Что изменилось", HumanReport.ownerChanged(current,previous,summary),
+                    ()->openPage("changes"), UiMode.reason("changed",has,comparable,complete));
+            question(wrap,"Где работа", HumanReport.ownerWhere(current,previous),
+                    ()->openPage("branches"), UiMode.reason("where",has,comparable,complete));
+            question(wrap,"Какие проблемы", HumanReport.ownerProblems(current),
+                    ()->openPage("problems"), UiMode.reason("problems",has,comparable,complete));
+            question(wrap,"Кто выполнял", HumanReport.ownerWho(current),
+                    ()->openPage("commits"), UiMode.reason("who",has,comparable,complete));
+        }
+        if (!loading && current != null) {
             addLine(wrap,HumanReport.ownerStatus(current,previous,summary),14,MUTED,false,0);
             space(wrap,8);
         }
+        coverageStrip(wrap);
+        if (lastError != null && !loading) {
+            LinearLayout warn=panel(wrap);
+            addLine(warn,"Последняя попытка не удалась. "+lastError,14,WARN,false,0);
+        }
+        if (!loading && current != null && (current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
+                || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
+                || SnapshotCodec.isImported(current))) {
+            LinearLayout stale=panel(wrap);
+            addLine(stale,"Часть сведений с прошлой удачной загрузки или из файла.",14,WARN,false,0);
+            TextView why=txt("Почему данные неполные?",14,ACCENT,true);
+            why.setMinHeight(dp(48));
+            why.setGravity(Gravity.CENTER_VERTICAL);
+            why.setContentDescription("Почему данные неполные");
+            why.setOnClickListener(v -> openPage("incomplete"));
+            space(stale,6);
+            stale.addView(why,lp(-1,-2));
+        }
+
         refresh=new Button(this);
         refresh.setText(loading?"Обновление…":"Обновить");
         refresh.setAllCaps(false);
@@ -395,78 +446,17 @@ public final class MainActivity extends Activity {
         wrap.addView(refresh,lp(-1,56));
         refresh.setOnClickListener(v->sync());
         space(wrap,8);
-        Button switchProject=new Button(this);
-        switchProject.setText("Сменить проект");
-        switchProject.setAllCaps(false);
-        switchProject.setTextSize(15);
-        switchProject.setTextColor(TEXT);
-        switchProject.setBackground(shape(PANEL,15,STROKE));
-        switchProject.setContentDescription("Сменить репозиторий GitHub");
-        wrap.addView(switchProject,lp(-1,48));
-        switchProject.setOnClickListener(v->openPage("projects"));
-        space(wrap,8);
-        TextView connectLink=txt("Подключить проект или токен",14,ACCENT,false);
-        connectLink.setMinHeight(dp(48));
-        connectLink.setGravity(Gravity.CENTER_VERTICAL);
-        connectLink.setContentDescription("Подключить проект или токен");
-        connectLink.setOnClickListener(v->openPage("access"));
-        wrap.addView(connectLink,lp(-1,-2));
-        space(wrap,16);
-
-        String step = HumanReport.nextStep(current,previous,summary,lastError);
         if (current == null && !loading) {
-            LinearLayout start=panel(wrap);
-            addLine(start,"GitTeller читает проект на GitHub и говорит простыми словами, что там изменилось. Он ничего не меняет в проекте.",15,TEXT,false,0);
-            TextView guide=txt("Как пользоваться",15,ACCENT,true);
-            guide.setMinHeight(dp(48));
-            guide.setGravity(Gravity.CENTER_VERTICAL);
-            guide.setContentDescription("Как пользоваться");
-            guide.setOnClickListener(v -> openPage("guide"));
-            space(start,8);
-            start.addView(guide,lp(-1,-2));
-        }
-        if (loading) {
-            LinearLayout hero=panel(wrap);
-            addLine(hero,"Идёт чтение GitHub",20,TEXT,true,0);
-            addLine(hero,"Подождите. Старые сведения проекта пока не меняются.",16,TEXT,false,10);
-        } else {
-            if (developerMode()) {
-                developerDashboard(wrap);
-            } else {
-                boolean has = current != null;
-                boolean comparable = has && previous != null && !SnapshotCodec.isImported(current)
-                        && !SnapshotCodec.isImported(previous)
-                        && current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
-                boolean complete = comparable && current.optBoolean("branchesComplete",false)
-                        && previous.optBoolean("branchesComplete",false)
-                        && current.optBoolean("issuesComplete",false) && previous.optBoolean("issuesComplete",false)
-                        && current.optBoolean("pullsComplete",false) && previous.optBoolean("pullsComplete",false);
-                question(wrap,"Что изменилось", HumanReport.ownerChanged(current,previous,summary),
-                        ()->openPage("changes"), UiMode.reason("changed",has,comparable,complete));
-                question(wrap,"Где работа", HumanReport.ownerWhere(current,previous),
-                        ()->openPage("branches"), UiMode.reason("where",has,comparable,complete));
-                question(wrap,"Какие проблемы", HumanReport.ownerProblems(current),
-                        ()->openPage("problems"), UiMode.reason("problems",has,comparable,complete));
-                question(wrap,"Кто выполнял", HumanReport.ownerWho(current),
-                        ()->openPage("commits"), UiMode.reason("who",has,comparable,complete));
-            }
-            if (lastError != null) {
-                LinearLayout warn=panel(wrap);
-                addLine(warn,"Последняя попытка не удалась. "+lastError,14,WARN,false,0);
-            }
-            if (current != null && (current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
-                    || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
-                    || SnapshotCodec.isImported(current))) {
-                LinearLayout stale=panel(wrap);
-                addLine(stale,"Часть сведений с прошлой удачной загрузки или из файла.",14,WARN,false,0);
-                TextView why=txt("Почему данные неполные?",14,ACCENT,true);
-                why.setMinHeight(dp(48));
-                why.setGravity(Gravity.CENTER_VERTICAL);
-                why.setContentDescription("Почему данные неполные");
-                why.setOnClickListener(v -> openPage("incomplete"));
-                space(stale,6);
-                stale.addView(why,lp(-1,-2));
-            }
+            Button connect=new Button(this);
+            connect.setText("Подключить проект");
+            connect.setAllCaps(false);
+            connect.setTextSize(15);
+            connect.setTextColor(TEXT);
+            connect.setBackground(shape(PANEL,15,STROKE));
+            connect.setContentDescription("Подключить проект или токен");
+            wrap.addView(connect,lp(-1,48));
+            connect.setOnClickListener(v->openPage("access"));
+            space(wrap,8);
         }
         if (!loading && !"Повторить загрузку".equals(step)) {
             Button next=new Button(this);
@@ -483,8 +473,21 @@ public final class MainActivity extends Activity {
                 else if ("Открыть направления".equals(step)) openPage("branches");
                 else sync();
             });
+            space(wrap,8);
         }
-        space(wrap,14);
+        TextView switchProject=txt("Сменить проект",14,ACCENT,false);
+        switchProject.setMinHeight(dp(48));
+        switchProject.setGravity(Gravity.CENTER_VERTICAL);
+        switchProject.setContentDescription("Сменить репозиторий GitHub");
+        switchProject.setOnClickListener(v->openPage("projects"));
+        wrap.addView(switchProject,lp(-1,-2));
+        TextView connectLink=txt("Подключить проект или токен",14,MUTED,false);
+        connectLink.setMinHeight(dp(48));
+        connectLink.setGravity(Gravity.CENTER_VERTICAL);
+        connectLink.setContentDescription("Подключить проект или токен");
+        connectLink.setOnClickListener(v->openPage("access"));
+        if (current != null) wrap.addView(connectLink,lp(-1,-2));
+        space(wrap,8);
         TextView footer=txt("Чтение GitHub. Это не проверка готовности программы.",12,MUTED,false);
         footer.setGravity(Gravity.CENTER);
         wrap.addView(footer,lp(-1,-2));
@@ -496,9 +499,11 @@ public final class MainActivity extends Activity {
         LinearLayout card = panel(parent);
         addLine(card, "Что известно", 16, TEXT, true, 0);
         addLine(card, Coverage.compact(current, developerMode()), 14, MUTED, false, 8);
-        if (current != null) {
-            addLine(card, "Последняя запись снимка: " + formatTime(current.optLong("capturedAt", 0))
-                    + ". Само обновление не запускается.", 13, MUTED, false, 8);
+        if (current != null && developerMode()) {
+            addLine(card, "Обновлено вручную: " + formatTime(current.optLong("capturedAt", 0))
+                    + ". Само не запускается.", 13, MUTED, false, 8);
+        } else if (current != null) {
+            addLine(card, "Обновлено вручную: " + formatTime(current.optLong("capturedAt", 0)) + ".", 13, MUTED, false, 8);
         }
         TextView link = txt("Почему данные неполные?", 15, ACCENT, true);
         link.setMinHeight(dp(48));
@@ -562,6 +567,8 @@ public final class MainActivity extends Activity {
         close.setOnClickListener(v -> closeDrawer(motionMs() > 0));
         panel.addView(close, lp(-1, 48));
         addLine(panel, "GitTeller", 13, MUTED, false, 0);
+        space(panel, 8);
+        modePicker(panel);
         space(panel, 8);
         ScrollView list = new ScrollView(this);
         LinearLayout items = vertical();
