@@ -43,6 +43,7 @@ import java.text.DateFormat;
 import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /** Real Android views. No HTML, CSS or WebView. */
 public final class MainActivity extends Activity {
@@ -727,7 +728,7 @@ public final class MainActivity extends Activity {
     }
 
     private void syncNow(){
-        if(loading)return;
+        if(loading || isFinishing() || isDestroyed()) return;
         final int epoch=syncEpoch;
         final String selected=repo;
         final String access;
@@ -742,6 +743,7 @@ public final class MainActivity extends Activity {
             return;
         }
         loading=true;draw();
+        try {
         worker.execute(()->{
             GithubClient client=new GithubClient(access);
             inflight=client;
@@ -777,6 +779,9 @@ public final class MainActivity extends Activity {
                 if(inflight==client) inflight=null;
             }
         });
+        } catch (RejectedExecutionException ignored) {
+            loading = false;
+        }
     }
 
     private void exportBackup(){

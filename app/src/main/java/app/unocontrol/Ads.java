@@ -108,6 +108,7 @@ final class Ads {
                 done[0] = true;
                 showing = false;
                 interstitial = null;
+                if (!alive) return;
                 preload(activity);
                 if (onFinished != null) onFinished.run();
             };
@@ -134,11 +135,13 @@ final class Ads {
 
     void destroy() {
         alive = false;
+        try { if (interstitial != null) interstitial.setAdEventListener(null); } catch (Throwable ignored) {}
         try { if (banner != null) banner.destroy(); } catch (Throwable ignored) {}
         try { if (loader != null) loader.cancelLoading(); } catch (Throwable ignored) {}
         banner = null;
         interstitial = null;
         loader = null;
         loadingAd = false;
+        showing = false;
     }
 }
