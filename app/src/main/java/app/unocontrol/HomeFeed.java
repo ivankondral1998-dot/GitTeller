@@ -110,7 +110,7 @@ final class HomeFeed {
         keepNewest(rows, found, 3);
     }
 
-    /** Cap after time order. Snapshot arrays keep GitHub page order, which is not "newest first". */
+    /** Cap after time order. Snapshot arrays keep GitHub page order, which is not newest first. */
     private static void keepNewest(List<Row> into, List<Row> found, int cap) {
         found.sort((a, b) -> Long.compare(b.when, a.when));
         int n = Math.min(cap, found.size());

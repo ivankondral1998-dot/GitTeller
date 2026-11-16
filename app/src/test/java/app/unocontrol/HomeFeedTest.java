@@ -81,4 +81,21 @@ public class HomeFeedTest {
         assertEquals("2 д назад", HomeFeed.ago(now - 2L * 86_400_000L, now));
         assertEquals("", HomeFeed.ago(0L, now));
     }
+
+    @Test public void laterItemWinsThePerSourceCap() throws Exception {
+        JSONArray issues = new JSONArray();
+        issues.put(issue(1, "2026-01-01T00:00:00Z", "first old"));
+        issues.put(issue(2, "2026-01-02T00:00:00Z", "second old"));
+        issues.put(issue(3, "2026-01-03T00:00:00Z", "third old"));
+        issues.put(issue(8, "2026-11-16T00:00:00Z", "newest open"));
+        JSONObject snap = new JSONObject().put("issues", issues);
+        List<HomeFeed.Row> rows = HomeFeed.latest(snap, HomeFeed.parseIso("2026-11-17T00:00:00Z"), 5);
+        assertEquals(3, rows.size());
+        assertTrue(rows.get(0).title.contains("newest open"));
+        assertFalse(rows.get(2).title.contains("first old"));
+    }
+
+    private static JSONObject issue(int number, String at, String title) throws Exception {
+        return new JSONObject().put("number", number).put("title", title).put("state", "open").put("updated_at", at);
+    }
 }

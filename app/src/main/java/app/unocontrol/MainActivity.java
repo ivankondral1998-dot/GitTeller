@@ -18,6 +18,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -199,9 +200,9 @@ public final class MainActivity extends Activity {
     }
     private LinearLayout panel(LinearLayout parent){
         LinearLayout card=vertical();
-        card.setPadding(dp(18),dp(18),dp(18),dp(18));
-        card.setBackground(shape(PANEL,18,STROKE));
-        LinearLayout.LayoutParams p=lp(-1,-2);p.bottomMargin=dp(12);
+        card.setPadding(dp(14),dp(12),dp(14),dp(12));
+        card.setBackground(shape(PANEL,16,STROKE));
+        LinearLayout.LayoutParams p=lp(-1,-2);p.bottomMargin=dp(8);
         parent.addView(card,p);
         return card;
     }
@@ -247,11 +248,11 @@ public final class MainActivity extends Activity {
         addLine(card, body, 16, TEXT, false, 6);
         TextView more = txt("Подробнее ›", 14, MUTED, true);
         more.setContentDescription("Подробнее: " + title);
-        more.setPadding(0, dp(10), 0, dp(10));
+        more.setPadding(0, dp(6), 0, dp(4));
         more.setClickable(true);
         more.setFocusable(true);
         more.setOnClickListener(v -> open.run());
-        space(card, 12);
+        space(card, 6);
         card.addView(more, lp(-1,-2));
         if (reason != null) {
             TextView why = txt("Почему так?", 14, ACCENT, false);
@@ -266,9 +267,9 @@ public final class MainActivity extends Activity {
                 explanation.setVisibility(show ? View.VISIBLE : View.GONE);
                 why.setText(show ? "Скрыть объяснение" : "Почему так?");
             });
-            space(card, 10);
+            space(card, 4);
             card.addView(why, lp(-1,-2));
-            space(card, 8);
+            space(card, 4);
             card.addView(explanation, lp(-1,-2));
         }
     }
@@ -332,7 +333,7 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);
         scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
         LinearLayout wrap=vertical();
-        wrap.setPadding(dp(20),dp(22),dp(20),dp(34));
+        wrap.setPadding(dp(16),dp(14),dp(16),dp(24));
         scroll.addView(wrap);
         FrameLayout.LayoutParams scrollBox = new FrameLayout.LayoutParams(-1,-1);
         scrollBox.bottomMargin = bannerReady ? dp(56) : 0;
@@ -348,8 +349,9 @@ public final class MainActivity extends Activity {
         LinearLayout head=new LinearLayout(this);
         head.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout brand=vertical();
+        String shortRepo=repo.length()>42?repo.substring(0,39)+"…":repo;
         brand.addView(txt("GitTeller",17,TEXT,true));
-        addLine(brand,developerMode() ? "Анализ GitHub" : "Что сделали, без чтения кода",12,MUTED,false,5);
+        addLine(brand,shortRepo,13,MUTED,false,2);
         head.addView(brand,new LinearLayout.LayoutParams(0,-2,1f));
         TextView search=txt("⌕",22,TEXT,false);
         search.setGravity(Gravity.CENTER);
@@ -369,71 +371,34 @@ public final class MainActivity extends Activity {
         head.addView(menu,lp(48,48));
         menu.setOnClickListener(v -> toggleDrawer());
         wrap.addView(head,lp(-1,-2));
-        space(wrap,18);
-        addLine(wrap,developerMode() ? "Панель разработчика" : "Что происходит с проектом",22,TEXT,true,0);
-        String shortRepo=repo.length()>48?repo.substring(0,45)+"…":repo;
-        addLine(wrap,"Проект: "+shortRepo,18,TEXT,true,6);
-        space(wrap,8);
+        space(wrap,14);
 
         Summary summary=Summary.of(current,previous);
         String step = HumanReport.nextStep(current,previous,summary,lastError);
         if (loading) {
-            LinearLayout hero=panel(wrap);
-            addLine(hero,"Идёт чтение GitHub",20,TEXT,true,0);
-            addLine(hero,"Подождите. Старые сведения проекта пока не меняются.",16,TEXT,false,10);
+            addLine(wrap,"Идёт чтение GitHub. Старые сведения пока на месте.",14,MUTED,false,0);
+            space(wrap,8);
         } else if (current == null) {
             LinearLayout start=panel(wrap);
-            addLine(start,"Здесь видно, что изменилось в проекте. Код читать не нужно. Приложение ничего в проекте не меняет.",15,TEXT,false,0);
-            TextView guide=txt("Как пользоваться",15,ACCENT,true);
-            guide.setMinHeight(dp(48));
+            addLine(start,"Здесь видно, что изменилось в проекте. Код читать не нужно.",15,TEXT,false,0);
+            TextView guide=txt("Как пользоваться",14,ACCENT,true);
+            guide.setMinHeight(dp(44));
             guide.setGravity(Gravity.CENTER_VERTICAL);
             guide.setContentDescription("Как пользоваться");
             guide.setOnClickListener(v -> openPage("guide"));
-            space(start,8);
+            space(start,4);
             start.addView(guide,lp(-1,-2));
         } else if (developerMode()) {
             developerDashboard(wrap);
             recentStrip(wrap);
         } else {
-            boolean has = true;
-            boolean comparable = previous != null && !SnapshotCodec.isImported(current)
-                    && !SnapshotCodec.isImported(previous)
-                    && current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
-            boolean complete = comparable && current.optBoolean("branchesComplete",false)
-                    && previous.optBoolean("branchesComplete",false)
-                    && current.optBoolean("issuesComplete",false) && previous.optBoolean("issuesComplete",false)
-                    && current.optBoolean("pullsComplete",false) && previous.optBoolean("pullsComplete",false);
-            question(wrap,"Что изменилось", HumanReport.ownerChanged(current,previous,summary),
-                    ()->openPage("changes"), UiMode.reason("changed",has,comparable,complete));
-            question(wrap,"Где работа", HumanReport.ownerWhere(current,previous),
-                    ()->openPage("branches"), UiMode.reason("where",has,comparable,complete));
-            question(wrap,"Какие проблемы", HumanReport.ownerProblems(current),
-                    ()->openPage("problems"), UiMode.reason("problems",has,comparable,complete));
-            question(wrap,"Кто выполнял", HumanReport.ownerWho(current),
-                    ()->openPage("commits"), UiMode.reason("who",has,comparable,complete));
+            answerBoard(wrap, summary);
             recentStrip(wrap);
-        }
-        if (!loading && current != null) {
-            addLine(wrap,HumanReport.ownerStatus(current,previous,summary),14,MUTED,false,0);
-            space(wrap,8);
         }
         coverageStrip(wrap);
         if (lastError != null && !loading) {
-            LinearLayout warn=panel(wrap);
-            addLine(warn,"Последняя попытка не удалась. "+lastError,14,WARN,false,0);
-        }
-        if (!loading && current != null && (current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
-                || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
-                || SnapshotCodec.isImported(current))) {
-            LinearLayout stale=panel(wrap);
-            addLine(stale,"Часть сведений с прошлой удачной загрузки или из файла.",14,WARN,false,0);
-            TextView why=txt("Почему данные неполные?",14,ACCENT,true);
-            why.setMinHeight(dp(48));
-            why.setGravity(Gravity.CENTER_VERTICAL);
-            why.setContentDescription("Почему данные неполные");
-            why.setOnClickListener(v -> openPage("incomplete"));
-            space(stale,6);
-            stale.addView(why,lp(-1,-2));
+            addLine(wrap,"Последняя попытка не удалась. "+lastError,13,WARN,false,0);
+            space(wrap,8);
         }
 
         refresh=new Button(this);
@@ -442,101 +407,173 @@ public final class MainActivity extends Activity {
         refresh.setTextSize(16);
         refresh.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
         refresh.setTextColor(BG);
-        refresh.setBackground(shape(ACCENT,15,0));
+        refresh.setBackground(shape(ACCENT,14,0));
         refresh.setEnabled(!loading);
         refresh.setContentDescription("Обновить данные с GitHub");
-        wrap.addView(refresh,lp(-1,56));
+        wrap.addView(refresh,lp(-1,48));
         refresh.setOnClickListener(v->sync());
-        space(wrap,8);
-        if (current == null && !loading) {
-            Button connect=new Button(this);
-            connect.setText("Подключить проект");
-            connect.setAllCaps(false);
-            connect.setTextSize(15);
-            connect.setTextColor(TEXT);
-            connect.setBackground(shape(PANEL,15,STROKE));
-            connect.setContentDescription("Подключить проект или токен");
-            wrap.addView(connect,lp(-1,48));
-            connect.setOnClickListener(v->openPage("access"));
-            space(wrap,8);
+        if ("Посмотреть задачу".equals(step) && !loading) {
+            TextView task=txt("Посмотреть задачу",14,ACCENT,false);
+            task.setMinHeight(dp(44));
+            task.setGravity(Gravity.CENTER_VERTICAL);
+            task.setContentDescription("Посмотреть задачу");
+            task.setOnClickListener(v->openPage("tasks"));
+            wrap.addView(task,lp(-1,-2));
         }
-        if (!loading && !"Повторить загрузку".equals(step)) {
-            Button next=new Button(this);
-            next.setText(step);
-            next.setAllCaps(false);
-            next.setTextSize(15);
-            next.setTextColor(TEXT);
-            next.setBackground(shape(PANEL_2,15,STROKE));
-            wrap.addView(next,lp(-1,48));
-            next.setOnClickListener(v->{
-                if ("Посмотреть задачу".equals(step)) openPage("tasks");
-                else if ("Проверить доступ".equals(step)) openPage("access");
-                else if ("Открыть изменения".equals(step)) openPage("changes");
-                else if ("Открыть направления".equals(step)) openPage("branches");
-                else sync();
-            });
-            space(wrap,8);
-        }
+        LinearLayout links=new LinearLayout(this);
+        links.setOrientation(LinearLayout.HORIZONTAL);
         TextView switchProject=txt("Сменить проект",14,ACCENT,false);
-        switchProject.setMinHeight(dp(48));
+        switchProject.setMinHeight(dp(44));
         switchProject.setGravity(Gravity.CENTER_VERTICAL);
         switchProject.setContentDescription("Сменить репозиторий GitHub");
         switchProject.setOnClickListener(v->openPage("projects"));
-        wrap.addView(switchProject,lp(-1,-2));
-        TextView connectLink=txt("Подключить проект или токен",14,MUTED,false);
-        connectLink.setMinHeight(dp(48));
-        connectLink.setGravity(Gravity.CENTER_VERTICAL);
-        connectLink.setContentDescription("Подключить проект или токен");
-        connectLink.setOnClickListener(v->openPage("access"));
-        if (current != null) wrap.addView(connectLink,lp(-1,-2));
-        space(wrap,8);
-        TextView footer=txt("Чтение GitHub. Это не проверка готовности программы.",12,MUTED,false);
+        links.addView(switchProject, new LinearLayout.LayoutParams(0,-2,1f));
+        if (current == null && !loading) {
+            TextView connect=txt("Подключить",14,TEXT,true);
+            connect.setMinHeight(dp(44));
+            connect.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+            connect.setContentDescription("Подключить проект или токен");
+            connect.setOnClickListener(v->openPage("access"));
+            links.addView(connect, lp(-2,-2));
+        } else if (current != null) {
+            TextView connectLink=txt("Токен",14,MUTED,false);
+            connectLink.setMinHeight(dp(44));
+            connectLink.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+            connectLink.setContentDescription("Подключить проект или токен");
+            connectLink.setOnClickListener(v->openPage("access"));
+            links.addView(connectLink, lp(-2,-2));
+        }
+        wrap.addView(links,lp(-1,-2));
+        TextView footer=txt("Чтение GitHub. Это не проверка готовности.",12,MUTED,false);
         footer.setGravity(Gravity.CENTER);
         wrap.addView(footer,lp(-1,-2));
         reopenDrawer = false;
         if (keepDrawer) openDrawer(false);
     }
 
+    private void answerBoard(LinearLayout parent, Summary summary) {
+        boolean comparable = previous != null && !SnapshotCodec.isImported(current)
+                && !SnapshotCodec.isImported(previous)
+                && current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
+        boolean complete = comparable && current.optBoolean("branchesComplete", false)
+                && previous.optBoolean("branchesComplete", false)
+                && current.optBoolean("issuesComplete", false) && previous.optBoolean("issuesComplete", false)
+                && current.optBoolean("pullsComplete", false) && previous.optBoolean("pullsComplete", false);
+        LinearLayout card = panel(parent);
+        answerRow(card, "Что изменилось", HumanReport.ownerChanged(current, previous, summary),
+                () -> openPage("changes"), UiMode.reason("changed", true, comparable, complete), true);
+        answerRow(card, "Где работа", HumanReport.ownerWhere(current, previous),
+                () -> openPage("branches"), UiMode.reason("where", true, comparable, complete), true);
+        answerRow(card, "Какие проблемы", HumanReport.ownerProblems(current),
+                () -> openPage("problems"), UiMode.reason("problems", true, comparable, complete), true);
+        answerRow(card, "Кто выполнял", HumanReport.ownerWho(current),
+                () -> openPage("commits"), UiMode.reason("who", true, comparable, complete), false);
+    }
+
+    private void answerRow(LinearLayout card, String title, String body, Runnable open, String reason, boolean divider) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(44));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setContentDescription(title);
+        row.setOnClickListener(v -> open.run());
+        TextView name = txt(title, 15, TEXT, true);
+        name.setMaxLines(1);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+        row.addView(txt("›", 18, MUTED, false), lp(-2, -2));
+        card.addView(row, lp(-1, -2));
+        if (body != null && !body.isEmpty()) {
+            TextView line = txt(body, 13, MUTED, false);
+            line.setMaxLines(2);
+            line.setEllipsize(TextUtils.TruncateAt.END);
+            card.addView(line, lp(-1, -2));
+        }
+        if (reason != null && !reason.isEmpty()) {
+            TextView why = txt("Почему так?", 12, ACCENT, false);
+            why.setMinHeight(dp(32));
+            why.setGravity(Gravity.CENTER_VERTICAL);
+            why.setClickable(true);
+            why.setFocusable(true);
+            why.setContentDescription("Объяснить основание вывода: " + title);
+            TextView explanation = txt(reason, 13, MUTED, false);
+            explanation.setVisibility(View.GONE);
+            why.setOnClickListener(v -> {
+                boolean show = explanation.getVisibility() != View.VISIBLE;
+                explanation.setVisibility(show ? View.VISIBLE : View.GONE);
+                why.setText(show ? "Скрыть" : "Почему так?");
+            });
+            card.addView(why, lp(-1, -2));
+            card.addView(explanation, lp(-1, -2));
+        }
+        if (divider) {
+            View line = new View(this);
+            line.setBackgroundColor(STROKE);
+            LinearLayout.LayoutParams rule = new LinearLayout.LayoutParams(-1, Math.max(1, dp(1)));
+            rule.topMargin = dp(8);
+            rule.bottomMargin = dp(8);
+            card.addView(line, rule);
+        }
+    }
+
     private void recentStrip(LinearLayout parent) {
         java.util.List<HomeFeed.Row> rows = HomeFeed.latest(current, System.currentTimeMillis(), 5);
         if (rows.isEmpty()) return;
         LinearLayout card = panel(parent);
-        addLine(card, "Свежее", 16, TEXT, true, 0);
-        addLine(card, "Из уже загруженного списка. Это не вся история и не проверка, что код работает.", 12, MUTED, false, 4);
+        addLine(card, "Свежее", 15, TEXT, true, 0);
         for (HomeFeed.Row row : rows) {
-            TextView line = txt(row.title, 15, TEXT, false);
-            line.setMinHeight(dp(44));
-            line.setGravity(Gravity.CENTER_VERTICAL);
-            line.setContentDescription(row.title);
+            LinearLayout block = vertical();
+            block.setMinimumHeight(dp(44));
+            block.setClickable(true);
+            block.setFocusable(true);
+            String desc = row.meta == null || row.meta.isEmpty() ? row.title : row.title + ". " + row.meta;
+            block.setContentDescription(desc);
             final String page = row.page;
-            line.setClickable(true);
-            line.setFocusable(true);
-            line.setOnClickListener(v -> openPage(page));
-            space(card, 8);
-            card.addView(line, lp(-1, -2));
+            block.setOnClickListener(v -> openPage(page));
+            TextView title = txt(row.title, 14, TEXT, false);
+            title.setMaxLines(1);
+            title.setEllipsize(TextUtils.TruncateAt.END);
+            block.addView(title, lp(-1, -2));
             if (row.meta != null && !row.meta.isEmpty()) {
-                addLine(card, row.meta, 12, MUTED, false, 0);
+                TextView meta = txt(row.meta, 12, MUTED, false);
+                meta.setMaxLines(1);
+                meta.setEllipsize(TextUtils.TruncateAt.END);
+                block.addView(meta, lp(-1, -2));
             }
+            space(card, 6);
+            card.addView(block, lp(-1, -2));
         }
+        addLine(card, "Не вся история.", 12, MUTED, false, 6);
     }
 
     private void coverageStrip(LinearLayout parent) {
         LinearLayout card = panel(parent);
-        addLine(card, "Что известно", 16, TEXT, true, 0);
-        addLine(card, Coverage.compact(current, developerMode()), 14, MUTED, false, 8);
-        if (current != null && developerMode()) {
-            addLine(card, "Обновлено вручную: " + formatTime(current.optLong("capturedAt", 0))
-                    + ". Само не запускается.", 13, MUTED, false, 8);
-        } else if (current != null) {
-            addLine(card, "Обновлено вручную: " + formatTime(current.optLong("capturedAt", 0)) + ".", 13, MUTED, false, 8);
+        addLine(card, "Что известно", 15, TEXT, true, 0);
+        TextView known = txt(Coverage.compact(current, developerMode()), 13, MUTED, false);
+        space(card, 6);
+        card.addView(known, lp(-1, -2));
+        if (current != null) {
+            addLine(card, "Обновлено вручную: " + formatTime(current.optLong("capturedAt", 0)) + ".", 12, MUTED, false, 6);
         }
-        TextView link = txt("Почему данные неполные?", 15, ACCENT, true);
-        link.setMinHeight(dp(48));
+        if (snapshotAged()) {
+            addLine(card, "Часть сведений с прошлой загрузки или из файла.", 13, WARN, false, 6);
+        }
+        TextView link = txt("Почему данные неполные?", 14, ACCENT, true);
+        link.setMinHeight(dp(40));
         link.setGravity(Gravity.CENTER_VERTICAL);
         link.setContentDescription("Почему данные неполные");
         link.setOnClickListener(v -> openPage("incomplete"));
-        space(card, 4);
+        space(card, 2);
         card.addView(link, lp(-1, -2));
+    }
+
+    private boolean snapshotAged() {
+        if (current == null || loading) return false;
+        return current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
+                || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
+                || SnapshotCodec.isImported(current);
     }
 
     private static String formatTime(long millis){

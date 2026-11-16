@@ -13,6 +13,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -97,15 +98,22 @@ public final class SectionActivity extends Activity {
         TextView t=text(v,size,strong,color);l.addView(t,lp(-1,-2));return t;
     }
     private LinearLayout card(){
-        LinearLayout l=col();l.setPadding(dp(17),dp(18),dp(17),dp(18));
-        l.setBackground(background(panel));LinearLayout.LayoutParams p=lp(-1,-2);p.bottomMargin=dp(13);
+        LinearLayout l=col();l.setPadding(dp(14),dp(12),dp(14),dp(12));
+        l.setBackground(background(panel));LinearLayout.LayoutParams p=lp(-1,-2);p.bottomMargin=dp(8);
         body.addView(l,p);return l;
     }
     private void note(String title,String description) {
-        LinearLayout card=card();line(card,title,17,true,ink);gap(card,10);line(card,description,15,false,muted);
+        LinearLayout card=card();line(card,title,15,true,ink);gap(card,4);line(card,description,14,false,muted);
     }
     private void action(String title,String subtitle,Runnable run) {
-        LinearLayout b=card();line(b,title+"   ›",17,true,ink);gap(b,7);line(b,subtitle,14,false,muted);
+        LinearLayout b=card();
+        TextView titleView=line(b,title+"   ›",15,true,ink);
+        titleView.setMaxLines(2);
+        titleView.setEllipsize(TextUtils.TruncateAt.END);
+        gap(b,4);
+        TextView sub=line(b,subtitle,13,false,muted);
+        sub.setMaxLines(3);
+        sub.setEllipsize(TextUtils.TruncateAt.END);
         b.setContentDescription(title+". "+subtitle);b.setClickable(true);b.setFocusable(true);b.setOnClickListener(v->run.run());
     }
     private void go(String name){Intent i=new Intent(this,SectionActivity.class);i.putExtra("page",name);startActivity(i);}
@@ -140,16 +148,16 @@ public final class SectionActivity extends Activity {
         LinearLayout root=col();root.setBackgroundColor(bg);
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(12),dp(14),dp(12),dp(12));
-        TextView back=text("‹",34,false,ink);back.setGravity(Gravity.CENTER);
+        TextView back=text("‹",22,false,ink);back.setGravity(Gravity.CENTER);
         back.setContentDescription("Назад");back.setClickable(true);back.setFocusable(true);
         back.setOnClickListener(v->finish());header.addView(back,lp(48,48));
         TextView h=text(title(),18,true,ink);h.setPadding(dp(8),0,0,0);
         header.addView(h,new LinearLayout.LayoutParams(0,-2,1f));
         root.addView(header,lp(-1,-2));
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
-        body=col();body.setPadding(dp(18),dp(8),dp(18),dp(28));scroll.addView(body);
+        body=col();body.setPadding(dp(16),dp(4),dp(16),dp(20));scroll.addView(body);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));setContentView(root);
-        line(body,"Проект: "+repo,15,true,ink);gap(body,10);
+        TextView project=line(body,repo,13,false,muted);project.setMaxLines(1);project.setEllipsize(TextUtils.TruncateAt.END);gap(body,8);
         switch(page) {
             case "overview":overview();break;
             case "changes":changes();break;
@@ -636,7 +644,7 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.16-dev", "На главном четыре ответа и короткая лента «Свежее» из уже загруженного. Подробный режим в правой панели. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.17-dev", "Главный экран короче: четыре ответа и лента «Свежее» в одном списке. Подробный режим в правой панели. Это не коммерческий релиз и не проверка готовности программы.");
         note("Реклама", "Реклама Яндекса. Баннер внизу. Большой ролик не чаще раза в час при «Обновить». Если реклама не загрузилась, обновление всё равно выполняется.");
         note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются в правой панели. На главном по умолчанию простой вид: четыре ответа. Подробности не удалены, они в панели. Выбор сохраняется на устройстве. Права GitHub не меняются.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
@@ -651,7 +659,7 @@ public final class SectionActivity extends Activity {
         note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
     }
     private void about(){
-        note("GitTeller 1.0.16-dev", "Нативное чтение GitHub. versionCode 32. Это не коммерческий релиз и не приёмка на телефоне.");
+        note("GitTeller 1.0.17-dev", "Нативное чтение GitHub. versionCode 33. Это не коммерческий релиз и не приёмка на телефоне.");
         note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
         note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
