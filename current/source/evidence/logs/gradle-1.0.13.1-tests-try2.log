@@ -1,0 +1,103 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.9/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Unable to receive command from client socket connection from /127.0.0.1:45463 to /127.0.0.1:41242. Discarding connection.
+org.gradle.internal.remote.internal.MessageIOException: Could not read message from '/127.0.0.1:41242'.
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:99)
+	at org.gradle.launcher.daemon.server.SynchronizedDispatchConnection.receive(SynchronizedDispatchConnection.java:70)
+	at org.gradle.launcher.daemon.server.DefaultDaemonConnection$1.run(DefaultDaemonConnection.java:74)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.lang.IllegalArgumentException: Unexpected type tag 71 found.
+	at org.gradle.internal.serialize.DefaultSerializerRegistry$TaggedTypeSerializer.read(DefaultSerializerRegistry.java:162)
+	at org.gradle.internal.serialize.Serializers$StatefulSerializerAdapter$1.read(Serializers.java:36)
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:86)
+	... 7 more
+Unable to receive command from client socket connection from /127.0.0.1:45463 to /127.0.0.1:36180. Discarding connection.
+org.gradle.internal.remote.internal.MessageIOException: Could not read message from '/127.0.0.1:36180'.
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:99)
+	at org.gradle.launcher.daemon.server.SynchronizedDispatchConnection.receive(SynchronizedDispatchConnection.java:70)
+	at org.gradle.launcher.daemon.server.DefaultDaemonConnection$1.run(DefaultDaemonConnection.java:74)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.lang.IllegalArgumentException: Unexpected type tag 71 found.
+	at org.gradle.internal.serialize.DefaultSerializerRegistry$TaggedTypeSerializer.read(DefaultSerializerRegistry.java:162)
+	at org.gradle.internal.serialize.Serializers$StatefulSerializerAdapter$1.read(Serializers.java:36)
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:86)
+	... 7 more
+Unable to receive command from client socket connection from /127.0.0.1:45463 to /127.0.0.1:36190. Discarding connection.
+org.gradle.internal.remote.internal.MessageIOException: Could not read message from '/127.0.0.1:36190'.
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:99)
+	at org.gradle.launcher.daemon.server.SynchronizedDispatchConnection.receive(SynchronizedDispatchConnection.java:70)
+	at org.gradle.launcher.daemon.server.DefaultDaemonConnection$1.run(DefaultDaemonConnection.java:74)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.lang.IllegalArgumentException: Unexpected type tag 71 found.
+	at org.gradle.internal.serialize.DefaultSerializerRegistry$TaggedTypeSerializer.read(DefaultSerializerRegistry.java:162)
+	at org.gradle.internal.serialize.Serializers$StatefulSerializerAdapter$1.read(Serializers.java:36)
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:86)
+	... 7 more
+Unable to receive command from client socket connection from /127.0.0.1:45463 to /127.0.0.1:36196. Discarding connection.
+org.gradle.internal.remote.internal.MessageIOException: Could not read message from '/127.0.0.1:36196'.
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:99)
+	at org.gradle.launcher.daemon.server.SynchronizedDispatchConnection.receive(SynchronizedDispatchConnection.java:70)
+	at org.gradle.launcher.daemon.server.DefaultDaemonConnection$1.run(DefaultDaemonConnection.java:74)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.lang.IllegalArgumentException: Unexpected type tag 71 found.
+	at org.gradle.internal.serialize.DefaultSerializerRegistry$TaggedTypeSerializer.read(DefaultSerializerRegistry.java:162)
+	at org.gradle.internal.serialize.Serializers$StatefulSerializerAdapter$1.read(Serializers.java:36)
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:86)
+	... 7 more
+Unable to receive command from client socket connection from /127.0.0.1:45463 to /127.0.0.1:36200. Discarding connection.
+org.gradle.internal.remote.internal.MessageIOException: Could not read message from '/127.0.0.1:36200'.
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:99)
+	at org.gradle.launcher.daemon.server.SynchronizedDispatchConnection.receive(SynchronizedDispatchConnection.java:70)
+	at org.gradle.launcher.daemon.server.DefaultDaemonConnection$1.run(DefaultDaemonConnection.java:74)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.lang.IllegalArgumentException: Unexpected type tag 71 found.
+	at org.gradle.internal.serialize.DefaultSerializerRegistry$TaggedTypeSerializer.read(DefaultSerializerRegistry.java:162)
+	at org.gradle.internal.serialize.Serializers$StatefulSerializerAdapter$1.read(Serializers.java:36)
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:86)
+	... 7 more
+Unable to receive command from client socket connection from /127.0.0.1:45463 to /127.0.0.1:36210. Discarding connection.
+org.gradle.internal.remote.internal.MessageIOException: Could not read message from '/127.0.0.1:36210'.
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:99)
+	at org.gradle.launcher.daemon.server.SynchronizedDispatchConnection.receive(SynchronizedDispatchConnection.java:70)
+	at org.gradle.launcher.daemon.server.DefaultDaemonConnection$1.run(DefaultDaemonConnection.java:74)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.lang.IllegalArgumentException: Unexpected type tag 71 found.
+	at org.gradle.internal.serialize.DefaultSerializerRegistry$TaggedTypeSerializer.read(DefaultSerializerRegistry.java:162)
+	at org.gradle.internal.serialize.Serializers$StatefulSerializerAdapter$1.read(Serializers.java:36)
+	at org.gradle.internal.remote.internal.inet.SocketConnection.receive(SocketConnection.java:86)
+	... 7 more
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Gradle build daemon has been stopped: stop command received
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.

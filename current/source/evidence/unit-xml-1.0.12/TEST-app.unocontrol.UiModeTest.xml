@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.unocontrol.UiModeTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-11-14T20:19:11" hostname="hds-6qxepf369j9c" time="0.001">
+  <properties/>
+  <testcase name="unknownModeStaysNoviceAndReasonsDoNotInventProof" classname="app.unocontrol.UiModeTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

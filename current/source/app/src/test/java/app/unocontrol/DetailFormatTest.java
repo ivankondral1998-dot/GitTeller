@@ -1,0 +1,55 @@
+package app.unocontrol;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.junit.Test;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class DetailFormatTest {
+    @Test public void issueTextIsNotAPassingTest() throws Exception {
+        JSONObject issue = new JSONObject().put("body", "Нужно починить вход").put("labels",
+                new JSONArray().put(new JSONObject().put("name", "bug")));
+        String text = GithubClient.formatIssue(issue).text;
+        assertTrue(text.contains("Нужно починить вход"));
+        assertTrue(text.contains("bug"));
+        assertTrue(text.contains("Проверка работоспособности отсутствует"));
+        assertFalse(text.contains("PASS"));
+    }
+
+    @Test public void closedPullWithoutMergedFlagIsNotMerged() throws Exception {
+        JSONObject pull = new JSONObject().put("merged", false).put("state", "closed").put("body", "");
+        String text = GithubClient.formatPull(pull, new JSONArray(), false, null,
+                "Проверок GitHub в ответе нет. Проверка работоспособности отсутствует.").text;
+        assertTrue(text.contains("не сообщает"));
+        assertFalse(text.toLowerCase().contains("слито ("));
+        assertTrue(text.contains("нет изменённых файлов") || text.contains("Файлы"));
+    }
+
+    @Test public void neutralAndSkippedAreNotCalledSuccessful() throws Exception {
+        JSONArray checks = new JSONArray().put(new JSONObject().put("conclusion", "success"))
+            .put(new JSONObject().put("conclusion", "neutral"))
+            .put(new JSONObject().put("conclusion", "skipped"));
+        String text = GithubClient.formatChecks(new JSONObject().put("total_count", 3).put("check_runs", checks));
+        assertTrue(text.contains("1 с результатом success"));
+        assertTrue(text.contains("2 пропущенных или нейтральных"));
+        assertFalse(text.contains("3 без замечаний"));
+    }
+
+    @Test public void incompleteCommitFileListIsLabeled() throws Exception {
+        JSONObject commit = new JSONObject().put("files", new JSONArray()
+                .put(new JSONObject().put("filename", "Main.java").put("status", "modified")));
+        String text = GithubClient.formatCommit(commit, "Проверок в ответе нет.", true).text;
+        assertTrue(text.contains("Main.java"));
+        assertTrue(text.contains("список неполный"));
+    }
+
+    @Test public void failedCheckIsNotHidden() throws Exception {
+        JSONObject runs = new JSONObject().put("total_count", 1).put("check_runs", new JSONArray()
+                .put(new JSONObject().put("name", "build").put("conclusion", "failure").put("status", "completed")));
+        String text = GithubClient.formatChecks(runs);
+        assertTrue(text.contains("1 с ошибкой"));
+        assertFalse(text.contains("PASS"));
+    }
+}

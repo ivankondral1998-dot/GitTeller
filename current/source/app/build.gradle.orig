@@ -1,0 +1,43 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'app.unocontrol'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'app.gitteller.mobile'
+        minSdk 26
+        targetSdk 35
+        versionCode 26
+        versionName '1.0.11-dev'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    def originalDebug = file("${System.getProperty('user.home')}/.android/debug.keystore")
+    if (!originalDebug.isFile()) {
+        throw new GradleException("Original debug keystore is missing. A new key will not be created.")
+    }
+    signingConfigs {
+        debug {
+            storeFile originalDebug
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.debug }
+        release { minifyEnabled false }
+    }
+    testOptions { unitTests.returnDefaultValues = true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    testImplementation "junit:junit:4.13.2"
+    // Android org.json in the local test JVM is a method-stub; use the actual JSON library for unit tests.
+    testImplementation "org.json:json:20240303"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "androidx.test:runner:1.6.2"
+}

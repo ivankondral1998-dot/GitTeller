@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.unocontrol.GithubStatusTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-11-14T20:19:11" hostname="hds-6qxepf369j9c" time="0.01">
+  <properties/>
+  <testcase name="nextPageIsDetectedAndADeadLinkIsNot" classname="app.unocontrol.GithubStatusTest" time="0.005"/>
+  <testcase name="tooManyRequestsIsRateLimit" classname="app.unocontrol.GithubStatusTest" time="0.0"/>
+  <testcase name="forbiddenIsNotARateLimitUnlessRemainingIsZero" classname="app.unocontrol.GithubStatusTest" time="0.0"/>
+  <testcase name="otherStatusDoesNotInventSuccess" classname="app.unocontrol.GithubStatusTest" time="0.001"/>
+  <testcase name="rateLimitIsNotRetried" classname="app.unocontrol.GithubStatusTest" time="0.0"/>
+  <testcase name="retryAfterOn403IsALimitNotABadToken" classname="app.unocontrol.GithubStatusTest" time="0.001"/>
+  <testcase name="apiRateMessageIsALimit" classname="app.unocontrol.GithubStatusTest" time="0.0"/>
+  <testcase name="forbiddenWithZeroRemainingIsRateLimit" classname="app.unocontrol.GithubStatusTest" time="0.0"/>
+  <testcase name="unauthorizedKeepsOldDataWording" classname="app.unocontrol.GithubStatusTest" time="0.0"/>
+  <testcase name="missingRepoIs404" classname="app.unocontrol.GithubStatusTest" time="0.0"/>
+  <testcase name="permissionTextDoesNotDeleteTheToken" classname="app.unocontrol.GithubStatusTest" time="0.001"/>
+  <testcase name="continuationStaysInsideTheSameRepository" classname="app.unocontrol.GithubStatusTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

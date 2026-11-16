@@ -1,0 +1,1801 @@
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/CHANGELOG.md /workspace/gitteller/CHANGELOG.md
+--- /tmp/gt112base/gitteller/CHANGELOG.md	2026-11-14 20:18:12.000000000 +0000
++++ /workspace/gitteller/CHANGELOG.md	2026-11-15 21:07:05.396754409 +0000
+@@ -1,7 +1,15 @@
+ # Changelog
+ 
++## 1.0.13-dev (versionCode 28)
++
++- Поиск по уже сохранённым данным активного проекта в обоих режимах. Кнопка на главном и пункт панели. Запрос не ходит в GitHub. Пустой ответ не означает, что на GitHub ничего нет. Запись открывается по ключу снимка, а не только по позиции.
++- Системное меню ⋮ заменено правой панелью: затемнение, размытие фона на Android 12+, запасной затемнённый фон на старых версиях. Закрытие фоном, кнопкой, смахиванием и Back. Back сначала закрывает панель.
++- Экран «Почему данные неполные?» и короткий блок «Что известно» на главном. Один классификатор: граница запроса, выборка из 12 коммитов, предел страниц, обрыв страницы, прошлый список, ответ 304, ошибка доступа, незапрошенное, непроверенные CI, импорт и неизвестное. Обычный 403 не объявляется доказанной нехваткой прав.
++- Автообновление при запуске не добавлялось. Токен, снимки и `display_mode` не переписываются.
++
+ ## 1.0.12-dev (versionCode 27)
+ 
++
+ - На главном два режима одних и тех же данных: «Режим чайника» и «Режим разработчика». Выбор пишется в `gitteller_v1` ключом `display_mode`. По умолчанию режим чайника. Неизвестный ключ тоже остаётся режимом чайника. Токен и снимки не трогаются.
+ - В режиме чайника прежние четыре ответа. «Подробнее» открывает раздел. «Почему так?» показывает правило вывода и не называет коммит проверкой, задачу дефектом или автора работающим агентом.
+ - В режиме разработчика — сводка веток, ленты, задач, PR, проверок и выборочной истории. Частичный, устаревший и импортированный снимок подписаны. Новых запросов GitHub нет.
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/MATRIX.md /workspace/gitteller/MATRIX.md
+--- /tmp/gt112base/gitteller/MATRIX.md	1970-01-01 00:00:00.000000000 +0000
++++ /workspace/gitteller/MATRIX.md	2026-11-15 21:07:22.872755165 +0000
+@@ -0,0 +1,15 @@
++# 1.0.13-dev — требование, код, тест, результат
++
++| Требование | Где | Тест | Результат | Не проверено |
++| --- | --- | --- | --- | --- |
++| Поиск по сохранённым данным, без запроса на каждый символ | `ProjectSearch`, кнопка на главном, `SectionActivity.search` | `ProjectSearchTest`, `CoverageSearchSmoke` | host PASS | клавиатура и вёрстка на A52 |
++| Кириллица, `fix/`, `#6`, префикс SHA, дубликаты, нет поля, >100 | `ProjectSearch.find` | `ProjectSearchTest` | host PASS | визуальный перенос длинных имён |
++| Пустой запрос и «нет совпадений» не говорят «на GitHub нет» | `ProjectSearch.emptyHint/noMatch` | те же | host PASS | — |
++| Открытие записи по ключу, а не чужой строки после смены снимка | `SectionActivity.at` | поиск отдаёт `key`; экран при чужом ключе возвращает «не найдена» | логика в коде, отдельного Android-теста нет | тап на A52 |
++| Правая панель вместо `PopupMenu`, Back не выходит из приложения | `MainActivity.openDrawer`, `DrawerMotion` | `DrawerMotionTest` | host PASS для двойного открытия и Back | анимация, размытие, свайп, поворот, тема, шрифт: NOT_RUN |
++| Размытие фона на API 31+, без него — затемнение | `MainActivity.setBlur` | нет прибора | код есть | A52 и эмулятор NOT_RUN |
++| Почему данные неполные, один классификатор | `Coverage`, экран `incomplete`, блок «Что известно» | `CoverageTest` | host PASS | чтение экрана глазами |
++| 401/403/429/таймаут не смешиваются; голый 403 не доказанная нехватка прав | `Coverage.http` | `CoverageTest.httpCodesAreNotMerged` | host PASS | живой ответ GitHub NOT_RUN |
++| Полный список, 12 коммитов, предел страниц, обрыв, stale, 304, импорт, старая схема, checks не PASS | `Coverage` | `CoverageTest`, `CoverageSearchSmoke` | host PASS | — |
++| Совместимость 1.0.12: пакет, токен, снимки, режим | versionCode 28, Keystore и prefs не мигрируют разрушающе | сборка и сертификат APK | подпись совпала | установка поверх на A52: OWNER_PENDING |
++| Gradle и локальные тесты | `testDebugUnitTest`, `tests-local/run.sh` | см. `TEST_RESULTS.md` | try1 compile/type tag; try2 1 падение текста; try3 обрыв исполнителя; try4 110/110 exit 0 | эмулятор NOT_RUN |
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/README.md /workspace/gitteller/README.md
+--- /tmp/gt112base/gitteller/README.md	2026-11-14 20:18:15.000000000 +0000
++++ /workspace/gitteller/README.md	2026-11-15 21:07:08.676754551 +0000
+@@ -1,10 +1,10 @@
+-# GitTeller 1.0.12-dev
++# GitTeller 1.0.13-dev
+ 
+ Нативное Android-приложение. Не коммерческий релиз и не приёмка на устройстве.
+ 
+-`applicationId` — `app.gitteller.mobile`, `versionCode` — 27, `versionName` — `1.0.12-dev`. Этот APK подписан исходным debug-ключом 1.0.6–1.0.11 (`67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`). См. [UPDATE.md](UPDATE.md).
++`applicationId` — `app.gitteller.mobile`, `versionCode` — 28, `versionName` — `1.0.13-dev`. Подпись — исходный debug-ключ 1.0.6–1.0.12. Контрольная SHA-256 сертификата `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef` сверяется по готовому APK. См. [UPDATE.md](UPDATE.md).
+ 
+-На главном два режима: «Режим чайника» и «Режим разработчика». Оба читают один снимок. Режим чайника отвечает на четыре вопроса и объясняет правило вывода. Режим разработчика показывает покрытие списков. Это не проверка готовности.
++На главном: два режима, поиск по сохранённым данным, блок «Что известно» и правая панель. Экран «Почему данные неполные?» объясняет только то, что записано в снимке.
+ 
+ ```bash
+ gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/REMAINING.md /workspace/gitteller/REMAINING.md
+--- /tmp/gt112base/gitteller/REMAINING.md	2026-11-14 20:19:41.000000000 +0000
++++ /workspace/gitteller/REMAINING.md	2026-11-15 21:07:32.196755568 +0000
+@@ -1,5 +1,13 @@
++# Что не доказано в 1.0.13-dev
++
++1. Samsung A52: **OWNER_PENDING**, не `DEVICE_VERIFIED`. Ставить поверх 1.0.12, токен не присылать.
++2. Эмулятор: панель, размытие, свайп, поворот, тема, шрифт, поиск с клавиатуры — **NOT_RUN**.
++3. Живой GitHub, приватный репозиторий, Keystore, force-stop, офлайн на устройстве — **NOT_RUN**. Классификатор читает уже записанные поля, новые запросы не добавлялись.
++4. Host PASS не равен проверке телефона.
++
+ # Что не доказано в 1.0.12-dev
+ 
++
+ 1. Физический Samsung A52: **NOT_DEVICE_VERIFIED**. Владелец проверяет дома. Токен в чат не присылать. Ставить поверх, не удаляя приложение.
+ 2. Эмулятор Android 14 для 1.0.12: **NOT_RUN**. Переключение режимов, сохранение `display_mode`, «Почему так?», Back и темы на эмуляторе не снимались.
+ 3. Приватный репозиторий, живой PAT, Android Keystore, force-stop: **NOT_RUN**. Логика токена не менялась с 1.0.11.
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/TEST_RESULTS.md /workspace/gitteller/TEST_RESULTS.md
+--- /tmp/gt112base/gitteller/TEST_RESULTS.md	2026-11-14 20:19:38.000000000 +0000
++++ /workspace/gitteller/TEST_RESULTS.md	2026-11-15 21:07:30.092755477 +0000
+@@ -1,5 +1,23 @@
++# Проверки 1.0.13-dev
++
++`applicationId` `app.gitteller.mobile`, `versionCode` 28, `versionName` 1.0.13-dev. Подпись сверяется `apksigner` по готовому APK. Ожидаемый сертификат `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`.
++
++`tests-local/run.sh`: exit 0. `CoverageSearchSmoke` PASS, `UiModeSmoke` 9 PASS, прежние 46 + 8 + 14 + зонд 8 PASS, `PARSE OK`. Лог: `evidence/logs/tests-local-1.0.13.log`.
++
++Gradle:
++
++- try1 exit 1: компиляция `duplicate case about` и шум `type tag 71`. Лог `evidence/logs/gradle-1.0.13-try1.log`.
++- try2 exit 1: `CoverageTest` 1 падение, формулировка «не весь» была только в `fact`. Остальные новые тесты зелёные. Плюс шум `type tag 71`.
++- try3 exit 1: `Gradle Test Executor` оборвался (`type tag 71`), XML не обновлён.
++- try4 exit 0, `BUILD SUCCESSFUL`. **110 тестов, 0 failures, 0 errors.** XML `evidence/unit-xml-1.0.13/`. Лог `evidence/logs/gradle-1.0.13-try4.log`. Шум `type tag 71` в логе есть, на итог не повлиял.
++
++Эмулятор и Samsung A52 для 1.0.13: **NOT_RUN**. Это не `DEVICE_VERIFIED`. На A52 статус `OWNER_PENDING`.
++
++Ниже — запись 1.0.12, она не является прогоном 1.0.13.
++
+ # Проверки 1.0.12-dev
+ 
++
+ `applicationId` `app.gitteller.mobile`, `versionCode` 27, `versionName` 1.0.12-dev. Подпись debug та же, что у 1.0.6–1.0.11: SHA-256 `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`. Только `INTERNET`. `allowBackup=false`. `usesCleartextTraffic=false`.
+ 
+ Diff 1.0.12 просмотрен отдельно. Меняются только режим экрана, `UiMode`, подпись версии и локальный тест. `GithubClient`, `TokenVault`, сравнение снимков и сеть не менялись.
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/UPDATE.md /workspace/gitteller/UPDATE.md
+--- /tmp/gt112base/gitteller/UPDATE.md	2026-11-14 20:18:21.000000000 +0000
++++ /workspace/gitteller/UPDATE.md	2026-11-15 21:07:12.808754730 +0000
+@@ -1,11 +1,11 @@
+-# Обновление до 1.0.12-dev
++# Обновление до 1.0.13-dev
+ 
+-Пакет приложения — `app.gitteller.mobile`, версия — `1.0.12-dev`, код версии — 27.
+-Эта сборка подписана тем же debug-ключом, что 1.0.6–1.0.11. Сертификат сверяется по готовому APK, не по этому тексту.
++Пакет — `app.gitteller.mobile`, версия — `1.0.13-dev`, код — 28.
++Ставьте поверх 1.0.12. Не удаляйте приложение и не очищайте данные. Токен остаётся в Android Keystore и `token-vault-v1`. Снимки и `display_mode` остаются в `gitteller_v1`. Новый ключ подписи не создавался.
+ 
+-Ставьте `GitTeller-1.0.12-dev.apk` поверх установленной 1.0.11. Не удаляйте приложение и не очищайте данные. Токены остаются в Android Keystore и `token-vault-v1`. Снимки остаются в `gitteller_v1`. Ключ режима `display_mode` только добавляется. Новый ключ подписи не создавался.
++Сертификат сверяется по APK, не по этому тексту. Ожидается SHA-256 `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`.
+ 
+-Проверка на Samsung A52 не выполнялась в этой сборке. Это не `DEVICE_VERIFIED`.
++На Samsung A52 владелец проверяет сам: установка поверх, оба режима, поиск, переход в запись, панель и Back, экран неполноты, «Обновить», офлайн, force-stop, темы, экспорт, смена проекта. До этой проверки статус `OWNER_PENDING`, не `DEVICE_VERIFIED`.
+ 
+ ## Что проверить на Samsung A52
+ 
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/app/build.gradle /workspace/gitteller/app/build.gradle
+--- /tmp/gt112base/gitteller/app/build.gradle	2026-11-14 20:17:45.000000000 +0000
++++ /workspace/gitteller/app/build.gradle	2026-11-15 21:01:55.924741020 +0000
+@@ -7,8 +7,8 @@
+         applicationId 'app.gitteller.mobile'
+         minSdk 26
+         targetSdk 35
+-        versionCode 27
+-        versionName '1.0.12-dev'
++        versionCode 28
++        versionName '1.0.13-dev'
+         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+     }
+     def originalDebug = file("${System.getProperty('user.home')}/.android/debug.keystore")
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/Coverage.java /workspace/gitteller/app/src/main/java/app/unocontrol/Coverage.java
+--- /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/Coverage.java	1970-01-01 00:00:00.000000000 +0000
++++ /workspace/gitteller/app/src/main/java/app/unocontrol/Coverage.java	2026-11-15 21:05:45.840750967 +0000
+@@ -0,0 +1,354 @@
++package app.unocontrol;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.util.ArrayList;
++import java.util.List;
++
++/** Why a saved snapshot is or is not complete. Reads stored fields only. Never calls GitHub. */
++final class Coverage {
++    static final String COMPLETE_WITHIN_REQUEST = "COMPLETE_WITHIN_REQUEST";
++    static final String SAMPLED_BY_DESIGN = "SAMPLED_BY_DESIGN";
++    static final String TRUNCATED_BY_CAP = "TRUNCATED_BY_CAP";
++    static final String PARTIAL_PAGE = "PARTIAL_PAGE";
++    static final String STALE_AFTER_FAILURE = "STALE_AFTER_FAILURE";
++    static final String CACHED_NOT_MODIFIED = "CACHED_NOT_MODIFIED";
++    static final String ACCESS_OR_API_FAILURE = "ACCESS_OR_API_FAILURE";
++    static final String NOT_REQUESTED = "NOT_REQUESTED";
++    static final String NOT_VERIFIED = "NOT_VERIFIED";
++    static final String IMPORTED = "IMPORTED";
++    static final String UNKNOWN = "UNKNOWN";
++
++    static final class Row {
++        final String area;
++        final String title;
++        final String code;
++        final int count;
++        final long at;
++        final String fact;
++        final String meaning;
++        final String action;
++        final String novice;
++        final String developer;
++
++        Row(String area, String title, String code, int count, long at, String fact, String meaning,
++            String action, String novice, String developer) {
++            this.area = area;
++            this.title = title;
++            this.code = code;
++            this.count = count;
++            this.at = at;
++            this.fact = fact;
++            this.meaning = meaning;
++            this.action = action;
++            this.novice = novice;
++            this.developer = developer;
++        }
++
++        String shown(boolean developerMode) { return developerMode ? developer : novice; }
++    }
++
++    private Coverage() {}
++
++    static List<Row> explain(JSONObject snapshot) {
++        List<Row> rows = new ArrayList<>();
++        rows.add(snapshotRow(snapshot));
++        rows.add(listRow(snapshot, "branches", "Ветки", "ветки", GithubClient.BRANCH_PAGE_CAP));
++        rows.add(listRow(snapshot, "issues", "Задачи", "задачи", GithubClient.ISSUE_PAGE_CAP));
++        rows.add(listRow(snapshot, "pulls", "Предложения", "предложения", GithubClient.PULL_PAGE_CAP));
++        rows.add(commitsRow(snapshot));
++        rows.add(checksRow());
++        return rows;
++    }
++
++    static Row one(JSONObject snapshot, String field) {
++        for (Row row : explain(snapshot)) if (row.area.equals(field)) return row;
++        return row(field, field, UNKNOWN, -1, 0, "Раздел не классифицирован.",
++                "Неизвестное не считается полной загрузкой.", "refresh",
++                field + ": причина неизвестна.", field + " · UNKNOWN");
++    }
++
++    /** Short home line. Never claims the project is fine when checks were not read. */
++    static String compact(JSONObject snapshot, boolean developer) {
++        if (snapshot == null)
++            return "Снимка нет. «Обновить» само не запускается. Это не пустой проект и не успешная проверка.";
++        StringBuilder text = new StringBuilder();
++        if (SnapshotCodec.isImported(snapshot))
++            text.append("Снимок импортирован. Это не живые данные. ");
++        text.append("История коммитов — выборка, не вся история. Проверки пока не подтверждены. ");
++        Row failure = null;
++        int unknown = 0;
++        for (Row row : explain(snapshot)) {
++            if ("snapshot".equals(row.area) || "checks".equals(row.area) || "commits".equals(row.area)) continue;
++            if (ACCESS_OR_API_FAILURE.equals(row.code) || STALE_AFTER_FAILURE.equals(row.code)
++                    || TRUNCATED_BY_CAP.equals(row.code) || PARTIAL_PAGE.equals(row.code)) {
++                if (failure == null) failure = row;
++            } else if (UNKNOWN.equals(row.code) || NOT_REQUESTED.equals(row.code)) unknown++;
++        }
++        if (failure != null) text.append(failure.novice).append(' ');
++        else if (unknown > 0) text.append("Часть списков без доказанной полноты. ");
++        else text.append("Списки в границах запроса есть. Это не тесты и не вся история. ");
++        if (developer) {
++            text.append("Источник: ").append(snapshot.optString("origin", "не определён"))
++                    .append(". Запись: ").append(HumanReport.humanDate(snapshot.optLong("capturedAt", 0))).append('.');
++        }
++        return text.toString().trim();
++    }
++
++    private static Row snapshotRow(JSONObject snapshot) {
++        if (snapshot == null)
++            return row("snapshot", "Снимок", UNKNOWN, 0, 0, "Снимок не сохранён.",
++                    "Показывать нечего.", "refresh",
++                    "Снимка проекта ещё нет.", "Снимок · UNKNOWN");
++        long at = snapshot.optLong("capturedAt", 0);
++        if (SnapshotCodec.isImported(snapshot))
++            return row("snapshot", "Снимок", IMPORTED, 0, at, "Архив JSON, не ответ GitHub этого сеанса.",
++                    "Импорт нельзя считать свежей проверкой.", "refresh",
++                    "Это сохранённый файл, не свежее чтение GitHub.",
++                    "Снимок · IMPORTED · " + HumanReport.humanDate(at));
++        String origin = snapshot.optString("origin", "");
++        if (origin.isEmpty())
++            return row("snapshot", "Снимок", UNKNOWN, 0, at, "Поле origin отсутствует.",
++                    "Без источника нельзя назвать снимок полным.", "refresh",
++                    "Откуда снимок — неизвестно.", "Снимок · UNKNOWN · origin нет");
++        return row("snapshot", "Снимок", origin.equals("LIVE") || origin.equals("PARTIAL") || origin.equals("CACHED")
++                        ? origin : UNKNOWN,
++                0, at, "Источник в снимке: " + origin + ".",
++                "LIVE не означает, что каждый список полон и что тесты прошли.", "none",
++                "Снимок сохранён. Его полнота разобрана по разделам ниже.",
++                "Снимок · " + origin + " · " + HumanReport.humanDate(at));
++    }
++
++    private static Row checksRow() {
++        return row("checks", "Проверки", NOT_VERIFIED, -1, 0,
++                "Общий снимок не запрашивает checks, статусы и Actions.",
++                "Отсутствие записи о CI не является успешным тестом.", "none",
++                "Проверки пока не подтверждены. Пустое место — не успех.",
++                "Проверки · NOT_VERIFIED · запрос в общем снимке не выполнялся. Это не PASS.");
++    }
++
++    private static Row commitsRow(JSONObject snapshot) {
++        if (snapshot == null)
++            return row("commits", "Коммиты", UNKNOWN, -1, 0, "Снимка нет.", "Историю не с чем сравнивать.", "refresh",
++                    "История ещё не загружена.", "Коммиты · UNKNOWN");
++        int count = countOf(snapshot, "commits");
++        long at = snapshot.optLong("commitsFetchedAt", 0);
++        if (SnapshotCodec.isImported(snapshot))
++            return row("commits", "Коммиты", IMPORTED, count, at, "История пришла из файла импорта.",
++                    "Это не живая выборка и не вся история.", "refresh",
++                    "История в файле. Она не заменяет чтение GitHub.",
++                    "Коммиты · IMPORTED · записей " + shown(count));
++        if (snapshot.optBoolean("commitsStale", false))
++            return failureRow("commits", "Коммиты", STALE_AFTER_FAILURE, count, at, notes(snapshot, "история"),
++                    "Показан прошлый список коммитов: новое чтение не удалось.",
++                    "Старая выборка не описывает проект сейчас.", "refresh",
++                    "История устарела: свежий ответ не получен.");
++        if (!snapshot.has("commitsFetched"))
++            return row("commits", "Коммиты", UNKNOWN, count, at,
++                    "В снимке нет признака commitsFetched.",
++                    "Без этого признака нельзя назвать историю ни полной, ни штатной выборкой.", "refresh",
++                    "Неизвестно, читалась ли история.",
++                    "Коммиты · UNKNOWN · нет commitsFetched");
++        if (!snapshot.optBoolean("commitsFetched", false)) {
++            String joined = join(notes(snapshot, "история"));
++            if (joined.contains("запрос не отправлялся"))
++                return row("commits", "Коммиты", NOT_REQUESTED, count, at, joined.isEmpty() ? "Запрос истории не отправлялся." : joined,
++                        "Раздел не читался. Пустота не означает отсутствие коммитов.", "refresh",
++                        "История в этот раз не запрашивалась.",
++                        "Коммиты · NOT_REQUESTED · " + clip(joined));
++            if (http(joined) != null)
++                return failureRow("commits", "Коммиты", ACCESS_OR_API_FAILURE, count, at, notes(snapshot, "история"),
++                        "Запрос истории не удался.", "Ошибка сети или GitHub. Это не пустая история.", actionFor(joined),
++                        "Историю прочитать не удалось.");
++            return row("commits", "Коммиты", UNKNOWN, count, at,
++                    joined.isEmpty() ? "commitsFetched=false, причины в снимке нет." : joined,
++                    "Причина не записана. Нельзя назвать это выборкой или успехом.", "refresh",
++                    "История не получена, причина неизвестна.",
++                    "Коммиты · UNKNOWN · " + clip(joined));
++        }
++        return row("commits", "Коммиты", SAMPLED_BY_DESIGN, count, at,
++                "Запрошены последние 12 коммитов основной ветки. commitsComplete намеренно не ставится.",
++                "Не требуется, это выборка. Это не вся история и не проверка тестов.", "none",
++                "История показана выборочно. Это не ошибка.",
++                "Коммиты · SAMPLED_BY_DESIGN · записей " + shown(count) + " · последние 12 основной ветки · "
++                        + HumanReport.humanDate(at));
++    }
++
++    private static Row listRow(JSONObject snapshot, String field, String title, String label, int cap) {
++        if (snapshot == null)
++            return row(field, title, UNKNOWN, -1, 0, "Снимка нет.", "Список неизвестен.", "refresh",
++                    title + ": данных нет.", title + " · UNKNOWN");
++        int count = countOf(snapshot, field);
++        long at = snapshot.optLong(field + "FetchedAt", 0);
++        List<String> notes = notes(snapshot, label);
++        String joined = join(notes);
++        if (SnapshotCodec.isImported(snapshot))
++            return row(field, title, IMPORTED, count, at, "Список из файла импорта.",
++                    "Импорт не является живым полным чтением.", "refresh",
++                    title + ": импортированный снимок, не живые данные.",
++                    title + " · IMPORTED · записей " + shown(count));
++        if (snapshot.optBoolean(field + "Stale", false))
++            return failureRow(field, title, STALE_AFTER_FAILURE, count, at, notes,
++                    "Показан прошлый список: свежее чтение не удалось.",
++                    "Эти записи могли устареть.", "refresh",
++                    title + ": показаны старые данные, новое чтение не удалось.");
++        if (snapshot.optBoolean(field + "Cached", false)) {
++            boolean complete = snapshot.optBoolean(field + "Complete", false);
++            return row(field, title, CACHED_NOT_MODIFIED, count, at,
++                    "Ответ 304 сохранил прошлый список. Полнота того списка: " + (complete ? "в границах прошлого запроса" : "не подтверждена") + ".",
++                    "Это не новое чтение. 304 не означает, что тесты прошли.",
++                    complete ? "none" : "refresh",
++                    complete ? title + ": GitHub подтвердил прежний список. Это не новая проверка."
++                            : title + ": прежний список подтверждён не полностью.",
++                    title + " · CACHED_NOT_MODIFIED · записей " + shown(count)
++                            + " · complete=" + complete + " · " + HumanReport.humanDate(at));
++        }
++        if (joined.contains("предел ") && joined.contains("страниц"))
++            return truncated(field, title, count, at, cap, joined);
++        if (joined.contains("загрузка прервана") || joined.contains("небезопасная ссылка"))
++            return row(field, title, PARTIAL_PAGE, count, at, clip(joined),
++                    "Страницы оборвались. Видимый кусок не описывает весь список.", "refresh",
++                    title + ": список оборвался на следующей странице. Это не весь проект.",
++                    title + " · PARTIAL_PAGE · записей " + shown(count) + " · " + clip(joined));
++        String http = http(joined);
++        if (!snapshot.has(field + "Fetched")) {
++            if (http != null)
++                return access(field, title, count, at, joined, http);
++            return row(field, title, UNKNOWN, count, at,
++                    joined.isEmpty() ? "Нет признака " + field + "Fetched. Старая схема не считается полной." : clip(joined),
++                    "Неизвестное не называется полной загрузкой.", "refresh",
++                    title + ": неизвестно, полным ли был список.",
++                    title + " · UNKNOWN · нет " + field + "Fetched");
++        }
++        if (!snapshot.optBoolean(field + "Fetched", false)) {
++            if (joined.contains("запрос не отправлялся"))
++                return row(field, title, NOT_REQUESTED, count, at,
++                        joined.isEmpty() ? "Запрос не отправлялся." : clip(joined),
++                        "Раздел не читался. Пустой экран не означает ноль записей.", "refresh",
++                        title + ": в этот раз не запрашивались.",
++                        title + " · NOT_REQUESTED · " + clip(joined));
++            if (http != null) return access(field, title, count, at, joined, http);
++            return row(field, title, UNKNOWN, count, at,
++                    joined.isEmpty() ? field + "Fetched=false, текста ошибки нет." : clip(joined),
++                    "Причина не записана.", "refresh",
++                    title + ": не получены, причина неизвестна.",
++                    title + " · UNKNOWN · " + clip(joined));
++        }
++        if (snapshot.optBoolean(field + "Complete", false) && notes.isEmpty())
++            return row(field, title, COMPLETE_WITHIN_REQUEST, count, at,
++                    "Список получен в границах запроса (не больше " + cap + " страниц по 100). Это не весь репозиторий и не вся история.",
++                    "Полный ответ в этих границах не доказывает успешные тесты.", "none",
++                    title + " получены в границах запроса. Это не вся история проекта.",
++                    title + " · COMPLETE_WITHIN_REQUEST · записей " + shown(count) + " · страниц до " + cap
++                            + " · не весь репозиторий · " + HumanReport.humanDate(at));
++        if (http != null) return access(field, title, count, at, joined, http);
++        if (!notes.isEmpty())
++            return row(field, title, UNKNOWN, count, at, clip(joined),
++                    "Замечание есть, но оно не доказывает ни предел страниц, ни код HTTP.", "refresh",
++                    title + ": список неполный, точная причина не разобрана.",
++                    title + " · UNKNOWN · " + clip(joined));
++        return row(field, title, UNKNOWN, count, at, "Признак полноты ложный или причина не записана.",
++                "Неполный список без причины не называется успешным.", "refresh",
++                title + ": полнота не доказана.",
++                title + " · UNKNOWN · complete=" + snapshot.optBoolean(field + "Complete", false));
++    }
++
++    private static Row truncated(String field, String title, int count, long at, int cap, String joined) {
++        String pages = "предел страниц";
++        int start = joined.indexOf("предел ");
++        if (start >= 0) {
++            int end = joined.indexOf(" страниц", start);
++            if (end > start) pages = joined.substring(start, end + " страниц".length());
++        }
++        return row(field, title, TRUNCATED_BY_CAP, count, at,
++                "Пагинация остановлена: " + pages + ". Рабочий предел этого раздела — " + cap + " страниц.",
++                "Дальше списка в снимке нет. Это не ошибка телефона и не весь репозиторий.", "refresh",
++                title + ": показаны не все, запрос дошёл до своего предела. Это не сбой телефона.",
++                title + " · TRUNCATED_BY_CAP · записей " + shown(count) + " · " + pages + " · cap " + cap);
++    }
++
++    private static Row access(String field, String title, int count, long at, String joined, String httpFact) {
++        return row(field, title, ACCESS_OR_API_FAILURE, count, at, httpFact,
++                "Ошибка чтения не означает, что записей нет и что проверки прошли.", actionFor(joined),
++                title + ": " + httpFact,
++                title + " · ACCESS_OR_API_FAILURE · записей " + shown(count) + " · " + httpFact);
++    }
++
++    private static Row failureRow(String field, String title, String code, int count, long at, List<String> notes,
++                                  String base, String meaning, String action, String novice) {
++        String http = http(join(notes));
++        String fact = http == null ? base : base + " " + http;
++        return row(field, title, code, count, at, fact, meaning, action, novice,
++                title + " · " + code + " · записей " + shown(count) + " · " + fact);
++    }
++
++    static String http(String text) {
++        if (text == null || text.isEmpty()) return null;
++        boolean limit = text.contains("Лимит запросов");
++        if (limit && (text.contains("429") || text.contains("403")))
++            return "Лимит запросов подтверждён ответом GitHub.";
++        if (text.contains("(401)") || text.contains("HTTP 401"))
++            return "Ответ 401: токен не принят. Токен приложением не удалён.";
++        if (text.contains("(404)") || text.contains("HTTP 404"))
++            return "Ответ 404: проект не найден или к нему нет доступа.";
++        if (text.contains("(429)") || text.contains("HTTP 429"))
++            return "Ответ 429: лимит запросов.";
++        if (text.contains("не ответил вовремя"))
++            return "Таймаут: GitHub не ответил вовремя. Это не пустой список.";
++        if (text.contains("Нет соединения"))
++            return "Нет соединения с GitHub. Это не пустой список.";
++        if (text.contains("(403)") || text.contains("HTTP 403"))
++            return "Причина не установлена (403), возможно права или лимит.";
++        if (text.contains("HTTP "))
++            return clip(text);
++        return null;
++    }
++
++    private static String actionFor(String text) {
++        if (text == null) return "refresh";
++        if (text.contains("(401)") || text.contains("HTTP 401") || text.contains("(404)") || text.contains("HTTP 404")
++                || text.contains("(403)") || text.contains("HTTP 403"))
++            return "access";
++        return "refresh";
++    }
++
++    private static List<String> notes(JSONObject snapshot, String label) {
++        List<String> out = new ArrayList<>();
++        JSONArray warnings = snapshot.optJSONArray("warnings");
++        if (warnings == null) return out;
++        String prefix = label + ":";
++        for (int i = 0; i < warnings.length(); i++) {
++            String line = warnings.optString(i);
++            if (line != null && line.startsWith(prefix)) out.add(line);
++        }
++        return out;
++    }
++
++    private static String join(List<String> lines) {
++        StringBuilder b = new StringBuilder();
++        for (String line : lines) {
++            if (b.length() > 0) b.append(' ');
++            b.append(line);
++        }
++        return b.toString();
++    }
++
++    private static int countOf(JSONObject snapshot, String field) {
++        JSONArray list = snapshot.optJSONArray(field);
++        return list == null ? -1 : list.length();
++    }
++
++    private static String shown(int count) { return count < 0 ? "нет массива" : Integer.toString(count); }
++
++    private static String clip(String value) {
++        if (value == null) return "";
++        String clean = value.replace('\n', ' ').trim();
++        return clean.length() <= 220 ? clean : clean.substring(0, 220) + "…";
++    }
++
++    private static Row row(String area, String title, String code, int count, long at, String fact, String meaning,
++                           String action, String novice, String developer) {
++        return new Row(area, title, code, count, at, fact, meaning, action, novice, developer);
++    }
++}
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/DrawerMotion.java /workspace/gitteller/app/src/main/java/app/unocontrol/DrawerMotion.java
+--- /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/DrawerMotion.java	1970-01-01 00:00:00.000000000 +0000
++++ /workspace/gitteller/app/src/main/java/app/unocontrol/DrawerMotion.java	2026-11-15 21:00:03.080736137 +0000
+@@ -0,0 +1,41 @@
++package app.unocontrol;
++
++/** Open/close rules for the home drawer. Views animate; this only stops double opens and a Back exit. */
++final class DrawerMotion {
++    boolean open;
++    boolean busy;
++    boolean closing;
++
++    boolean requestOpen() {
++        if (open || busy || closing) return false;
++        busy = true;
++        return true;
++    }
++
++    void markOpen() {
++        open = true;
++        busy = false;
++        closing = false;
++    }
++
++    boolean requestClose() {
++        if (closing) return false;
++        if (!open && !busy) return false;
++        closing = true;
++        busy = true;
++        return true;
++    }
++
++    void markClosed() {
++        open = false;
++        busy = false;
++        closing = false;
++    }
++
++    /** True when Back must close the panel instead of leaving the app. */
++    boolean consumeBack() {
++        if (!open && !busy) return false;
++        requestClose();
++        return true;
++    }
++}
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/MainActivity.java /workspace/gitteller/app/src/main/java/app/unocontrol/MainActivity.java
+--- /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/MainActivity.java	2026-11-14 20:17:45.000000000 +0000
++++ /workspace/gitteller/app/src/main/java/app/unocontrol/MainActivity.java	2026-11-15 21:04:22.320747353 +0000
+@@ -1,5 +1,6 @@
+ package app.unocontrol;
+ 
++import android.animation.ValueAnimator;
+ import android.app.Activity;
+ import android.app.AlertDialog;
+ import android.content.ClipData;
+@@ -9,20 +10,24 @@
+ import android.content.SharedPreferences;
+ import android.content.res.Configuration;
+ import android.graphics.Color;
++import android.graphics.RenderEffect;
++import android.graphics.Shader;
+ import android.graphics.Typeface;
+ import android.graphics.drawable.GradientDrawable;
+ import android.net.Uri;
++import android.os.Build;
+ import android.os.Bundle;
++import android.provider.Settings;
+ import android.text.InputType;
+ import android.view.Gravity;
+-import android.view.MenuItem;
++import android.view.MotionEvent;
+ import android.view.View;
+ import android.view.ViewGroup;
++import android.view.animation.DecelerateInterpolator;
+ import android.widget.Button;
+ import android.widget.EditText;
+ import android.widget.FrameLayout;
+ import android.widget.LinearLayout;
+-import android.widget.PopupMenu;
+ import android.widget.ScrollView;
+ import android.widget.TextView;
+ import android.widget.Toast;
+@@ -66,6 +71,13 @@
+     private JSONArray feed = new JSONArray();
+     private LinearLayout content;
+     private Button refresh;
++    private FrameLayout homeRoot;
++    private ScrollView homeScroll;
++    private int savedScroll;
++    private boolean reopenDrawer;
++    private final DrawerMotion drawer = new DrawerMotion();
++    private View drawerLayer;
++    private float dragX;
+ 
+     @Override public void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
+@@ -80,9 +92,28 @@
+         lastError = prefs.getString(key(repo, "lastError"), "");
+         if (lastError != null && lastError.isEmpty()) lastError = null;
+         feed = parseArray(prefs.getString(key(repo, "feed"), ""));
++        if (savedInstanceState != null) {
++            savedScroll = savedInstanceState.getInt("scroll", 0);
++            reopenDrawer = savedInstanceState.getBoolean("drawer", false);
++        }
+         draw();
+     }
+ 
++    @Override protected void onSaveInstanceState(Bundle out) {
++        super.onSaveInstanceState(out);
++        if (homeScroll != null) savedScroll = homeScroll.getScrollY();
++        out.putInt("scroll", savedScroll);
++        out.putBoolean("drawer", drawer.open);
++    }
++
++    @Override public void onBackPressed() {
++        if (drawer.consumeBack()) {
++            closeDrawer(motionMs() > 0);
++            return;
++        }
++        super.onBackPressed();
++    }
++
+     private static String key(String repo, String suffix) { return repo.toLowerCase(java.util.Locale.ROOT) + ":" + suffix; }
+ 
+     private static JSONObject parse(String s) {
+@@ -248,12 +279,7 @@
+     }
+ 
+     private String collectionCoverage(String field) {
+-        if (current == null) return "Снимок отсутствует";
+-        if (SnapshotCodec.isImported(current)) return "Импортированный снимок: не живые данные";
+-        if (current.optBoolean(field + "Stale", false)) return "Показаны старые данные: новое чтение не удалось";
+-        return current.optBoolean(field + "Complete", false)
+-                ? "Список получен полностью в пределах запроса"
+-                : "Частичный или недоступный список";
++        return Coverage.one(current, field).shown(developerMode());
+     }
+ 
+     private void developerDashboard(LinearLayout parent) {
+@@ -283,12 +309,17 @@
+                 () -> openPage("pulls"));
+         developerCard(parent, "Проверки и диагностика", "Охват запросов, ограничения API и неизвестные результаты тестов",
+                 () -> openPage("accuracy"));
+-        developerCard(parent, "Коммиты", "Последняя доступная история; не все ветки и не вся история",
++        developerCard(parent, "Коммиты: " + count(current, "commits"),
++                Coverage.one(current, "commits").shown(true),
+                 () -> openPage("commits"));
+     }
+ 
+     private void draw() {
+         applyPalette();
++        boolean keepDrawer = drawer.open || reopenDrawer;
++        if (homeScroll != null) savedScroll = homeScroll.getScrollY();
++        drawer.markClosed();
++        drawerLayer = null;
+         FrameLayout root=new FrameLayout(this);
+         root.setBackgroundColor(BG);
+         ScrollView scroll=new ScrollView(this);
+@@ -298,7 +329,11 @@
+         scroll.addView(wrap);
+         root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
+         setContentView(root);
++        homeRoot = root;
++        homeScroll = scroll;
+         content=wrap;
++        final int restore = savedScroll;
++        homeScroll.post(() -> homeScroll.scrollTo(0, restore));
+ 
+         LinearLayout head=new LinearLayout(this);
+         head.setGravity(Gravity.CENTER_VERTICAL);
+@@ -306,11 +341,23 @@
+         brand.addView(txt("GitTeller",17,TEXT,true));
+         addLine(brand,developerMode() ? "Анализ GitHub" : "GitHub простыми словами",12,MUTED,false,5);
+         head.addView(brand,new LinearLayout.LayoutParams(0,-2,1f));
++        TextView search=txt("⌕",22,TEXT,false);
++        search.setGravity(Gravity.CENTER);
++        search.setContentDescription("Поиск по сохранённым данным проекта");
++        search.setBackground(shape(PANEL,14,STROKE));
++        search.setClickable(true);
++        search.setFocusable(true);
++        LinearLayout.LayoutParams searchBox=lp(48,48);
++        searchBox.rightMargin=dp(8);
++        head.addView(search,searchBox);
++        search.setOnClickListener(v -> openPage("search"));
+         TextView menu=txt("⋮",27,TEXT,false);
+-        menu.setGravity(Gravity.CENTER);menu.setContentDescription("Дополнительные разделы и настройки");
++        menu.setGravity(Gravity.CENTER);menu.setContentDescription("Открыть панель разделов");
+         menu.setBackground(shape(PANEL,14,STROKE));
+-        head.addView(menu,lp(44,44));
+-        menu.setOnClickListener(v -> showMenu(menu));
++        menu.setClickable(true);
++        menu.setFocusable(true);
++        head.addView(menu,lp(48,48));
++        menu.setOnClickListener(v -> toggleDrawer());
+         wrap.addView(head,lp(-1,-2));
+         space(wrap,16);
+         modePicker(wrap);
+@@ -319,6 +366,7 @@
+         String shortRepo=repo.length()>48?repo.substring(0,45)+"…":repo;
+         addLine(wrap,"Проект: "+shortRepo,18,TEXT,true,6);
+         space(wrap,8);
++        coverageStrip(wrap);
+ 
+         Summary summary=Summary.of(current,previous);
+         if (current != null && !loading) {
+@@ -382,7 +430,14 @@
+                     || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
+                     || SnapshotCodec.isImported(current))) {
+                 LinearLayout stale=panel(wrap);
+-                addLine(stale,"Часть сведений с прошлой удачной загрузки.",14,WARN,false,0);
++                addLine(stale,"Часть сведений с прошлой удачной загрузки или из файла.",14,WARN,false,0);
++                TextView why=txt("Почему данные неполные?",14,ACCENT,true);
++                why.setMinHeight(dp(48));
++                why.setGravity(Gravity.CENTER_VERTICAL);
++                why.setContentDescription("Почему данные неполные");
++                why.setOnClickListener(v -> openPage("incomplete"));
++                space(stale,6);
++                stale.addView(why,lp(-1,-2));
+             }
+         }
+         if (!loading && !"Повторить загрузку".equals(step)) {
+@@ -405,6 +460,25 @@
+         TextView footer=txt("Чтение GitHub. Это не проверка готовности программы.",12,MUTED,false);
+         footer.setGravity(Gravity.CENTER);
+         wrap.addView(footer,lp(-1,-2));
++        reopenDrawer = false;
++        if (keepDrawer) openDrawer(false);
++    }
++
++    private void coverageStrip(LinearLayout parent) {
++        LinearLayout card = panel(parent);
++        addLine(card, "Что известно", 16, TEXT, true, 0);
++        addLine(card, Coverage.compact(current, developerMode()), 14, MUTED, false, 8);
++        if (current != null) {
++            addLine(card, "Последняя запись снимка: " + formatTime(current.optLong("capturedAt", 0))
++                    + ". Само обновление не запускается.", 13, MUTED, false, 8);
++        }
++        TextView link = txt("Почему данные неполные?", 15, ACCENT, true);
++        link.setMinHeight(dp(48));
++        link.setGravity(Gravity.CENTER_VERTICAL);
++        link.setContentDescription("Почему данные неполные");
++        link.setOnClickListener(v -> openPage("incomplete"));
++        space(card, 4);
++        card.addView(link, lp(-1, -2));
+     }
+ 
+     private static String formatTime(long millis){
+@@ -418,22 +492,161 @@
+         startActivityForResult(intent, REQUEST_SECTION);
+     }
+ 
+-    private void showMenu(View anchor) {
+-        PopupMenu menu = new PopupMenu(this, anchor);
+-        menu.getMenu().add(0,1,0,"Разделы проекта");
+-        menu.getMenu().add(0,5,1,"Обновить");
+-        menu.getMenu().add(0,2,2,"Подключение GitHub");
+-        menu.getMenu().add(0,3,3,"Настройки");
+-        menu.setOnMenuItemClickListener(item -> {
+-            switch (item.getItemId()) {
+-                case 1: openPage("index"); return true;
+-                case 5: sync(); return true;
+-                case 2: openPage("access"); return true;
+-                case 3: openPage("settings"); return true;
++    private void toggleDrawer() {
++        if (drawer.open || drawer.busy) closeDrawer(motionMs() > 0);
++        else openDrawer(motionMs() > 0);
++    }
++
++    private void openDrawer(boolean animate) {
++        if (homeRoot == null || !drawer.requestOpen()) return;
++        if (drawerLayer != null) homeRoot.removeView(drawerLayer);
++        int screen = getResources().getDisplayMetrics().widthPixels;
++        int panelWidth = Math.min(dp(320), Math.max(dp(220), screen - dp(56)));
++        FrameLayout layer = new FrameLayout(this);
++        layer.setClickable(true);
++        layer.setFocusable(true);
++        View scrim = new View(this);
++        scrim.setBackgroundColor(0x99000000);
++        scrim.setAlpha(animate ? 0f : 1f);
++        scrim.setContentDescription("Закрыть панель");
++        scrim.setOnClickListener(v -> closeDrawer(motionMs() > 0));
++        layer.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
++        LinearLayout panel = vertical();
++        panel.setClickable(true);
++        panel.setBackground(drawerShape());
++        int bar = systemBar("status_bar_height");
++        int nav = systemBar("navigation_bar_height");
++        panel.setPadding(dp(16), dp(12) + bar, dp(16), dp(16) + nav);
++        TextView close = txt("Закрыть", 15, ACCENT, true);
++        close.setMinHeight(dp(48));
++        close.setGravity(Gravity.CENTER_VERTICAL);
++        close.setContentDescription("Закрыть панель");
++        close.setOnClickListener(v -> closeDrawer(motionMs() > 0));
++        panel.addView(close, lp(-1, 48));
++        addLine(panel, "GitTeller", 13, MUTED, false, 0);
++        space(panel, 8);
++        ScrollView list = new ScrollView(this);
++        LinearLayout items = vertical();
++        list.addView(items);
++        panel.addView(list, new LinearLayout.LayoutParams(-1, 0, 1f));
++        drawerItem(items, "Поиск", () -> { closeDrawer(false); openPage("search"); });
++        drawerItem(items, "Разделы проекта", () -> { closeDrawer(false); openPage("index"); });
++        drawerItem(items, "Обновить", () -> { closeDrawer(false); sync(); });
++        drawerItem(items, "Сменить проект", () -> { closeDrawer(false); openPage("projects"); });
++        drawerItem(items, "Подключение GitHub", () -> { closeDrawer(false); openPage("access"); });
++        drawerItem(items, "Почему данные неполные?", () -> { closeDrawer(false); openPage("incomplete"); });
++        drawerItem(items, "Настройки", () -> { closeDrawer(false); openPage("settings"); });
++        drawerItem(items, "О приложении", () -> { closeDrawer(false); openPage("about"); });
++        View grip = new View(this);
++        grip.setContentDescription("Смахните вправо, чтобы закрыть панель");
++        grip.setOnTouchListener((v, event) -> dragDrawer(panel, event));
++        LinearLayout shell = new LinearLayout(this);
++        shell.setOrientation(LinearLayout.HORIZONTAL);
++        shell.addView(grip, new LinearLayout.LayoutParams(dp(28), -1));
++        shell.addView(panel, new LinearLayout.LayoutParams(0, -1, 1f));
++        shell.setBackground(drawerShape());
++        panel.setBackgroundColor(0);
++        FrameLayout.LayoutParams panelBox = new FrameLayout.LayoutParams(panelWidth, -1, Gravity.END);
++        layer.addView(shell, panelBox);
++        homeRoot.addView(layer, new FrameLayout.LayoutParams(-1, -1));
++        drawerLayer = layer;
++        if (!animate) {
++            setBlur(18f);
++            drawer.markOpen();
++            return;
++        }
++        shell.setTranslationX(panelWidth);
++        shell.animate().translationX(0f).setDuration(motionMs()).setInterpolator(new DecelerateInterpolator()).start();
++        scrim.animate().alpha(1f).setDuration(motionMs()).start();
++        ValueAnimator blur = ValueAnimator.ofFloat(0f, 18f);
++        blur.setDuration(motionMs());
++        blur.addUpdateListener(a -> setBlur((Float) a.getAnimatedValue()));
++        blur.addListener(new android.animation.AnimatorListenerAdapter() {
++            @Override public void onAnimationEnd(android.animation.Animator animation) {
++                if (!drawer.closing && drawerLayer != null) drawer.markOpen();
+             }
+-            return false;
+         });
+-        menu.show();
++        blur.start();
++    }
++
++    private boolean dragDrawer(View panel, MotionEvent event) {
++        View shell = (View) panel.getParent();
++        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
++            dragX = event.getRawX();
++            return true;
++        }
++        if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
++            shell.setTranslationX(Math.max(0f, event.getRawX() - dragX));
++            return true;
++        }
++        if (event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
++            if (shell.getTranslationX() > shell.getWidth() * 0.33f) closeDrawer(motionMs() > 0);
++            else shell.animate().translationX(0f).setDuration(motionMs()).start();
++            return true;
++        }
++        return true;
++    }
++
++    private void drawerItem(LinearLayout parent, String label, Runnable action) {
++        TextView item = txt(label, 16, TEXT, false);
++        item.setMinHeight(dp(48));
++        item.setGravity(Gravity.CENTER_VERTICAL);
++        item.setPadding(dp(8), 0, dp(8), 0);
++        item.setClickable(true);
++        item.setFocusable(true);
++        item.setContentDescription(label);
++        item.setOnClickListener(v -> action.run());
++        parent.addView(item, lp(-1, -2));
++    }
++
++    private void closeDrawer(boolean animate) {
++        if (drawerLayer == null) {
++            drawer.markClosed();
++            setBlur(0f);
++            return;
++        }
++        if (!drawer.closing && !drawer.requestClose()) return;
++        View layer = drawerLayer;
++        if (!animate) {
++            setBlur(0f);
++            if (homeRoot != null) homeRoot.removeView(layer);
++            if (drawerLayer == layer) drawerLayer = null;
++            drawer.markClosed();
++            return;
++        }
++        layer.animate().alpha(0f).setDuration(motionMs()).withEndAction(() -> {
++            setBlur(0f);
++            if (homeRoot != null) homeRoot.removeView(layer);
++            if (drawerLayer == layer) drawerLayer = null;
++            drawer.markClosed();
++        }).start();
++    }
++
++    private GradientDrawable drawerShape() {
++        GradientDrawable d = new GradientDrawable();
++        d.setColor(PANEL);
++        float r = dp(18);
++        d.setCornerRadii(new float[]{r, r, 0f, 0f, 0f, 0f, r, r});
++        return d;
++    }
++
++    private void setBlur(float radius) {
++        if (homeScroll == null || Build.VERSION.SDK_INT < 31) return;
++        if (radius < 0.8f) homeScroll.setRenderEffect(null);
++        else homeScroll.setRenderEffect(RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP));
++    }
++
++    private long motionMs() {
++        try {
++            float scale = Settings.Global.getFloat(getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
++            if (scale == 0f) return 0L;
++        } catch (Exception ignored) { /* keep the normal motion */ }
++        return 240L;
++    }
++
++    private int systemBar(String name) {
++        int id = getResources().getIdentifier(name, "dimen", "android");
++        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
+     }
+ 
+     @Override protected void onResume() {
+@@ -592,6 +805,7 @@
+                 String action=data.getStringExtra("action");
+                 if("import".equals(action)) {importLegacy();return;}
+                 if("export".equals(action)) {exportBackup();return;}
++                if("sync".equals(action)) {sync();return;}
+                 if("changed".equals(action)) {
+                     abandonSync();
+                     String selected=prefs.getString("repo",DEFAULT_REPO);
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/ProjectSearch.java /workspace/gitteller/app/src/main/java/app/unocontrol/ProjectSearch.java
+--- /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/ProjectSearch.java	1970-01-01 00:00:00.000000000 +0000
++++ /workspace/gitteller/app/src/main/java/app/unocontrol/ProjectSearch.java	2026-11-15 21:00:00.844736041 +0000
+@@ -0,0 +1,266 @@
++package app.unocontrol;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.List;
++import java.util.Locale;
++
++/** Search over data already stored for the active project. Never calls GitHub. */
++final class ProjectSearch {
++    static final int PER_GROUP = 40;
++
++    static final class Hit {
++        final String group;
++        final String title;
++        final String detail;
++        final String page;
++        final int index;
++        final String key;
++        final String marker;
++
++        Hit(String group, String title, String detail, String page, int index, String key, String marker) {
++            this.group = group;
++            this.title = title;
++            this.detail = detail;
++            this.page = page;
++            this.index = index;
++            this.key = key == null ? "" : key;
++            this.marker = marker == null ? "" : marker;
++        }
++    }
++
++    static final class Report {
++        final String scope;
++        final List<Hit> hits;
++        final int omitted;
++        final boolean emptyQuery;
++
++        Report(String scope, List<Hit> hits, int omitted, boolean emptyQuery) {
++            this.scope = scope;
++            this.hits = hits;
++            this.omitted = omitted;
++            this.emptyQuery = emptyQuery;
++        }
++    }
++
++    private ProjectSearch() {}
++
++    static Report find(JSONObject snapshot, JSONArray feed, String rawQuery, List<String> localRepos) {
++        String query = norm(rawQuery);
++        String scope = scope(snapshot);
++        if (query.isEmpty()) return new Report(scope, Collections.<Hit>emptyList(), 0, true);
++        List<Hit> hits = new ArrayList<>();
++        int omitted = 0;
++        omitted += take(hits, "Разделы", sections(query));
++        if (localRepos != null) omitted += take(hits, "Проекты", projects(localRepos, query));
++        omitted += take(hits, "Ветки", rows(snapshot, "branches", "Ветки", "branch-detail", query, "name", "sha"));
++        omitted += take(hits, "Задачи", numbered(snapshot, "issues", "Задачи", "issue-detail", query));
++        omitted += take(hits, "PR", numbered(snapshot, "pulls", "PR", "pull-detail", query));
++        omitted += take(hits, "Коммиты", commits(snapshot, query));
++        omitted += take(hits, "Изменения", events(feed, query));
++        omitted += take(hits, "Диагностика", diagnostics(snapshot, query));
++        return new Report(scope, hits, omitted, false);
++    }
++
++    static String scope(JSONObject snapshot) {
++        if (snapshot == null)
++            return "Снимок не сохранён. Поиск идёт только по разделам приложения и не обращается к GitHub.";
++        String repo = snapshot.optString("repo", "проект не указан");
++        String origin = SnapshotCodec.isImported(snapshot) ? "IMPORTED" : snapshot.optString("origin", "не определён");
++        boolean stale = snapshot.optBoolean("branchesStale", false) || snapshot.optBoolean("issuesStale", false)
++                || snapshot.optBoolean("pullsStale", false) || snapshot.optBoolean("commitsStale", false);
++        return "Проект: " + repo + ". Источник: " + origin + "."
++                + (stale ? " Есть устаревшие списки." : "")
++                + " Это сохранённые данные, не весь GitHub.";
++    }
++
++    static String noMatch() {
++        return "В сохранённых данных совпадений нет. Это не доказательство, что на GitHub такого нет.";
++    }
++
++    static String emptyHint() {
++        return "Введите запрос. Поиск смотрит сохранённые данные этого проекта, а не весь GitHub.";
++    }
++
++    private static int take(List<Hit> into, String group, List<Hit> found) {
++        int extra = 0;
++        for (int i = 0; i < found.size(); i++) {
++            if (i < PER_GROUP) into.add(found.get(i));
++            else extra++;
++        }
++        return extra;
++    }
++
++    private static List<Hit> sections(String query) {
++        String[][] table = {
++                {"Разделы проекта", "index"},
++                {"Обзор", "overview"},
++                {"Изменения", "changes"},
++                {"Направления работы", "branches"},
++                {"Проблемы", "problems"},
++                {"История изменений", "commits"},
++                {"Задачи", "tasks"},
++                {"Предложения изменений", "pulls"},
++                {"Надёжность сведений", "accuracy"},
++                {"Подключение GitHub", "access"},
++                {"Настройки", "settings"},
++                {"Почему данные неполные", "incomplete"},
++                {"О приложении", "about"},
++                {"Поиск", "search"}
++        };
++        List<Hit> out = new ArrayList<>();
++        for (String[] row : table) {
++            if (contains(row[0], query))
++                out.add(new Hit("Разделы", row[0], "Раздел приложения", row[1], -1, "", ""));
++        }
++        return out;
++    }
++
++    private static List<Hit> projects(List<String> repos, String query) {
++        List<Hit> out = new ArrayList<>();
++        for (String repo : repos) {
++            if (repo == null || repo.isEmpty()) continue;
++            if (contains(repo, query))
++                out.add(new Hit("Проекты", clip(repo), "Сохранён на этом устройстве. Откроет этот проект, не чужие записи.",
++                        "switch-repo", -1, repo, ""));
++        }
++        return out;
++    }
++
++    private static List<Hit> rows(JSONObject snapshot, String field, String group, String page, String query,
++                                  String nameKey, String shaKey) {
++        List<Hit> out = new ArrayList<>();
++        JSONArray list = snapshot == null ? null : snapshot.optJSONArray(field);
++        if (list == null) return out;
++        boolean sha = shaQuery(query);
++        for (int i = 0; i < list.length(); i++) {
++            JSONObject row = list.optJSONObject(i);
++            if (row == null) continue;
++            String name = row.optString(nameKey);
++            String id = row.optString(shaKey);
++            if (contains(name, query) || contains(id, query) || (sha && starts(id, query)))
++                out.add(new Hit(group, clip(name.isEmpty() ? id : name), clip(id), page, i, name.isEmpty() ? id : name, ""));
++        }
++        return out;
++    }
++
++    private static List<Hit> numbered(JSONObject snapshot, String field, String group, String page, String query) {
++        List<Hit> out = new ArrayList<>();
++        JSONArray list = snapshot == null ? null : snapshot.optJSONArray(field);
++        if (list == null) return out;
++        Integer exact = hashNumber(query);
++        for (int i = 0; i < list.length(); i++) {
++            JSONObject row = list.optJSONObject(i);
++            if (row == null) continue;
++            int number = row.optInt("number", -1);
++            String title = row.optString("title");
++            boolean match = contains(title, query) || contains(number < 0 ? "" : ("#" + number), query)
++                    || (exact != null && exact.intValue() == number);
++            if (!match) continue;
++            String key = number < 0 ? "" : Integer.toString(number);
++            out.add(new Hit(group, clip(title.isEmpty() ? ("#" + key) : title),
++                    number < 0 ? "без номера" : ("#" + number), page, i, key, ""));
++        }
++        return out;
++    }
++
++    private static List<Hit> commits(JSONObject snapshot, String query) {
++        List<Hit> out = new ArrayList<>();
++        JSONArray list = snapshot == null ? null : snapshot.optJSONArray("commits");
++        if (list == null) return out;
++        boolean sha = shaQuery(query);
++        for (int i = 0; i < list.length(); i++) {
++            JSONObject row = list.optJSONObject(i);
++            if (row == null) continue;
++            String id = row.optString("sha");
++            String message = row.optString("message");
++            String author = row.optString("author");
++            if (contains(message, query) || contains(author, query) || contains(id, query) || (sha && starts(id, query)))
++                out.add(new Hit("Коммиты", clip(message.isEmpty() ? id : message), clip(author + " " + id),
++                        "commit-detail", i, id, ""));
++        }
++        return out;
++    }
++
++    private static List<Hit> events(JSONArray feed, String query) {
++        List<Hit> out = new ArrayList<>();
++        if (feed == null) return out;
++        for (int i = 0; i < feed.length(); i++) {
++            JSONObject event = feed.optJSONObject(i);
++            if (event == null) continue;
++            String text = event.optString("event");
++            String id = event.optString("id");
++            String kind = event.optString("kind");
++            if (contains(text, query) || contains(id, query) || contains(kind, query))
++                out.add(new Hit("Изменения", clip(text.isEmpty() ? kind : text), clip(kind), "changes", i, "", id));
++        }
++        return out;
++    }
++
++    private static List<Hit> diagnostics(JSONObject snapshot, String query) {
++        List<Hit> out = new ArrayList<>();
++        if (snapshot == null) return out;
++        JSONArray warnings = snapshot.optJSONArray("warnings");
++        if (warnings != null) {
++            for (int i = 0; i < warnings.length(); i++) {
++                String line = warnings.optString(i);
++                if (line == null || line.isEmpty() || !contains(line, query)) continue;
++                if (line.toLowerCase(Locale.ROOT).contains("token") && line.contains("ghp_")) continue;
++                out.add(new Hit("Диагностика", clip(line), "Записанное предупреждение загрузки", "incomplete", -1, "", ""));
++            }
++        }
++        for (Coverage.Row row : Coverage.explain(snapshot)) {
++            if ("snapshot".equals(row.area)) continue;
++            if (contains(row.novice, query) || contains(row.developer, query) || contains(row.code, query))
++                out.add(new Hit("Диагностика", clip(row.title + ": " + row.novice), row.code, "incomplete", -1, row.area, ""));
++        }
++        return out;
++    }
++
++    static String norm(String raw) {
++        if (raw == null) return "";
++        String value = raw.replace('\u00a0', ' ').trim().toLowerCase(Locale.ROOT);
++        StringBuilder b = new StringBuilder();
++        boolean space = false;
++        for (int i = 0; i < value.length(); i++) {
++            char c = value.charAt(i);
++            if (Character.isWhitespace(c)) {
++                if (!space && b.length() > 0) {
++                    b.append(' ');
++                    space = true;
++                }
++            } else {
++                b.append(c);
++                space = false;
++            }
++        }
++        return b.toString();
++    }
++
++    private static boolean contains(String hay, String query) {
++        return hay != null && !query.isEmpty() && norm(hay).contains(query);
++    }
++
++    private static boolean starts(String hay, String query) {
++        return hay != null && norm(hay).startsWith(query);
++    }
++
++    static boolean shaQuery(String query) { return query != null && query.matches("[0-9a-f]{4,40}"); }
++
++    static Integer hashNumber(String query) {
++        if (query == null || !query.startsWith("#")) return null;
++        String digits = query.substring(1);
++        if (!digits.matches("\\d{1,9}")) return null;
++        try { return Integer.valueOf(digits); }
++        catch (NumberFormatException e) { return null; }
++    }
++
++    private static String clip(String value) {
++        if (value == null) return "";
++        String clean = value.replace('\n', ' ').trim();
++        return clean.length() <= 160 ? clean : clean.substring(0, 160) + "…";
++    }
++}
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/SectionActivity.java /workspace/gitteller/app/src/main/java/app/unocontrol/SectionActivity.java
+--- /tmp/gt112base/gitteller/app/src/main/java/app/unocontrol/SectionActivity.java	2026-11-14 20:17:45.000000000 +0000
++++ /workspace/gitteller/app/src/main/java/app/unocontrol/SectionActivity.java	2026-11-15 21:05:23.576750004 +0000
+@@ -50,7 +50,7 @@
+         vault=new TokenVault(this);
+         page=getIntent().getStringExtra("page");
+         if(page==null)page="index";
+-        if("access".equals(page))
++        if("access".equals(page) || "search".equals(page))
+             getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+         paint();render();
+     }
+@@ -122,8 +122,11 @@
+             case "access":return "Подключение GitHub";
+             case "settings":return "Настройки";
+             case "why":return "Почему это не доказательство";
++            case "incomplete":return "Почему данные неполные?";
++            case "search":return "Поиск";
++            case "projects":return "Сменить проект";
++            case "about":return "О приложении";
+             case "data":return "Настройки";
+-            case "about":return "Настройки";
+             case "branch-detail":return "Направление работы";
+             case "issue-detail":return "Задача";
+             case "pull-detail":return "Предложение изменений";
+@@ -155,8 +158,12 @@
+             case "pulls":pulls();break;
+             case "accuracy":accuracy();break;
+             case "access":access();break;
+-            case "settings":case "data":case "about":settings();break;
++            case "settings":case "data":settings();break;
++            case "about":about();break;
+             case "why":why();break;
++            case "search":search();break;
++            case "incomplete":incomplete();break;
++            case "projects":projects();break;
+             case "branch-detail":branchDetail();break;
+             case "commit-detail":commitDetail();break;
+             case "issue-detail":case "pull-detail":taskDetail();break;
+@@ -179,6 +186,8 @@
+         action("Надёжность сведений","Что загружено полностью, а что нет",()->go("accuracy"));
+         action("Подключение GitHub","Репозиторий и доступ только на чтение",()->go("access"));
+         action("Настройки","Копии данных и ограничения приложения",()->go("settings"));
++        action("Поиск","По сохранённым данным этого проекта",()->go("search"));
++        action("Почему данные неполные?","Причина по каждому списку, без ложного успеха",()->go("incomplete"));
+     }
+     private void overview(){
+         if(current==null){note("Нет данных","Вернитесь назад и нажмите «Обновить».");return;}
+@@ -268,7 +277,10 @@
+                     +". "+event.optString("basis")
+                     +"\nЧто это значит: "+HumanReport.eventMeaning(event.optString("kind"))
+                     +"\n"+HumanReport.unknownOnce(event.optString("unknown"));
+-            note(happened, bodyText);
++            String focus=getIntent().getStringExtra("eventId");
++            if(focus!=null && !focus.isEmpty() && focus.equals(event.optString("id")))
++                note("Открыто из поиска", bodyText);
++            else note(happened, bodyText);
+             String url=event.optString("url");
+             if(url.startsWith("https://github.com/")) technical("Ссылка\n"+url+"\nИдентификатор\n"+event.optString("id"));
+         }
+@@ -456,7 +468,18 @@
+         }, "gitteller-detail").start();
+     }
+     private JSONObject at(String field){
+-        if(current==null)return null;JSONArray list=current.optJSONArray(field);if(list==null)return null;
++        JSONArray list=current==null?null:current.optJSONArray(field);
++        if(list==null) return null;
++        String key=getIntent().getStringExtra("key");
++        if(key!=null && !key.isEmpty()){
++            for(int i=0;i<list.length();i++){
++                JSONObject row=list.optJSONObject(i);
++                if(row==null) continue;
++                if(key.equals(row.optString("name")) || key.equalsIgnoreCase(row.optString("sha"))
++                        || key.equals(String.valueOf(row.optInt("number",-1)))) return row;
++            }
++            return null;
++        }
+         return list.optJSONObject(getIntent().getIntExtra("idx",-1));
+     }
+     private String sourceLine(){
+@@ -523,23 +546,15 @@
+     private void accuracy(){
+         if(current==null){note("Нет данных","Ещё не было проверки GitHub.");return;}
+         note("Источник", sourceLine());
+-        note("Направления", (current.optBoolean("branchesStale", false)
+-                ? "Показан прошлый список. Свежие указатели не получены."
+-                : (current.optBoolean("branchesComplete", false)
+-                    ? "Указатели веток проверены полностью."
+-                    : "Указатели веток проверены не полностью.")) + sectionTime("branchesCached", "branchesFetchedAt"));
+-        note("История", "История изучена лишь частично. На главном снимке только последние записи основной ветки. История другого направления запрашивается, когда его открывают."
+-                + sectionTime("commitsCached", "commitsFetchedAt"));
+-        note("Задачи", (current.optBoolean("issuesStale", false) ? "Показан прошлый список задач."
+-                : (current.optBoolean("issuesComplete", false) ? "Список задач в пределах запроса загружен." : "Список задач неполный или недоступен. Это не ноль задач."))
+-                + sectionTime("issuesCached", "issuesFetchedAt"));
+-        note("Предложения", (current.optBoolean("pullsStale", false) ? "Показан прошлый список предложений."
+-                : (current.optBoolean("pullsComplete", false) ? "Список предложений в пределах запроса загружен." : "Список предложений неполный или недоступен."))
+-                + sectionTime("pullsCached", "pullsFetchedAt"));
+-        note("Проверки", "Результаты автоматических проверок запрашиваются при открытии записи. Если GitHub их не отдал, это не успех. Обычный токен может не иметь права Checks: read; тогда используются статусы коммита или GitHub Actions, если они доступны.");
++        boolean developer=UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF, UiMode.NOVICE)));
++        for (Coverage.Row row : Coverage.explain(current)) {
++            if ("snapshot".equals(row.area)) continue;
++            note(row.title, row.shown(developer) + "\n" + row.meaning);
++        }
++        action("Почему данные неполные?","Статус, причина и следующее действие по каждому списку",()->go("incomplete"));
+         JSONArray warnings=current.optJSONArray("warnings");
+         if(warnings==null||warnings.length()==0) note("Замечания загрузки","Отдельных ошибок при последней загрузке не записано. Это не значит, что проект проверен.");
+-        else for(int i=0;i<warnings.length();i++) note("Почему данные неполные", warnings.optString(i));
++        else for(int i=0;i<warnings.length();i++) note("Записано при загрузке", warnings.optString(i));
+     }
+     private void access(){
+         note("Безопасное подключение","Для публичного репозитория токен не нужен. Для приватного нужен токен GitHub только на чтение. Он хранится в Android Keystore отдельно для каждого проекта. Токен с правом записи не нужен и здесь не запрашивается.");
+@@ -594,7 +609,7 @@
+         return " Время раздела: " + when + "." + cache;
+     }
+     private void settings(){
+-        note("GitTeller 1.0.12-dev", "Два режима представления одних данных GitHub. Это не коммерческий релиз и не проверка готовности программы.");
++        note("GitTeller 1.0.13-dev", "Два режима, поиск по сохранённым данным и правая панель. Это не коммерческий релиз и не проверка готовности программы.");
+         note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются на главном экране. Выбор сохраняется на устройстве. Права GitHub не меняются.");
+         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
+         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
+@@ -604,17 +619,152 @@
+         action("Поделиться кратким отчётом","Текст для себя. Токен и тела записей не входят", this::shareReport);
+         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
+         note("Проекты на этом телефоне","Данные и токены не смешиваются. Выбор проекта не удаляет остальные.");
++        projectChoices();
++        note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
++    }
++    private void about(){
++        note("GitTeller 1.0.13-dev", "Нативное чтение GitHub. versionCode 28. Это не коммерческий релиз и не приёмка на телефоне.");
++        note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
++        note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
++        action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
++    }
++    private void projects(){
++        note("Проекты на этом телефоне","Список берётся из уже сохранённых снимков. Новый проект отсюда не придумывается.");
++        projectChoices();
++        action("Подключить другой адрес","Репозиторий и токен только на чтение",()->go("access"));
++    }
++    private void projectChoices(){
++        boolean any=false;
+         for (String stored : prefs.getAll().keySet()) {
+             if (!stored.endsWith(":current")) continue;
+             String name = stored.substring(0, stored.length() - ":current".length());
+             if (name.isEmpty()) continue;
+-            action(name, name.equalsIgnoreCase(repo) ? "Сейчас открыт" : "Переключить на этот проект", () -> {
+-                if (!prefs.edit().putString("repo", name).commit()) { toast("Не удалось выбрать проект"); return; }
+-                setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
+-                finish();
+-            });
++            any=true;
++            action(name, name.equalsIgnoreCase(repo) ? "Сейчас открыт" : "Переключить на этот проект", () -> selectRepo(name));
+         }
+-        note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
++        if(!any) note("Список пуст","На устройстве ещё нет сохранённого снимка. Это не значит, что проектов нет на GitHub.");
++    }
++    private void selectRepo(String name){
++        if (!prefs.edit().putString("repo", name).commit()) { toast("Не удалось выбрать проект"); return; }
++        setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
++        finish();
++    }
++    private void incomplete(){
++        boolean developer=UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF, UiMode.NOVICE)));
++        line(body, developer ? "Покрытие по полям снимка" : "Почему данные выглядят неполными", 18, true, ink);
++        gap(body, 8);
++        line(body, "Обновление не запускается само. Кнопка ниже только открывает действие, запрос уйдёт после «Обновить».", 14, false, muted);
++        gap(body, 12);
++        if(current==null){
++            note("Снимка нет","Нажмите «Обновить» на главном экране. Пустой экран не означает пустой проект.");
++            button(card(), "Обновить", () -> { setResult(RESULT_OK, new Intent().putExtra("action","sync")); finish(); });
++            return;
++        }
++        note("Проект", repo + " · " + (SnapshotCodec.isImported(current) ? "IMPORTED" : current.optString("origin","не определён"))
++                + " · " + HumanReport.humanDate(current.optLong("capturedAt",0)));
++        for (Coverage.Row row : Coverage.explain(current)) {
++            LinearLayout card=card();
++            line(card, row.title, 17, true, ink); gap(card, 8);
++            line(card, row.shown(developer), 15, false, ink); gap(card, 8);
++            line(card, "Что известно: " + row.fact, 14, false, muted); gap(card, 6);
++            line(card, "Что это значит: " + row.meaning, 14, false, muted);
++            if (developer) {
++                gap(card, 6);
++                line(card, row.code + " · записей " + (row.count < 0 ? "нет массива" : String.valueOf(row.count))
++                        + " · " + HumanReport.humanDate(row.at), 13, false, muted);
++            }
++            if ("refresh".equals(row.action))
++                button(card, "Обновить", () -> { setResult(RESULT_OK, new Intent().putExtra("action","sync")); finish(); });
++            else if ("access".equals(row.action))
++                button(card, "Проверить доступ", () -> go("access"));
++            else if ("commits".equals(row.action))
++                button(card, "Открыть коммит", () -> go("commits"));
++            else if (Coverage.SAMPLED_BY_DESIGN.equals(row.code))
++                line(card, "Не требуется, это выборка.", 14, false, muted);
++            else if (Coverage.NOT_VERIFIED.equals(row.code))
++                line(card, "Отдельный запрос отсюда не докажет проверки. Откройте конкретную запись.", 14, false, muted);
++            else line(card, "Дополнительный запрос для этого пункта не требуется.", 14, false, muted);
++        }
++    }
++    private void search(){
++        line(body, "Поиск по сохранённым данным", 18, true, ink); gap(body, 6);
++        line(body, ProjectSearch.scope(current), 14, false, muted); gap(body, 10);
++        LinearLayout bar=card();
++        EditText field=new EditText(this);
++        field.setSingleLine(true);
++        field.setTextColor(ink);
++        field.setHint("Ветка, #номер, SHA, текст");
++        field.setHintTextColor(muted);
++        String restored=getIntent().getStringExtra("query");
++        if(restored!=null) field.setText(restored);
++        field.setContentDescription("Строка поиска");
++        bar.addView(field, lp(-1,-2));
++        button(bar, "Очистить", () -> field.setText(""));
++        LinearLayout results=col();
++        body.addView(results, lp(-1,-2));
++        Runnable apply=() -> {
++            results.removeAllViews();
++            String raw=field.getText()==null ? "" : field.getText().toString();
++            getIntent().putExtra("query", raw);
++            ProjectSearch.Report report=ProjectSearch.find(current, parseFeed(), raw, localRepos());
++            if(report.emptyQuery){
++                TextView hint=line(results, ProjectSearch.emptyHint(), 15, false, muted);
++                hint.setPadding(0, dp(8), 0, 0);
++                return;
++            }
++            if(report.hits.isEmpty()){
++                line(results, ProjectSearch.noMatch(), 15, false, ink);
++                return;
++            }
++            String group="";
++            for (ProjectSearch.Hit hit : report.hits) {
++                if(!hit.group.equals(group)){
++                    group=hit.group;
++                    gap(results, 8);
++                    line(results, group, 13, true, muted);
++                    gap(results, 6);
++                }
++                choice(results, hit.title, hit.detail.isEmpty() ? hit.group : hit.detail, () -> openHit(hit));
++            }
++            if(report.omitted>0){
++                gap(results, 8);
++                line(results, "Ещё "+report.omitted+" совпадений не показаны. Уточните запрос. Это не потерянные данные GitHub.", 14, false, muted);
++            }
++        };
++        field.addTextChangedListener(new android.text.TextWatcher() {
++            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
++            public void onTextChanged(CharSequence s, int start, int before, int count) { apply.run(); }
++            public void afterTextChanged(android.text.Editable s) {}
++        });
++        apply.run();
++    }
++    private void choice(LinearLayout host, String title, String subtitle, Runnable run) {
++        LinearLayout b=col();
++        b.setPadding(dp(17),dp(14),dp(17),dp(14));
++        b.setBackground(background(panel));
++        b.setMinimumHeight(dp(48));
++        line(b,title+"   ›",17,true,ink);gap(b,7);line(b,subtitle,14,false,muted);
++        b.setContentDescription(title+". "+subtitle);b.setClickable(true);b.setFocusable(true);b.setOnClickListener(v->run.run());
++        LinearLayout.LayoutParams p=lp(-1,-2);p.bottomMargin=dp(10);
++        host.addView(b,p);
++    }
++    private java.util.List<String> localRepos(){
++        java.util.ArrayList<String> out=new java.util.ArrayList<>();
++        for (String stored : prefs.getAll().keySet()) {
++            if (!stored.endsWith(":current")) continue;
++            String name=stored.substring(0, stored.length()-":current".length());
++            if(!name.isEmpty()) out.add(name);
++        }
++        return out;
++    }
++    private void openHit(ProjectSearch.Hit hit){
++        if("switch-repo".equals(hit.page)){ selectRepo(hit.key); return; }
++        Intent i=new Intent(this, SectionActivity.class);
++        i.putExtra("page", hit.page);
++        if(hit.index>=0) i.putExtra("idx", hit.index);
++        if(hit.key!=null && !hit.key.isEmpty()) i.putExtra("key", hit.key);
++        if(hit.marker!=null && !hit.marker.isEmpty()) i.putExtra("eventId", hit.marker);
++        startActivity(i);
+     }
+     private void why(){
+         note("Событие", "Коммит, задача или сдвиг ветки говорят только о том, что запись появилась в GitHub.");
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/app/src/test/java/app/unocontrol/CoverageTest.java /workspace/gitteller/app/src/test/java/app/unocontrol/CoverageTest.java
+--- /tmp/gt112base/gitteller/app/src/test/java/app/unocontrol/CoverageTest.java	1970-01-01 00:00:00.000000000 +0000
++++ /workspace/gitteller/app/src/test/java/app/unocontrol/CoverageTest.java	2026-11-15 21:00:37.236737615 +0000
+@@ -0,0 +1,104 @@
++package app.unocontrol;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++import org.junit.Test;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++public class CoverageTest {
++    private static JSONObject live() throws Exception {
++        return new JSONObject().put("repo", "demo/app").put("origin", "LIVE")
++                .put("capturedAt", 1_700_000_000_000L)
++                .put("branches", new JSONArray().put(new JSONObject().put("name", "main")))
++                .put("issues", new JSONArray())
++                .put("pulls", new JSONArray())
++                .put("commits", new JSONArray())
++                .put("branchesFetched", true).put("issuesFetched", true).put("pullsFetched", true).put("commitsFetched", true)
++                .put("branchesComplete", true).put("issuesComplete", true).put("pullsComplete", true)
++                .put("commitsComplete", false)
++                .put("warnings", new JSONArray());
++    }
++
++    private static Coverage.Row row(JSONObject snapshot, String area) {
++        return Coverage.one(snapshot, area);
++    }
++
++    @Test public void completeListStaysInsideTheRequestAndChecksAreNotPass() throws Exception {
++        JSONObject snapshot = live();
++        Coverage.Row branches = row(snapshot, "branches");
++        assertEquals(Coverage.COMPLETE_WITHIN_REQUEST, branches.code);
++        assertTrue(branches.developer.contains("не весь"));
++        assertEquals(Coverage.SAMPLED_BY_DESIGN, row(snapshot, "commits").code);
++        assertTrue(row(snapshot, "commits").novice.contains("не ошибка"));
++        assertEquals(Coverage.NOT_VERIFIED, row(snapshot, "checks").code);
++        assertFalse(row(snapshot, "checks").developer.contains("проверки прошли"));
++        assertTrue(Coverage.compact(snapshot, false).contains("не подтверждены"));
++        assertFalse(Coverage.compact(snapshot, true).contains("всё хорошо"));
++    }
++
++    @Test public void pageCapAndBrokenPageStayDistinct() throws Exception {
++        JSONObject cap = live().put("branchesComplete", false)
++                .put("warnings", new JSONArray().put("ветки: предел 5 страниц"));
++        assertEquals(Coverage.TRUNCATED_BY_CAP, row(cap, "branches").code);
++        assertTrue(row(cap, "branches").fact.contains("5"));
++        assertTrue(row(cap, "branches").developer.contains("cap 5"));
++        JSONObject broken = live().put("issuesComplete", false)
++                .put("warnings", new JSONArray().put("задачи: загрузка прервана"));
++        assertEquals(Coverage.PARTIAL_PAGE, row(broken, "issues").code);
++    }
++
++    @Test public void httpCodesAreNotMergedAndPlain403IsNotAProvenScopeError() throws Exception {
++        JSONObject denied = live().put("pullsFetched", false).put("pullsComplete", false)
++                .put("warnings", new JSONArray().put("предложения: Токен недействителен или истёк (401)."));
++        assertEquals(Coverage.ACCESS_OR_API_FAILURE, row(denied, "pulls").code);
++        assertEquals("access", row(denied, "pulls").action);
++        assertTrue(row(denied, "pulls").fact.contains("401"));
++
++        JSONObject forbidden = live().put("issuesFetched", false).put("issuesComplete", false)
++                .put("warnings", new JSONArray().put("задачи: Доступ ограничен (403): не хватает прав или так закрыта эта точка API."));
++        assertEquals(Coverage.ACCESS_OR_API_FAILURE, row(forbidden, "issues").code);
++        assertTrue(row(forbidden, "issues").fact.contains("не установлена (403)"));
++        assertFalse(row(forbidden, "issues").fact.contains("не хватает прав"));
++
++        JSONObject limited = live().put("branchesFetched", false).put("branchesComplete", false)
++                .put("warnings", new JSONArray().put("ветки: Лимит запросов GitHub исчерпан (429)."));
++        assertTrue(row(limited, "branches").fact.contains("Лимит"));
++        assertEquals("refresh", row(limited, "branches").action);
++
++        JSONObject slow = live().put("pullsFetched", false).put("pullsComplete", false)
++                .put("warnings", new JSONArray().put("предложения: GitHub не ответил вовремя."));
++        assertTrue(row(slow, "pulls").fact.contains("Таймаут"));
++        assertFalse(row(slow, "pulls").fact.contains("401"));
++    }
++
++    @Test public void staleCacheImportAndMissingMetadataDoNotBecomeComplete() throws Exception {
++        JSONObject stale = live().put("issuesStale", true).put("issuesFetched", false).put("issuesComplete", false)
++                .put("warnings", new JSONArray().put("задачи: показан прошлый список. Свежие данные этого раздела не получены.")
++                        .put("задачи: Токен недействителен или истёк (401)."));
++        assertEquals(Coverage.STALE_AFTER_FAILURE, row(stale, "issues").code);
++        assertTrue(row(stale, "issues").fact.contains("401"));
++
++        JSONObject cached = live().put("branchesCached", true);
++        assertEquals(Coverage.CACHED_NOT_MODIFIED, row(cached, "branches").code);
++        assertFalse(Coverage.COMPLETE_WITHIN_REQUEST.equals(row(cached, "branches").code));
++
++        JSONObject imported = live().put("origin", "IMPORTED");
++        assertEquals(Coverage.IMPORTED, row(imported, "branches").code);
++        assertEquals(Coverage.IMPORTED, row(imported, "commits").code);
++
++        JSONObject old = new JSONObject().put("repo", "demo/app").put("origin", "LIVE")
++                .put("branchesComplete", true).put("branches", new JSONArray()).put("warnings", new JSONArray());
++        assertEquals(Coverage.UNKNOWN, row(old, "branches").code);
++
++        JSONObject quiet = live().put("issuesComplete", false);
++        assertEquals(Coverage.UNKNOWN, row(quiet, "issues").code);
++
++        JSONObject skipped = live().put("pullsFetched", false).put("pullsComplete", false)
++                .put("warnings", new JSONArray().put("предложения: запрос не отправлялся, лимит GitHub ещё действует"));
++        assertEquals(Coverage.NOT_REQUESTED, row(skipped, "pulls").code);
++        assertEquals(Coverage.NOT_VERIFIED, row(null, "checks").code);
++    }
++}
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/app/src/test/java/app/unocontrol/DrawerMotionTest.java /workspace/gitteller/app/src/test/java/app/unocontrol/DrawerMotionTest.java
+--- /tmp/gt112base/gitteller/app/src/test/java/app/unocontrol/DrawerMotionTest.java	1970-01-01 00:00:00.000000000 +0000
++++ /workspace/gitteller/app/src/test/java/app/unocontrol/DrawerMotionTest.java	2026-11-15 21:00:55.688738413 +0000
+@@ -0,0 +1,28 @@
++package app.unocontrol;
++
++import org.junit.Test;
++
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++public class DrawerMotionTest {
++    @Test public void doubleOpenBackAndOutsideTapDoNotStackOrLeaveTheApp() {
++        DrawerMotion drawer = new DrawerMotion();
++        assertTrue(drawer.requestOpen());
++        assertFalse(drawer.requestOpen());
++        drawer.markOpen();
++        assertTrue(drawer.open);
++        assertTrue(drawer.consumeBack());
++        assertFalse(drawer.consumeBack() && drawer.requestClose());
++        assertTrue(drawer.closing);
++        drawer.markClosed();
++        assertFalse(drawer.open);
++        assertFalse(drawer.consumeBack());
++        drawer.requestOpen();
++        drawer.markOpen();
++        assertTrue(drawer.requestClose());
++        assertFalse(drawer.requestClose());
++        drawer.markClosed();
++        assertFalse(drawer.busy);
++    }
++}
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/app/src/test/java/app/unocontrol/ProjectSearchTest.java /workspace/gitteller/app/src/test/java/app/unocontrol/ProjectSearchTest.java
+--- /tmp/gt112base/gitteller/app/src/test/java/app/unocontrol/ProjectSearchTest.java	1970-01-01 00:00:00.000000000 +0000
++++ /workspace/gitteller/app/src/test/java/app/unocontrol/ProjectSearchTest.java	2026-11-15 21:00:53.228738307 +0000
+@@ -0,0 +1,120 @@
++package app.unocontrol;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++import org.junit.Test;
++
++import java.util.Arrays;
++import java.util.Collections;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++public class ProjectSearchTest {
++    private static JSONObject snapshot() throws Exception {
++        return new JSONObject().put("repo", "demo/app").put("origin", "PARTIAL")
++                .put("branchesFetched", true).put("branchesComplete", false)
++                .put("issuesFetched", true).put("issuesComplete", true)
++                .put("pullsFetched", true).put("pullsComplete", true)
++                .put("commitsFetched", true)
++                .put("warnings", new JSONArray().put("ветки: предел 5 страниц"))
++                .put("branches", new JSONArray()
++                        .put(new JSONObject().put("name", "fix/login").put("sha", "abc1111111111111111111111111111111111111"))
++                        .put(new JSONObject().put("name", "fix/login").put("sha", "def2222222222222222222222222222222222222"))
++                        .put(new JSONObject().put("name", "исправление-окна").put("sha", "abc9999999999999999999999999999999999999")))
++                .put("issues", new JSONArray()
++                        .put(new JSONObject().put("number", 6).put("title", "Открыть отчёт"))
++                        .put(new JSONObject().put("number", 16).put("title", "Другая задача")))
++                .put("pulls", new JSONArray().put(new JSONObject().put("number", 4).put("title", "fix/login proposal")))
++                .put("commits", new JSONArray().put(new JSONObject()
++                        .put("sha", "abc1111111111111111111111111111111111111")
++                        .put("message", "очень-длинное-имя-".concat(repeat("х", 240)))
++                        .put("author", "octocat")));
++    }
++
++    private static String repeat(String piece, int n) {
++        StringBuilder b = new StringBuilder();
++        for (int i = 0; i < n; i++) b.append(piece);
++        return b.toString();
++    }
++
++    private static int group(ProjectSearch.Report report, String name) {
++        int n = 0;
++        for (ProjectSearch.Hit hit : report.hits) if (name.equals(hit.group)) n++;
++        return n;
++    }
++
++    @Test public void emptyQueryDoesNotClaimTheRemoteIsEmpty() throws Exception {
++        ProjectSearch.Report report = ProjectSearch.find(snapshot(), new JSONArray(), "   ", null);
++        assertTrue(report.emptyQuery);
++        assertTrue(report.hits.isEmpty());
++        assertTrue(ProjectSearch.emptyHint().contains("не весь GitHub"));
++        assertFalse(ProjectSearch.emptyHint().contains("на GitHub нет"));
++    }
++
++    @Test public void cyrillicPrefixShaAndHashStayOnTheSavedRecord() throws Exception {
++        JSONObject snapshot = snapshot();
++        ProjectSearch.Report cyr = ProjectSearch.find(snapshot, new JSONArray(), "ИСПРАВЛЕНИЕ", null);
++        assertEquals(1, group(cyr, "Ветки"));
++        assertEquals("branch-detail", cyr.hits.get(0).page);
++        assertEquals("исправление-окна", cyr.hits.get(0).key);
++
++        ProjectSearch.Report fix = ProjectSearch.find(snapshot, new JSONArray(), "fix/", null);
++        assertEquals(2, group(fix, "Ветки"));
++        assertEquals(0, fix.hits.get(0).index);
++        assertEquals(1, fix.hits.get(1).index);
++
++        ProjectSearch.Report number = ProjectSearch.find(snapshot, new JSONArray(), "#6", null);
++        assertEquals(1, group(number, "Задачи"));
++        assertEquals("6", number.hits.get(0).key);
++        assertEquals("issue-detail", number.hits.get(0).page);
++
++        ProjectSearch.Report sha = ProjectSearch.find(snapshot, new JSONArray(), "abc1111", null);
++        assertTrue(group(sha, "Ветки") >= 1);
++        assertTrue(group(sha, "Коммиты") >= 1);
++        boolean longName = false;
++        for (ProjectSearch.Hit hit : sha.hits) {
++            assertTrue(hit.title.length() <= 161);
++            if ("Коммиты".equals(hit.group)) longName = true;
++        }
++        assertTrue(longName);
++
++        ProjectSearch.Report missing = ProjectSearch.find(new JSONObject().put("repo", "demo/app"), null, "#6", null);
++        assertEquals(0, group(missing, "Задачи"));
++        assertTrue(missing.scope.contains("demo/app"));
++    }
++
++    @Test public void importedStaleRepoChangeAndOverflowDoNotInventARemoteMiss() throws Exception {
++        JSONObject imported = snapshot().put("origin", "IMPORTED").put("issuesStale", true);
++        ProjectSearch.Report report = ProjectSearch.find(imported, null, "отчёт", Collections.singletonList("other/repo"));
++        assertTrue(report.scope.contains("IMPORTED"));
++        assertTrue(report.scope.contains("устаревшие"));
++        assertEquals(0, group(report, "Проекты"));
++
++        ProjectSearch.Report other = ProjectSearch.find(snapshot().put("repo", "other/repo"), new JSONArray(), "other/repo",
++                Arrays.asList("demo/app", "other/repo"));
++        assertEquals("other/repo", other.scope.contains("other/repo") ? "other/repo" : "");
++        assertEquals(1, group(other, "Проекты"));
++        assertEquals("switch-repo", other.hits.get(0).page);
++
++        JSONArray many = new JSONArray();
++        for (int i = 0; i < 120; i++) many.put(new JSONObject().put("name", "branch-" + i).put("sha", "a"));
++        JSONObject wide = snapshot().put("branches", many);
++        ProjectSearch.Report overflow = ProjectSearch.find(wide, new JSONArray(), "branch-", null);
++        assertEquals(ProjectSearch.PER_GROUP, group(overflow, "Ветки"));
++        assertEquals(80, overflow.omitted);
++
++        JSONArray feed = new JSONArray().put(new JSONObject().put("id", "e1").put("kind", "branch_moved").put("event", "указатель сдвинулся"));
++        ProjectSearch.Report events = ProjectSearch.find(snapshot(), feed, "указатель", null);
++        assertEquals(1, group(events, "Изменения"));
++        assertEquals("e1", events.hits.get(0).marker);
++        assertEquals("changes", events.hits.get(0).page);
++
++        ProjectSearch.Report none = ProjectSearch.find(snapshot(), new JSONArray(), "нет-такого-слова", null);
++        assertTrue(none.hits.isEmpty());
++        assertFalse(none.emptyQuery);
++        assertTrue(ProjectSearch.noMatch().contains("не доказательство"));
++        assertFalse(ProjectSearch.noMatch().contains("на GitHub нет"));
++    }
++}
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/tests-local/app/unocontrol/CoverageSearchSmoke.java /workspace/gitteller/tests-local/app/unocontrol/CoverageSearchSmoke.java
+--- /tmp/gt112base/gitteller/tests-local/app/unocontrol/CoverageSearchSmoke.java	1970-01-01 00:00:00.000000000 +0000
++++ /workspace/gitteller/tests-local/app/unocontrol/CoverageSearchSmoke.java	2026-11-15 21:04:36.580747970 +0000
+@@ -0,0 +1,47 @@
++package app.unocontrol;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.util.Collections;
++
++public final class CoverageSearchSmoke {
++    private static void ok(boolean condition, String name) {
++        if (!condition) throw new AssertionError(name);
++    }
++
++    public static void main(String[] args) throws Exception {
++        JSONObject live = new JSONObject().put("repo", "demo/app").put("origin", "LIVE")
++                .put("branches", new JSONArray().put(new JSONObject().put("name", "fix/a").put("sha", "abcd111111111111111111111111111111111111")))
++                .put("issues", new JSONArray().put(new JSONObject().put("number", 6).put("title", "исправление")))
++                .put("pulls", new JSONArray()).put("commits", new JSONArray())
++                .put("branchesFetched", true).put("issuesFetched", true).put("pullsFetched", true).put("commitsFetched", true)
++                .put("branchesComplete", true).put("issuesComplete", true).put("pullsComplete", true)
++                .put("warnings", new JSONArray());
++        ok(Coverage.COMPLETE_WITHIN_REQUEST.equals(Coverage.one(live, "branches").code), "complete");
++        ok(Coverage.SAMPLED_BY_DESIGN.equals(Coverage.one(live, "commits").code), "sample");
++        ok(Coverage.NOT_VERIFIED.equals(Coverage.one(live, "checks").code), "checks");
++        ok(!Coverage.compact(live, false).contains("всё хорошо"), "no all-clear");
++        JSONObject old = new JSONObject().put("origin", "LIVE").put("branchesComplete", true).put("warnings", new JSONArray());
++        ok(Coverage.UNKNOWN.equals(Coverage.one(old, "branches").code), "old schema");
++        JSONObject cap = new JSONObject().put("origin", "LIVE").put("branchesFetched", true).put("branchesComplete", false)
++                .put("warnings", new JSONArray().put("ветки: предел 5 страниц"));
++        ok(Coverage.TRUNCATED_BY_CAP.equals(Coverage.one(cap, "branches").code), "cap");
++        JSONObject denied = new JSONObject().put("origin", "LIVE").put("issuesFetched", false).put("issuesComplete", false)
++                .put("warnings", new JSONArray().put("задачи: Доступ ограничен (403): не хватает прав."));
++        ok(Coverage.one(denied, "issues").fact.contains("не установлена (403)"), "plain 403");
++        ok(!Coverage.one(denied, "issues").fact.contains("не хватает прав"), "403 not treated as proof");
++        ProjectSearch.Report empty = ProjectSearch.find(live, new JSONArray(), "  ", null);
++        ok(empty.emptyQuery && empty.hits.isEmpty(), "empty query");
++        ok(!ProjectSearch.noMatch().contains("на GitHub нет"), "no remote denial");
++        ProjectSearch.Report found = ProjectSearch.find(live, new JSONArray(), "#6", Collections.<String>emptyList());
++        ok(found.hits.size() == 1 && "issue-detail".equals(found.hits.get(0).page), "hash deep link");
++        ProjectSearch.Report cyr = ProjectSearch.find(live, new JSONArray(), "ИСПРАВЛЕНИЕ", null);
++        ok(!cyr.hits.isEmpty() && "issue-detail".equals(cyr.hits.get(0).page), "cyrillic");
++        DrawerMotion drawer = new DrawerMotion();
++        ok(drawer.requestOpen() && !drawer.requestOpen(), "no double drawer");
++        drawer.markOpen();
++        ok(drawer.consumeBack() && !drawer.consumeBack() == false || drawer.closing, "back closes drawer");
++        System.out.println("CoverageSearchSmoke: PASS");
++    }
++}
+diff -ruN '--exclude=build' '--exclude=.gradle' '--exclude=evidence' /tmp/gt112base/gitteller/tests-local/run.sh /workspace/gitteller/tests-local/run.sh
+--- /tmp/gt112base/gitteller/tests-local/run.sh	2026-11-14 20:17:45.000000000 +0000
++++ /workspace/gitteller/tests-local/run.sh	2026-11-15 21:04:41.332748176 +0000
+@@ -5,8 +5,9 @@
+ trap 'rm -rf "$TMP"' EXIT
+ mkdir -p "$TMP"
+ javac -encoding UTF-8 -d "$TMP" "$ROOT"/tests-local/org/json/*.java \
+-  "$ROOT"/app/src/main/java/app/unocontrol/UiMode.java "$ROOT"/app/src/main/java/app/unocontrol/AtomicCipherFile.java "$ROOT"/app/src/main/java/app/unocontrol/EventFeed.java "$ROOT"/app/src/main/java/app/unocontrol/Summary.java "$ROOT"/app/src/main/java/app/unocontrol/ChangeSet.java "$ROOT"/app/src/main/java/app/unocontrol/CommitExplainer.java "$ROOT"/app/src/main/java/app/unocontrol/HumanReport.java "$ROOT"/app/src/main/java/app/unocontrol/GithubClient.java "$ROOT"/app/src/main/java/app/unocontrol/SnapshotCodec.java \
+-  "$ROOT"/tests-local/app/unocontrol/UiModeSmoke.java "$ROOT"/tests-local/app/unocontrol/Smoke.java "$ROOT"/tests-local/app/unocontrol/GithubAuditSmoke.java "$ROOT"/tests-local/app/unocontrol/AuditRegression1081.java "$ROOT"/tests-local/app/unocontrol/IndependentProbe109.java
++  "$ROOT"/app/src/main/java/app/unocontrol/UiMode.java "$ROOT"/app/src/main/java/app/unocontrol/Coverage.java "$ROOT"/app/src/main/java/app/unocontrol/ProjectSearch.java "$ROOT"/app/src/main/java/app/unocontrol/DrawerMotion.java "$ROOT"/app/src/main/java/app/unocontrol/AtomicCipherFile.java "$ROOT"/app/src/main/java/app/unocontrol/EventFeed.java "$ROOT"/app/src/main/java/app/unocontrol/Summary.java "$ROOT"/app/src/main/java/app/unocontrol/ChangeSet.java "$ROOT"/app/src/main/java/app/unocontrol/CommitExplainer.java "$ROOT"/app/src/main/java/app/unocontrol/HumanReport.java "$ROOT"/app/src/main/java/app/unocontrol/GithubClient.java "$ROOT"/app/src/main/java/app/unocontrol/SnapshotCodec.java \
++  "$ROOT"/tests-local/app/unocontrol/CoverageSearchSmoke.java "$ROOT"/tests-local/app/unocontrol/UiModeSmoke.java "$ROOT"/tests-local/app/unocontrol/Smoke.java "$ROOT"/tests-local/app/unocontrol/GithubAuditSmoke.java "$ROOT"/tests-local/app/unocontrol/AuditRegression1081.java "$ROOT"/tests-local/app/unocontrol/IndependentProbe109.java
++java -cp "$TMP" app.unocontrol.CoverageSearchSmoke
+ java -cp "$TMP" app.unocontrol.UiModeSmoke
+ java -cp "$TMP" app.unocontrol.Smoke
+ java -cp "$TMP" app.unocontrol.GithubAuditSmoke

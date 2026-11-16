@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.unocontrol.GitHubLoad111Test" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-14T20:19:11" hostname="hds-6qxepf369j9c" time="0.009">
+  <properties/>
+  <testcase name="historyFailureMarksFirstLoadPartial" classname="app.unocontrol.GitHubLoad111Test" time="0.003"/>
+  <testcase name="historyFailureKeepsPreviousHistoryAndMarksItStale" classname="app.unocontrol.GitHubLoad111Test" time="0.005"/>
+  <testcase name="successfulEmptyHistoryResponseStaysLive" classname="app.unocontrol.GitHubLoad111Test" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
