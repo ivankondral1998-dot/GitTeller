@@ -126,6 +126,8 @@ public final class SectionActivity extends Activity {
             case "search":return "Поиск";
             case "projects":return "Сменить проект";
             case "about":return "О приложении";
+            case "guide":return "Как пользоваться";
+            case "token-help":return "Как получить токен";
             case "data":return "Настройки";
             case "branch-detail":return "Направление работы";
             case "issue-detail":return "Задача";
@@ -160,6 +162,8 @@ public final class SectionActivity extends Activity {
             case "access":access();break;
             case "settings":case "data":settings();break;
             case "about":about();break;
+            case "guide":guide();break;
+            case "token-help":tokenHelp();break;
             case "why":why();break;
             case "search":search();break;
             case "incomplete":incomplete();break;
@@ -576,6 +580,7 @@ public final class SectionActivity extends Activity {
     }
     private void access(){
         note("Безопасное подключение","Для публичного репозитория токен не нужен. Для приватного нужен токен GitHub только на чтение. Он хранится в Android Keystore отдельно для каждого проекта. Токен с правом записи не нужен и здесь не запрашивается.");
+        button(card(),"Как получить токен","Что это и откуда его взять, без жаргона",()->go("token-help"));
         LinearLayout form=card();
         line(form,"Репозиторий GitHub",14,true,ink);gap(form,8);
         EditText repoField=new EditText(this);repoField.setSingleLine(true);repoField.setText(repo);
@@ -627,7 +632,7 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.13.1-dev", "Два режима, поиск по сохранённым данным и правая панель. Ссылка GitHub открывается отдельной кнопкой и только на выбранный проект. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.14-dev", "Два режима, поиск по сохранённым данным и правая панель. Ссылка GitHub открывается отдельной кнопкой и только на выбранный проект. Реклама Яндекса: баннер внизу главного экрана, большой ролик не чаще раза в час при «Обновить». Если реклама не загрузилась, обновление всё равно выполняется. Это не коммерческий релиз и не проверка готовности программы.");
         note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются на главном экране. Выбор сохраняется на устройстве. Права GitHub не меняются.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
@@ -641,7 +646,7 @@ public final class SectionActivity extends Activity {
         note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
     }
     private void about(){
-        note("GitTeller 1.0.13.1-dev", "Нативное чтение GitHub. versionCode 29. Это не коммерческий релиз и не приёмка на телефоне.");
+        note("GitTeller 1.0.14-dev", "Нативное чтение GitHub. versionCode 30. Это не коммерческий релиз и не приёмка на телефоне.");
         note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
         note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
@@ -783,6 +788,27 @@ public final class SectionActivity extends Activity {
         if(hit.key!=null && !hit.key.isEmpty()) i.putExtra("key", hit.key);
         if(hit.marker!=null && !hit.marker.isEmpty()) i.putExtra("eventId", hit.marker);
         startActivity(i);
+    }
+    private void guide(){
+        note("Что это","GitTeller смотрит за проектом на GitHub. GitHub — место, где лежит код и заметки людей или агентов, которые над ним работают. Приложение ничего туда не пишет.");
+        note("Что смотреть на главном","Четыре ответа: что изменилось, где работа, какие проблемы, кто выполнял. Это сведения из GitHub, не проверка, что программа работает.");
+        note("Когда нужен токен","Публичный проект читается без токена. Приватный — только с ключом на чтение. Ключ хранится на этом телефоне и никуда не отправляется.");
+        action("Как получить токен","Пошагово, без жаргона",()->go("token-help"));
+        note("Чего приложение не делает","Не пишет в репозиторий, не запускает тесты, не доказывает готовность кода и не считает пустой список успехом.");
+    }
+    private void tokenHelp(){
+        note("Что такое токен","Это как пароль только на чтение. С ним приложение видит приватный проект. Без права записи оно не может ничего изменить.");
+        note("Когда он не нужен","Если проект открыт всем (публичный), поле токена можно оставить пустым. Достаточно адреса вида owner/repo.");
+        note("Как получить","1. Откройте github.com в браузере и войдите.\n2. Нажмите на аватар → Settings.\n3. Внизу слева: Developer settings.\n4. Personal access tokens → Fine-grained tokens.\n5. Generate new token. Доступ: только нужный репозиторий.\n6. Права: Contents = Read, Metadata = Read, Issues = Read, Pull requests = Read. Запись не включайте.\n7. Generate. Скопируйте токен сразу: GitHub показывает его один раз.\n8. Вставьте в поле на экране подключения и сохраните.");
+        note("Важно","Никому не отправляйте токен, даже создателю приложения. Он остаётся только на этом телефоне, в защищённом хранилище Android.");
+        button(card(),"Открыть настройки токенов GitHub","Точная страница fine-grained токенов", this::openTokenSettings);
+    }
+    private void openTokenSettings(){
+        final String url = "https://github.com/settings/tokens?type=beta";
+        if (!"https://github.com/settings/tokens?type=beta".equals(url)) return;
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+        } catch (Exception e) { toast("Браузер недоступен"); }
     }
     private void why(){
         note("Событие", "Коммит, задача или сдвиг ветки говорят только о том, что запись появилась в GitHub.");

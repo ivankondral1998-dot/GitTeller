@@ -78,6 +78,9 @@ public final class MainActivity extends Activity {
     private final DrawerMotion drawer = new DrawerMotion();
     private View drawerLayer;
     private float dragX;
+    private final Ads ads = new Ads();
+    private FrameLayout bannerSlot;
+    private boolean bannerReady;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -97,6 +100,7 @@ public final class MainActivity extends Activity {
             reopenDrawer = savedInstanceState.getBoolean("drawer", false);
         }
         draw();
+        ads.preload(this);
     }
 
     @Override protected void onSaveInstanceState(Bundle out) {
@@ -320,16 +324,18 @@ public final class MainActivity extends Activity {
         if (homeScroll != null) savedScroll = homeScroll.getScrollY();
         drawer.markClosed();
         drawerLayer = null;
-        FrameLayout root=new FrameLayout(this);
-        root.setBackgroundColor(BG);
+        ensureShell();
+        homeRoot.removeAllViews();
+        homeRoot.setBackgroundColor(BG);
         ScrollView scroll=new ScrollView(this);
         scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
         LinearLayout wrap=vertical();
         wrap.setPadding(dp(20),dp(22),dp(20),dp(34));
         scroll.addView(wrap);
-        root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
-        setContentView(root);
-        homeRoot = root;
+        FrameLayout.LayoutParams scrollBox = new FrameLayout.LayoutParams(-1,-1);
+        scrollBox.bottomMargin = bannerReady ? dp(56) : 0;
+        homeRoot.addView(scroll, scrollBox);
+        if (bannerSlot != null) homeRoot.addView(bannerSlot, new FrameLayout.LayoutParams(-1,-2, Gravity.BOTTOM));
         homeScroll = scroll;
         content=wrap;
         final int restore = savedScroll;
@@ -393,10 +399,28 @@ public final class MainActivity extends Activity {
         switchProject.setBackground(shape(PANEL,15,STROKE));
         switchProject.setContentDescription("Сменить репозиторий GitHub");
         wrap.addView(switchProject,lp(-1,48));
-        switchProject.setOnClickListener(v->openPage("access"));
+        switchProject.setOnClickListener(v->openPage("projects"));
+        space(wrap,8);
+        TextView connectLink=txt("Подключить проект или токен",14,ACCENT,false);
+        connectLink.setMinHeight(dp(48));
+        connectLink.setGravity(Gravity.CENTER_VERTICAL);
+        connectLink.setContentDescription("Подключить проект или токен");
+        connectLink.setOnClickListener(v->openPage("access"));
+        wrap.addView(connectLink,lp(-1,-2));
         space(wrap,16);
 
         String step = HumanReport.nextStep(current,previous,summary,lastError);
+        if (current == null && !loading) {
+            LinearLayout start=panel(wrap);
+            addLine(start,"GitTeller читает проект на GitHub и говорит простыми словами, что там изменилось. Он ничего не меняет в проекте.",15,TEXT,false,0);
+            TextView guide=txt("Как пользоваться",15,ACCENT,true);
+            guide.setMinHeight(dp(48));
+            guide.setGravity(Gravity.CENTER_VERTICAL);
+            guide.setContentDescription("Как пользоваться");
+            guide.setOnClickListener(v -> openPage("guide"));
+            space(start,8);
+            start.addView(guide,lp(-1,-2));
+        }
         if (loading) {
             LinearLayout hero=panel(wrap);
             addLine(hero,"Идёт чтение GitHub",20,TEXT,true,0);
@@ -486,6 +510,16 @@ public final class MainActivity extends Activity {
         return DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(new Date(millis));
     }
 
+    private void ensureShell() {
+        if (homeRoot != null && bannerSlot != null) return;
+        homeRoot = new FrameLayout(this);
+        bannerSlot = new FrameLayout(this);
+        bannerSlot.setVisibility(android.view.View.GONE);
+        setContentView(homeRoot);
+        ads.attachBanner(this, bannerSlot);
+        bannerReady = true;
+    }
+
     private void openPage(String page) {
         Intent intent = new Intent(this, SectionActivity.class);
         intent.putExtra("page", page);
@@ -530,6 +564,7 @@ public final class MainActivity extends Activity {
         list.addView(items);
         panel.addView(list, new LinearLayout.LayoutParams(-1, 0, 1f));
         drawerItem(items, "Поиск", () -> { closeDrawer(false); openPage("search"); });
+        drawerItem(items, "Как пользоваться", () -> { closeDrawer(false); openPage("guide"); });
         drawerItem(items, "Разделы проекта", () -> { closeDrawer(false); openPage("index"); });
         drawerItem(items, "Обновить", () -> { closeDrawer(false); sync(); });
         drawerItem(items, "Сменить проект", () -> { closeDrawer(false); openPage("projects"); });
@@ -684,6 +719,12 @@ public final class MainActivity extends Activity {
 
     private void sync(){
         if(loading)return;
+        if (ads.showInterstitialIfDue(this, prefs, this::syncNow)) return;
+        syncNow();
+    }
+
+    private void syncNow(){
+        if(loading)return;
         final int epoch=syncEpoch;
         final String selected=repo;
         final String access;
@@ -713,7 +754,7 @@ public final class MainActivity extends Activity {
                     prefs.edit().putString(key(repo,"previous"),previous==null?"":previous.toString())
                             .putString(key(repo,"current"),current.toString())
                             .putString(key(repo,"feed"), feed.toString())
-                            .remove(key(repo,"lastError")).apply();
+                            .remove(key(repo,"lastError")).commit();
                     loading=false;draw();toast("Данные обновлены");
                 });
             }catch(Exception e){
@@ -851,5 +892,5 @@ public final class MainActivity extends Activity {
         }
     }
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
-    @Override protected void onDestroy(){super.onDestroy();abandonSync();worker.shutdownNow();}
+    @Override protected void onDestroy(){super.onDestroy();abandonSync();ads.destroy();worker.shutdownNow();}
 }
