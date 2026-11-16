@@ -101,13 +101,18 @@ final class HomeFeed {
             int number = row.optInt("number", 0);
             String kind = merged ? "Отмечено как внесённое" : "Предложение";
             String head = number > 0 ? kind + " #" + number + " · " + title : kind + " · " + title;
-            String whenField = merged && !row.optString("merged_at").isEmpty()
-                    ? row.optString("merged_at") : row.optString("updated_at");
+            String whenField = usableStamp(row.optString("merged_at"));
+            if (!merged || whenField.isEmpty()) whenField = row.optString("updated_at");
             long when = parseIso(whenField);
             String state = merged ? "внесение не проверено на устройстве" : "ещё открыто";
             found.add(new Row(head, join(state, ago(when, nowMs)), "pulls", when));
         }
         keepNewest(rows, found, 3);
+    }
+
+    private static String usableStamp(String iso) {
+        if (parseIso(iso) <= 0L) return "";
+        return iso;
     }
 
     /** Cap after time order. Snapshot arrays keep GitHub page order, which is not newest first. */

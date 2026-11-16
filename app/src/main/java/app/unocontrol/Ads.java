@@ -36,7 +36,7 @@ final class Ads {
     private boolean loadingAd;
     private boolean alive = true;
 
-    void attachBanner(Activity activity, FrameLayout slot) {
+    void attachBanner(Activity activity, FrameLayout slot, Runnable onVisibility) {
         if (activity == null || slot == null) return;
         try {
             if (banner != null) {
@@ -48,8 +48,8 @@ final class Ads {
             view.setAdSize(BannerAdSize.fixedSize(activity, 320, 50));
             view.setAdUnitId(AdUnits.BANNER);
             view.setBannerAdEventListener(new BannerAdEventListener() {
-                @Override public void onAdLoaded() { slot.setVisibility(android.view.View.VISIBLE); }
-                @Override public void onAdFailedToLoad(AdRequestError error) { slot.setVisibility(android.view.View.GONE); }
+                @Override public void onAdLoaded() { showSlot(activity, slot, true, onVisibility); }
+                @Override public void onAdFailedToLoad(AdRequestError error) { showSlot(activity, slot, false, onVisibility); }
                 @Override public void onAdClicked() {}
                 @Override public void onImpression(ImpressionData data) {}
                 @Override public void onLeftApplication() {}
@@ -62,8 +62,14 @@ final class Ads {
             view.loadAd(new AdRequest.Builder().build());
             banner = view;
         } catch (Throwable ignored) {
-            slot.setVisibility(android.view.View.GONE);
+            showSlot(activity, slot, false, onVisibility);
         }
+    }
+
+    private static void showSlot(Activity activity, FrameLayout slot, boolean visible, Runnable onVisibility) {
+        slot.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
+        if (onVisibility == null || activity == null) return;
+        activity.runOnUiThread(onVisibility);
     }
 
     void preload(Activity activity) {

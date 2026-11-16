@@ -82,7 +82,6 @@ public final class MainActivity extends Activity {
     private float dragX;
     private final Ads ads = new Ads();
     private FrameLayout bannerSlot;
-    private boolean bannerReady;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -336,7 +335,7 @@ public final class MainActivity extends Activity {
         wrap.setPadding(dp(16),dp(14),dp(16),dp(24));
         scroll.addView(wrap);
         FrameLayout.LayoutParams scrollBox = new FrameLayout.LayoutParams(-1,-1);
-        scrollBox.bottomMargin = bannerReady ? dp(56) : 0;
+        scrollBox.bottomMargin = bannerInset();
         homeRoot.addView(scroll, 0, scrollBox);
         if (bannerSlot.getParent() != homeRoot) {
             homeRoot.addView(bannerSlot, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
@@ -471,26 +470,25 @@ public final class MainActivity extends Activity {
     }
 
     private void answerRow(LinearLayout card, String title, String body, Runnable open, String reason, boolean divider) {
+        LinearLayout block = vertical();
+        block.setMinimumHeight(dp(44));
+        block.setClickable(true);
+        block.setFocusable(true);
+        block.setContentDescription(body == null || body.isEmpty() ? title : title + ". " + body);
+        block.setOnClickListener(v -> open.run());
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(44));
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setContentDescription(title);
-        row.setOnClickListener(v -> open.run());
         TextView name = txt(title, 15, TEXT, true);
         name.setMaxLines(1);
         name.setEllipsize(TextUtils.TruncateAt.END);
         row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
         row.addView(txt("›", 18, MUTED, false), lp(-2, -2));
-        card.addView(row, lp(-1, -2));
+        block.addView(row, lp(-1, -2));
         if (body != null && !body.isEmpty()) {
-            TextView line = txt(body, 13, MUTED, false);
-            line.setMaxLines(2);
-            line.setEllipsize(TextUtils.TruncateAt.END);
-            card.addView(line, lp(-1, -2));
+            block.addView(txt(body, 13, MUTED, false), lp(-1, -2));
         }
+        card.addView(block, lp(-1, -2));
         if (reason != null && !reason.isEmpty()) {
             TextView why = txt("Почему так?", 12, ACCENT, false);
             why.setMinHeight(dp(32));
@@ -550,12 +548,14 @@ public final class MainActivity extends Activity {
 
     private void coverageStrip(LinearLayout parent) {
         LinearLayout card = panel(parent);
-        addLine(card, "Что известно", 15, TEXT, true, 0);
-        TextView known = txt(Coverage.compact(current, developerMode()), 13, MUTED, false);
-        space(card, 6);
-        card.addView(known, lp(-1, -2));
-        if (current != null) {
-            addLine(card, "Обновлено вручную: " + formatTime(current.optLong("capturedAt", 0)) + ".", 12, MUTED, false, 6);
+        if (!developerMode()) {
+            addLine(card, "Что известно", 15, TEXT, true, 0);
+            TextView known = txt(Coverage.compact(current, false), 13, MUTED, false);
+            space(card, 6);
+            card.addView(known, lp(-1, -2));
+            if (current != null) {
+                addLine(card, "Обновлено вручную: " + formatTime(current.optLong("capturedAt", 0)) + ".", 12, MUTED, false, 6);
+            }
         }
         if (snapshotAged()) {
             addLine(card, "Часть сведений с прошлой загрузки или из файла.", 13, WARN, false, 6);
@@ -587,8 +587,20 @@ public final class MainActivity extends Activity {
         bannerSlot = new FrameLayout(this);
         bannerSlot.setVisibility(android.view.View.GONE);
         setContentView(homeRoot);
-        ads.attachBanner(this, bannerSlot);
-        bannerReady = true;
+        ads.attachBanner(this, bannerSlot, this::fitBanner);
+    }
+
+    private int bannerInset() {
+        return bannerSlot != null && bannerSlot.getVisibility() == View.VISIBLE ? dp(56) : 0;
+    }
+
+    private void fitBanner() {
+        if (homeScroll == null || !(homeScroll.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams box = (FrameLayout.LayoutParams) homeScroll.getLayoutParams();
+        int margin = bannerInset();
+        if (box.bottomMargin == margin) return;
+        box.bottomMargin = margin;
+        homeScroll.setLayoutParams(box);
     }
 
     private void openPage(String page) {

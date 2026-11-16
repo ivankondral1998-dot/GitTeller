@@ -95,6 +95,19 @@ public class HomeFeedTest {
         assertFalse(rows.get(2).title.contains("first old"));
     }
 
+    @Test public void badMergedStampFallsBackToUpdateTime() throws Exception {
+        JSONArray pulls = new JSONArray();
+        pulls.put(openPull(1, "older one", "2026-11-01T00:00:00Z"));
+        pulls.put(openPull(2, "older two", "2026-11-02T00:00:00Z"));
+        pulls.put(openPull(3, "older three", "2026-11-03T00:00:00Z"));
+        pulls.put(new JSONObject().put("number", 9).put("title", "just landed").put("state", "closed").put("merged", true)
+                .put("merged_at", "null").put("updated_at", "2026-11-16T00:00:00Z"));
+        JSONObject snap = new JSONObject().put("pulls", pulls);
+        List<HomeFeed.Row> rows = HomeFeed.latest(snap, HomeFeed.parseIso("2026-11-17T00:00:00Z"), 5);
+        assertTrue(rows.get(0).title.contains("just landed"));
+        assertTrue(rows.get(0).meta.contains("не проверено"));
+    }
+
     private static JSONObject issue(int number, String at, String title) throws Exception {
         return new JSONObject().put("number", number).put("title", title).put("state", "open").put("updated_at", at);
     }
