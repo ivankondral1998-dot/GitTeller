@@ -21,7 +21,7 @@ import com.yandex.mobile.ads.interstitial.InterstitialAdLoader;
 
 /**
  * Banner and interstitial for Mobile Ads 7.18.1.
- * Banner: setAdUnitId + BannerAdSize.stickySize + AdRequest.Builder().
+ * Banner: setAdUnitId + BannerAdSize.fixedSize(320, 50) + AdRequest.Builder().
  * Interstitial: InterstitialAdLoader.setAdLoadListener + AdRequestConfiguration.
  * Every call fails open: a missing ad never blocks GitHub refresh.
  * Frequency lives in gitteller_v1, never in the token vault.
@@ -44,10 +44,8 @@ final class Ads {
                 banner = null;
             }
             BannerAdView view = new BannerAdView(activity);
-            float density = activity.getResources().getDisplayMetrics().density;
-            int adWidth = Math.round(activity.getResources().getDisplayMetrics().widthPixels / Math.max(density, 1f));
-            if (adWidth < 320) adWidth = 320;
-            view.setAdSize(BannerAdSize.stickySize(activity, adWidth));
+            // Small fixed banner (320x50), not sticky (sticky takes up to 15% of screen).
+            view.setAdSize(BannerAdSize.fixedSize(activity, 320, 50));
             view.setAdUnitId(AdUnits.BANNER);
             view.setBannerAdEventListener(new BannerAdEventListener() {
                 @Override public void onAdLoaded() { slot.setVisibility(android.view.View.VISIBLE); }
