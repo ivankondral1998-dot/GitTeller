@@ -1,0 +1,3 @@
+fabb14dbacff9a3f9162ea9e198c100ef4bd10365e0cc91c3b30b583b5fd51ec  /workspace/artifacts/GitTeller-1.0.10-dev.apk
+e2b124bf677fafcbcbe514271586a761f2940aaf43ea9cac939551da0a0bf4c2  /workspace/artifacts/GitTeller-1.0.10-dev-source.zip
+c8ce2bb1e154f0110487a33d22cac58509c1304619f3a0505e5cd5b77b16b3a0  /workspace/artifacts/ui-110-home-dark.png

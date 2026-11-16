@@ -1,0 +1,4 @@
+2c3cd9a73624510c93598d024ca8a479f962d4c92b0d07ef239d57514fcc7aca  GitTeller-1.0.11-dev.apk
+e8695713a1b41da3244beae1b35de7dc80ca5a5ecf8cfb768b72fa8d71ea2dc4  GitTeller-1.0.11-dev-source.zip
+6c0f48b4757c7835425b1ddf250f14b6c97eae888016a70cc2f94bb7d76c1229  GitTeller-1.0.10-to-1.0.11-dev.diff
+d0c3df313844d9766db2acace585942d21bbf8882477dcf094c7029651c6aa16  GitTeller-1.0.11-dev-verification.zip

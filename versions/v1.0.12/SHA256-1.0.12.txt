@@ -1,0 +1,2 @@
+12bf5d8dbceb5a0efd011867d059fcbe85a208496bd0bb33db58bc527c891e58  /workspace/artifacts/GitTeller-1.0.12-dev.apk
+d26e42eb52d052694121e3072c7cefce19d1a2a47809844f6ee19a005496285d  /workspace/artifacts/GitTeller-1.0.12-dev-source.zip

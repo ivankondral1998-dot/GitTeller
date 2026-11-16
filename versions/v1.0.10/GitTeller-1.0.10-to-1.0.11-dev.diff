@@ -1,0 +1,685 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,13 @@
+ # Changelog
+ 
++## 1.0.11-dev (versionCode 26)
++
++- Импорт исключён из наблюдений о сдвиге веток и из базы запроса сравнения указателей.
++- Ошибка загрузки последних коммитов отмечает снимок как PARTIAL. Отчёт учитывает старые снимки без признака успешной загрузки истории.
++- Объяснение события «ветка обнаружена» указывает на текущий снимок и предыдущий полный список.
++- Экран направления показывает подтверждённое различие двух SHA при неполной загрузке веток.
++- Добавлено 13 регрессионных тестов, включая запросы GitHub с подставными HTTP-ответами и проверку метода экрана направления.
++
+ ## 1.0.10-dev (versionCode 25)
+ 
+ - Главный экран — выбранный `owner/repo`, время загрузки, база сравнения и один статус: данные загружены, часть недоступна, есть изменения или нет достоверного сравнения. Кнопки «Обновить» и «Сменить проект».
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1,14 +1,14 @@
+-# GitTeller 1.0.10-dev
++# GitTeller 1.0.11-dev
+ 
+ Нативное Android-приложение. Не коммерческий релиз и не приёмка на устройстве.
+ 
+-`applicationId` `app.gitteller.mobile`, `versionCode` 25, `versionName` 1.0.10-dev. Подпись debug совпадает с 1.0.6–1.0.9, поэтому обновление идёт поверх, без удаления. Если система откажется, не очищайте приложение: на телефоне может быть токен.
++`applicationId` — `app.gitteller.mobile`, `versionCode` — 26, `versionName` — `1.0.11-dev`. Готовый APK подписан локальным debug-ключом. Для обновления поверх ранее выданного APK требуется исходный ключ. См. [UPDATE.md](UPDATE.md).
+ 
+ Главный экран отвечает на четыре вопроса: что изменилось, где работа, какие проблемы, кто выполнял. Сдвиг указателя ветки не называется прогрессом и не называется списком файлов, пока сравнение не открыто. Обычная задача не называется ошибкой. Автор GitHub не называется работающим сейчас агентом.
+ 
+ ```bash
+-ANDROID_HOME=/tmp/android-sdk /opt/gradle-8.9/bin/gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
++gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+ sh tests-local/run.sh
+ ```
+ 
+-Первый Gradle Test Executor в этой среде часто падает с `Unexpected type tag 71`. Успешен только прогон с `BUILD SUCCESSFUL`. См. `TEST_RESULTS.md`. Прямой JUnitCore не подменяет Gradle. Samsung A52 этой сборкой не проверялся.
++Для сборки нужны JDK 17 или 21, Gradle 8.9 и Android SDK 35 с Build Tools 34.0.0. Укажите свой SDK в `ANDROID_HOME` или `local.properties`. Результаты проверки 1.0.11-dev находятся в отдельном архиве проверок.
+diff --git a/UPDATE.md b/UPDATE.md
+--- a/UPDATE.md
++++ b/UPDATE.md
+@@ -1,25 +1,22 @@
+-# Обновление до 1.0.10-dev без потери доступа
++# Обновление до 1.0.11-dev
+ 
+-`applicationId` не менялся: `app.gitteller.mobile`.  
+-Сертификат этого debug-APK совпадает с 1.0.6, 1.0.7, 1.0.8 и 1.0.9: SHA-256 `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef`. Поверх можно ставить только сборку с тем же ключом. Другой ключ Android отклонит. Удаление сотрёт Keystore.
++Пакет приложения — `app.gitteller.mobile`, версия — `1.0.11-dev`, код версии — 26.
++Готовый APK подписан локальным debug-ключом. Его сертификат отличается от сертификата выданной 1.0.10-dev. Android отклонит установку поверх неё.
+ 
+-Как ставить, если ключ тот же:
++| APK | SHA-256 сертификата |
++| --- | --- |
++| Исходная 1.0.10-dev из пакета | `67ec79901c9ff9f59d9dc1387efd7b759cfd716953bd2d0385076e68bd26b6ef` |
++| Локальная 1.0.11-dev | `170b9a72a4cd6bebb60e61b042d925be67e333a23872c6e8e17f4843a188eb51` |
+ 
+-1. Не удаляйте приложение и не очищайте его данные.
+-2. Установите `GitTeller-1.0.10-dev.apk` поверх (adb `install -r` или установщик Android). `versionCode` 25 выше 24.
+-3. Токены лежат в Android Keystore и в `noBackupFilesDir` (`token-vault-v1`). Обычное обновление их не удаляет. Очистка данных и удаление приложения удаляют.
+-4. Если прошлая версия успела переименовать файл токена в `.bak` и умерла до конца записи, чтение возвращает `.bak` на место. Это проверено на файлах Linux, не на телефоне.
+-5. Снимки проекта лежат в `SharedPreferences` `gitteller_v1`. Они сохраняются при обновлении поверх.
+-6. Пустое поле токена сохранённый доступ не стирает. Удаление токена спрашивает подтверждение и касается только выбранного проекта.
+-7. Резервный JSON по-прежнему без токена. Его нельзя считать свежей проверкой GitHub.
++Для обновления с сохранением токенов и снимков соберите эти исходники в окружении с исходным ключом подписи 1.0.10. Сверьте сертификат командой `apksigner verify --print-certs`, затем установите APK поверх существующей версии. Хранение в Android Keystore, `token-vault-v1` и `gitteller_v1` сохранено.
+ 
+-Если установка пишет, что подпись не совпадает, остановитесь. Не удаляйте приложение ради новой сборки, пока не решите, что токен можно ввести заново.
++Не удаляйте установленное приложение и не очищайте его данные ради этой debug-сборки. Резервный JSON содержит снимки и не содержит токенов. Проверка на Samsung A52 не выполнялась.
+ 
+ ## Что проверить на Samsung A52
+ 
+ Это не сделано в этой сборке. Не писать `DEVICE_VERIFIED`, пока владелец сам не пройдёт сценарий. Токен в чат не присылать.
+ 
+-1. Поставить APK поверх 1.0.9, не удаляя приложение.
++1. Поставить APK с исходной подписью поверх установленной версии, сохранив приложение и его данные.
+ 2. Открыть `ivvan2006/UNO`. На главном сразу видно «Проект: ivvan2006/UNO», время загрузки и четыре ответа. SHA на главном нет.
+ 3. «Что изменилось» не должно повторять «Не подтверждено: Не подтверждено». Сдвиг ветки говорит, что файлы ещё не запрашивались.
+ 4. Открыть «Изменения». У задачи №6, если событие только из `updated_at`: содержание неизвестно, не «исправлено».
+diff --git a/app/build.gradle b/app/build.gradle
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -7,8 +7,8 @@
+         applicationId 'app.gitteller.mobile'
+         minSdk 26
+         targetSdk 35
+-        versionCode 25
+-        versionName '1.0.10-dev'
++        versionCode 26
++        versionName '1.0.11-dev'
+         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+     }
+     buildTypes {
+diff --git a/app/src/main/java/app/unocontrol/ChangeSet.java b/app/src/main/java/app/unocontrol/ChangeSet.java
+--- a/app/src/main/java/app/unocontrol/ChangeSet.java
++++ b/app/src/main/java/app/unocontrol/ChangeSet.java
+@@ -44,7 +44,7 @@
+     static JSONArray between(JSONObject previous, JSONObject current) throws Exception {
+         JSONArray out = new JSONArray();
+         if (previous == null || current == null) return out;
+-        if (current.optBoolean("restoredFromBackup", false) || previous.optBoolean("restoredFromBackup", false))
++        if (SnapshotCodec.isImported(current) || SnapshotCodec.isImported(previous))
+             return out;
+         if (!current.optString("repo").equalsIgnoreCase(previous.optString("repo"))) return out;
+         String repo = current.optString("repo");
+diff --git a/app/src/main/java/app/unocontrol/GithubClient.java b/app/src/main/java/app/unocontrol/GithubClient.java
+--- a/app/src/main/java/app/unocontrol/GithubClient.java
++++ b/app/src/main/java/app/unocontrol/GithubClient.java
+@@ -221,11 +221,7 @@
+         out.put("issuesCached", issuesCached);
+         out.put("pullsCached", pullsCached);
+         preserveSources(out, previous);
+-        boolean partial = !out.optBoolean("branchesComplete", false) || !out.optBoolean("issuesComplete", false)
+-                || !out.optBoolean("pullsComplete", false) || out.optBoolean("branchesStale", false)
+-                || out.optBoolean("issuesStale", false) || out.optBoolean("pullsStale", false)
+-                || out.optBoolean("commitsStale", false);
+-        out.put("origin", partial ? "PARTIAL" : "LIVE");
++        out.put("origin", isPartialSnapshot(out) ? "PARTIAL" : "LIVE");
+         JSONArray warn = new JSONArray();
+         for (String w : warnings) warn.put(w);
+         JSONArray extra = out.optJSONArray("warnings");
+@@ -234,11 +230,24 @@
+         return new Result(out);
+     }
+ 
++    /** A successful request for recent commits does not imply full history coverage. */
++    static boolean isPartialSnapshot(JSONObject snapshot) {
++        return "PARTIAL".equals(snapshot.optString("origin"))
++                || !snapshot.optBoolean("branchesComplete", false)
++                || !snapshot.optBoolean("issuesComplete", false)
++                || !snapshot.optBoolean("pullsComplete", false)
++                || !snapshot.optBoolean("commitsFetched", false)
++                || snapshot.optBoolean("branchesStale", false)
++                || snapshot.optBoolean("issuesStale", false)
++                || snapshot.optBoolean("pullsStale", false)
++                || snapshot.optBoolean("commitsStale", false);
++    }
++
+     /** Keeps the last good list when this refresh did not fetch that source. */
+     static void preserveSources(JSONObject fresh, JSONObject previous) throws Exception {
+         if (fresh == null || previous == null) return;
+         if (!fresh.optString("repo").equalsIgnoreCase(previous.optString("repo"))) return;
+-        if (previous.optBoolean("restoredFromBackup", false)) return;
++        if (SnapshotCodec.isImported(previous)) return;
+         keep(fresh, previous, "branches", "branchesFetched", "branchesComplete", "branchesStale", "ветки");
+         keep(fresh, previous, "commits", "commitsFetched", "commitsComplete", "commitsStale", "история");
+         keep(fresh, previous, "issues", "issuesFetched", "issuesComplete", "issuesStale", "задачи");
+@@ -280,7 +289,7 @@
+ 
+     /** ETag is trustworthy only for one complete page. A later page can change while page 1 stays the same. */
+     private static String etagIfSafe(JSONObject previous, String array, String completeKey, String etagKey) {
+-        if (previous == null || previous.optBoolean("restoredFromBackup", false)) return null;
++        if (previous == null || SnapshotCodec.isImported(previous)) return null;
+         if (!previous.optBoolean(completeKey, false)) return null;
+         // Older snapshots may have cached the ETag of page one of a multi-page list.
+         // The explicit single-page marker is mandatory before conditional requests.
+@@ -512,7 +521,7 @@
+         c.setReadTimeout(14000);
+         c.setRequestProperty("Accept", "application/vnd.github+json");
+         c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
+-        c.setRequestProperty("User-Agent", "GitTeller/1.0.10-dev");
++        c.setRequestProperty("User-Agent", "GitTeller/1.0.11-dev");
+         if (etag != null && !etag.isEmpty()) c.setRequestProperty("If-None-Match", etag);
+         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
+         inflight = c;
+diff --git a/app/src/main/java/app/unocontrol/HumanReport.java b/app/src/main/java/app/unocontrol/HumanReport.java
+--- a/app/src/main/java/app/unocontrol/HumanReport.java
++++ b/app/src/main/java/app/unocontrol/HumanReport.java
+@@ -9,8 +9,8 @@
+     private HumanReport() {}
+     static String homeTitle(JSONObject current, JSONObject previous, Summary s) {
+         if (current == null) return "Подключите проект";
+-        if (current.optBoolean("restoredFromBackup", false)) return "Сведения из сохранённого файла";
+-        if (previous == null || previous.optBoolean("restoredFromBackup", false)) return "Первая проверка выполнена";
++        if (SnapshotCodec.isImported(current)) return "Сведения из сохранённого файла";
++        if (previous == null || SnapshotCodec.isImported(previous)) return "Первая проверка выполнена";
+         if (s.advanced + s.added + s.missing > 0) return "В истории проекта есть изменения";
+         if (s.issueChanges + s.pullChanges > 0) return "Изменились записи задач или предложений";
+         if (!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false))
+@@ -22,8 +22,8 @@
+     }
+     static String homeDescription(JSONObject current, JSONObject previous, Summary s) {
+         if (current == null) return "Укажите репозиторий GitHub и нажмите «Обновить».";
+-        if (current.optBoolean("restoredFromBackup", false)) return "Это сохранённая копия. Для проверки текущего состояния обновите данные с GitHub.";
+-        if (previous == null || previous.optBoolean("restoredFromBackup", false))
++        if (SnapshotCodec.isImported(current)) return "Это сохранённая копия. Для проверки текущего состояния обновите данные с GitHub.";
++        if (previous == null || SnapshotCodec.isImported(previous))
+             return "Данные получены. Сейчас сравнивать их не с чем: понадобится ещё одна проверка позже."
+                     + ((!current.optBoolean("issuesComplete", false) || !current.optBoolean("pullsComplete", false))
+                     ? " Сведения о задачах или предложениях загрузились не полностью." : "");
+@@ -55,9 +55,9 @@
+     /** Human home line. Must not say the project is idle when there is no baseline. */
+     static String whatChanged(JSONObject current, JSONObject previous, Summary s) {
+         if (current == null) return "Проект ещё не прочитан.";
+-        if (current.optBoolean("restoredFromBackup", false))
++        if (SnapshotCodec.isImported(current))
+             return "Показан сохранённый файл, а не свежая проверка.";
+-        if (previous == null || previous.optBoolean("restoredFromBackup", false)
++        if (previous == null || SnapshotCodec.isImported(previous)
+                 || !current.optString("repo").equalsIgnoreCase(previous.optString("repo")))
+             return "Это первая проверка. Базы для сравнения нет, поэтому нельзя сказать, что проект стоит на месте или что в нём нет нового.";
+         boolean branchesKnown = current.optBoolean("branchesComplete", false) && previous.optBoolean("branchesComplete", false);
+@@ -131,7 +131,7 @@
+                     || low.contains("отменён"))
+                 return "Повторить загрузку";
+         }
+-        if (current == null || current.optBoolean("restoredFromBackup", false)) return "Повторить загрузку";
++        if (current == null || SnapshotCodec.isImported(current)) return "Повторить загрузку";
+         if (previous == null) return "Открыть направления";
+         if (s.advanced + s.added + s.missing > 0 || s.issueChanges + s.pullChanges > 0) return "Открыть изменения";
+         if (current.optBoolean("issuesComplete", false) && countState(current.optJSONArray("issues"), "open") > 0)
+@@ -249,15 +249,9 @@
+     static String syncStatus(JSONObject current) {
+         if (current == null) return "Синхронизации ещё не было.";
+         String when = humanDate(current.optLong("capturedAt", 0));
+-        if (current.optBoolean("restoredFromBackup", false))
++        if (SnapshotCodec.isImported(current))
+             return "Это импорт, не свежая проверка GitHub. Дата файла: " + when + ".";
+-        boolean partial = !current.optBoolean("branchesComplete", false)
+-                || !current.optBoolean("issuesComplete", false)
+-                || !current.optBoolean("pullsComplete", false)
+-                || current.optBoolean("branchesStale", false)
+-                || current.optBoolean("issuesStale", false)
+-                || current.optBoolean("pullsStale", false)
+-                || current.optBoolean("commitsStale", false);
++        boolean partial = GithubClient.isPartialSnapshot(current);
+         if (partial) return "Проверка частичная, не полная. Ответ GitHub: " + when + ".";
+         if (current.optBoolean("branchesCached", false) || current.optBoolean("issuesCached", false)
+                 || current.optBoolean("pullsCached", false))
+@@ -315,16 +309,10 @@
+     /** One status line for the owner: loaded, partial, comparable, or not. */
+     static String ownerStatus(JSONObject current, JSONObject previous, Summary s) {
+         if (current == null) return "Данные ещё не загружены.";
+-        if (current.optBoolean("restoredFromBackup", false))
++        if (SnapshotCodec.isImported(current))
+             return "Показан сохранённый файл, не свежая загрузка. Дата файла: " + humanDate(current.optLong("capturedAt", 0)) + ".";
+-        boolean partial = !current.optBoolean("branchesComplete", false)
+-                || !current.optBoolean("issuesComplete", false)
+-                || !current.optBoolean("pullsComplete", false)
+-                || current.optBoolean("branchesStale", false)
+-                || current.optBoolean("issuesStale", false)
+-                || current.optBoolean("pullsStale", false);
+-        boolean noBase = previous == null || previous.optBoolean("restoredFromBackup", false)
+-                || !current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
++        boolean partial = GithubClient.isPartialSnapshot(current);
++        boolean noBase = !comparableSnapshots(current, previous);
+         String when = " Загрузка: " + humanDate(current.optLong("capturedAt", 0)) + ".";
+         String base = noBase ? " Сравнивать не с чем."
+                 : " База сравнения: " + humanDate(previous.optLong("capturedAt", 0)) + ".";
+@@ -342,7 +330,7 @@
+     static String ownerChanged(JSONObject current, JSONObject previous, Summary s) {
+         String fallback = whatChanged(current, previous, s);
+         if (current == null || previous == null) return fallback;
+-        if (current.optBoolean("restoredFromBackup", false) || previous.optBoolean("restoredFromBackup", false))
++        if (SnapshotCodec.isImported(current) || SnapshotCodec.isImported(previous))
+             return fallback;
+         try {
+             JSONArray events = ChangeSet.between(previous, current);
+@@ -368,9 +356,13 @@
+ 
+     static String ownerWhere(JSONObject current, JSONObject previous) {
+         if (current == null) return "Проект ещё не выбран.";
++        if (SnapshotCodec.isImported(current))
++            return "Показан импортированный файл. Чтобы определить, где изменилась работа, обновите данные с GitHub.";
++        if (!comparableSnapshots(current, previous))
++            return "Нет достоверной предыдущей проверки для сравнения направлений." + latestCommitLine(current);
+         StringBuilder names = new StringBuilder();
+         JSONArray now = current.optJSONArray("branches");
+-        JSONArray old = previous == null ? null : previous.optJSONArray("branches");
++        JSONArray old = previous.optJSONArray("branches");
+         java.util.Map<String, String> prior = new java.util.HashMap<>();
+         if (old != null) for (int i = 0; i < old.length(); i++) {
+             JSONObject b = old.optJSONObject(i);
+@@ -382,7 +374,7 @@
+             String name = b.optString("name");
+             String sha = b.optString("sha");
+             String was = prior.get(name);
+-            if (was != null && !was.equals(sha)) {
++            if (was != null && !was.isEmpty() && !sha.isEmpty() && !was.equals(sha)) {
+                 if (names.length() > 0) names.append(", ");
+                 names.append(name);
+             }
+@@ -437,16 +429,27 @@
+         return "task";
+     }
+ 
++    private static boolean comparableSnapshots(JSONObject current, JSONObject previous) {
++        return current != null && previous != null
++                && !SnapshotCodec.isImported(current) && !SnapshotCodec.isImported(previous)
++                && current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
++    }
++
++    static String previousBranchSha(String name, JSONObject current, JSONObject previous) {
++        return comparableSnapshots(current, previous) ? shaOf(previous, name) : null;
++    }
++
+     /** What the owner can say about one branch pointer before compare is fetched. */
+     static String branchPointerLine(String name, JSONObject current, JSONObject previous) {
+         String guess = branchAssumption(name);
+-        if (current == null || previous == null || previous.optBoolean("restoredFromBackup", false)
+-                || current.optBoolean("restoredFromBackup", false))
++        if (!comparableSnapshots(current, previous))
+             return "Сравнивать указатель не с чем. " + guess;
+         String sha = shaOf(current, name);
+         String prior = shaOf(previous, name);
++        if ((sha != null && sha.isEmpty()) || (prior != null && prior.isEmpty()))
++            return "Для сравнения нужны оба указателя ветки. " + guess;
+         if (prior == null) {
+-            if (!previous.optBoolean("branchesComplete", false))
++            if (previous.optJSONArray("branches") == null || !previous.optBoolean("branchesComplete", false))
+                 return "В неполном прошлом списке этого имени не было. Новым его называть нельзя. " + guess;
+             return "В прошлой полной проверке этого имени не было. Создание ветки не доказано. " + guess;
+         }
+@@ -492,7 +495,7 @@
+         if ("branch_moved".equals(kind))
+             return "Точка работы сдвинулась. Пока нет сравнения, нельзя сказать, были это новые записи, откат или переписывание.";
+         if ("branch_seen".equals(kind))
+-            return "Имя появилось в полном прошлом списке. Дата создания и автор неизвестны.";
++            return "Ветка обнаружена в текущем снимке. Её имени не было в предыдущем полном списке. Дата создания и автор неизвестны.";
+         if ("branch_absent".equals(kind))
+             return "Имени нет в новом полном списке. Удаление ветки не подтверждено.";
+         if ("issue_touch".equals(kind) || "pull_touch".equals(kind))
+diff --git a/app/src/main/java/app/unocontrol/MainActivity.java b/app/src/main/java/app/unocontrol/MainActivity.java
+--- a/app/src/main/java/app/unocontrol/MainActivity.java
++++ b/app/src/main/java/app/unocontrol/MainActivity.java
+@@ -256,7 +256,7 @@
+             }
+             if (current != null && (current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
+                     || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
+-                    || current.optBoolean("restoredFromBackup", false))) {
++                    || SnapshotCodec.isImported(current))) {
+                 LinearLayout stale=panel(wrap);
+                 addLine(stale,"Часть сведений с прошлой удачной загрузки.",14,WARN,false,0);
+             }
+diff --git a/app/src/main/java/app/unocontrol/SectionActivity.java b/app/src/main/java/app/unocontrol/SectionActivity.java
+--- a/app/src/main/java/app/unocontrol/SectionActivity.java
++++ b/app/src/main/java/app/unocontrol/SectionActivity.java
+@@ -207,38 +207,16 @@
+         JSONObject x=at("branches");if(x==null){note("Запись не найдена","Вернитесь к списку.");return;}
+         String name=x.optString("name"),sha=x.optString("sha");
+         note("Что произошло", "Открыто направление «"+name+"». "+HumanReport.branchAssumption(name));
+-        note("Что известно", branchDelta(name, sha));
++        note("Что известно", branchDelta(name));
+         note("Что остаётся неизвестным", "По названию и указателю нельзя узнать, прошли ли проверки и можно ли этим пользоваться. История ниже — только последние записи, не вся работа.");
+         note("Источник", sourceLine());
+         technical("Направление\n"+name+"\nУказатель\n"+sha);
+-        String prior = priorSha(name);
+-        if(prior != null && !prior.equals(sha)) loadCompare(prior, sha);
++        String prior = HumanReport.previousBranchSha(name, current, previous);
++        if(prior != null && !prior.isEmpty() && !sha.isEmpty() && !prior.equals(sha)) loadCompare(prior, sha);
+         loadBranchStory(name);
+     }
+-    private String branchDelta(String name, String sha){
+-        if(previous==null || previous.optBoolean("restoredFromBackup", false))
+-            return "Сравнивать не с чем: нет предыдущей проверки. Нельзя сказать, что направление новое или что оно стоит на месте.";
+-        if(!current.optBoolean("branchesComplete", false) || !previous.optBoolean("branchesComplete", false))
+-            return "Один из списков направлений неполный. Если указатель совпал с прошлой проверкой, это видно. Исчезновение или появление направления утверждать нельзя.";
+-        String prior=null;
+-        JSONArray old=previous.optJSONArray("branches");
+-        if(old!=null) for(int i=0;i<old.length();i++){
+-            JSONObject b=old.optJSONObject(i);
+-            if(b!=null && name.equals(b.optString("name"))) prior=b.optString("sha");
+-        }
+-        if(prior==null) return "В прошлой полной проверке этого направления не было. Это ещё не доказательство, что его только что создали: название могло измениться.";
+-        if(!prior.equals(sha)) return "Указатель этого направления изменился. Это ещё не прогресс: ниже будет сравнение GitHub, если оно доступно. Работоспособность не проверена.";
+-        return "Указатель с прошлой полной проверки не изменился. Это не значит, что работа закончена.";
+-    }
+-    private String priorSha(String name) {
+-        if(previous==null) return null;
+-        JSONArray old=previous.optJSONArray("branches");
+-        if(old==null) return null;
+-        for(int i=0;i<old.length();i++){
+-            JSONObject b=old.optJSONObject(i);
+-            if(b!=null && name.equals(b.optString("name"))) return b.optString("sha");
+-        }
+-        return null;
++    private String branchDelta(String name) {
++        return HumanReport.branchPointerLine(name, current, previous);
+     }
+     private void loadCompare(String base, String head) {
+         final int epoch = ++compareEpoch;
+@@ -481,8 +459,8 @@
+     }
+     private String sourceLine(){
+         if(current==null) return "Источник ещё не получен.";
+-        String kind=current.optBoolean("restoredFromBackup", false)?"Импортированный файл, не свежий запрос GitHub."
+-                :"PARTIAL".equals(current.optString("origin"))?"Частичный ответ GitHub, не полная проверка."
++        String kind=SnapshotCodec.isImported(current)?"Импортированный файл, не свежий запрос GitHub."
++                :GithubClient.isPartialSnapshot(current)?"Частичный ответ GitHub, не полная проверка."
+                 :"CACHED".equals(current.optString("origin"))?"GitHub подтвердил прежние списки. История при этом не проверена целиком."
+                 :"GitHub, только чтение.";
+         return kind+" Проект: "+repo+". Загрузка: "+HumanReport.humanDate(current.optLong("capturedAt",0))+".";
+@@ -610,7 +588,7 @@
+         return " Время раздела: " + when + "." + cache;
+     }
+     private void settings(){
+-        note("GitTeller 1.0.10-dev", "Объясняет, что произошло в проекте. Это не коммерческий релиз и не проверка готовности программы.");
++        note("GitTeller 1.0.11-dev", "Объясняет, что произошло в проекте. Это не коммерческий релиз и не проверка готовности программы.");
+         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
+         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
+         note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");
+diff --git a/app/src/main/java/app/unocontrol/SnapshotCodec.java b/app/src/main/java/app/unocontrol/SnapshotCodec.java
+--- a/app/src/main/java/app/unocontrol/SnapshotCodec.java
++++ b/app/src/main/java/app/unocontrol/SnapshotCodec.java
+@@ -7,6 +7,11 @@
+ final class SnapshotCodec {
+     private SnapshotCodec() {}
+ 
++    static boolean isImported(JSONObject snapshot) {
++        return snapshot != null && (snapshot.optBoolean("restoredFromBackup", false)
++                || "IMPORTED".equals(snapshot.optString("origin")));
++    }
++
+     static void validateSnapshot(JSONObject snapshot, String expectedRepo) {
+         if (snapshot == null) return;
+         if (!expectedRepo.equalsIgnoreCase(snapshot.optString("repo")))
+@@ -32,15 +37,16 @@
+         // Missing fields in older archives mean unknown coverage, not an empty completed list.
+         out.put("issuesComplete", raw.optBoolean("issuesComplete", false));
+         out.put("pullsComplete", raw.optBoolean("pullsComplete", false));
+-        out.put("restoredFromBackup", raw.optBoolean("restoredFromBackup", false));
++        out.put("restoredFromBackup", isImported(raw));
+         String origin = raw.optString("origin");
+         if ("LIVE".equals(origin) || "CACHED".equals(origin) || "PARTIAL".equals(origin) || "IMPORTED".equals(origin))
+             out.put("origin", origin);
+-        if (raw.optBoolean("restoredFromBackup", false)) out.put("origin", "IMPORTED");
++        if (isImported(raw)) out.put("origin", "IMPORTED");
+         copyTime(raw, out, "branchesFetchedAt");
+         copyTime(raw, out, "issuesFetchedAt");
+         copyTime(raw, out, "pullsFetchedAt");
+         copyTime(raw, out, "commitsFetchedAt");
++        if (raw.has("commitsFetched")) out.put("commitsFetched", raw.optBoolean("commitsFetched", false));
+         out.put("branchesStale", raw.optBoolean("branchesStale", false));
+         out.put("issuesStale", raw.optBoolean("issuesStale", false));
+         out.put("pullsStale", raw.optBoolean("pullsStale", false));
+diff --git a/app/src/main/java/app/unocontrol/Summary.java b/app/src/main/java/app/unocontrol/Summary.java
+--- a/app/src/main/java/app/unocontrol/Summary.java
++++ b/app/src/main/java/app/unocontrol/Summary.java
+@@ -27,12 +27,12 @@
+                 "Без синхронизации нельзя утверждать, что проект изменился или завершён.",0,0,0,0,0);
+         // A user-supplied backup is not authenticated GitHub evidence.
+         // Never compare a newly fetched live snapshot against a forged/imported baseline.
+-        if (current.optBoolean("restoredFromBackup", false))
++        if (SnapshotCodec.isImported(current))
+             return new Summary("Данные из резервной копии",
+                     "Показан сохранённый файл, а не текущая проверка GitHub. Нажмите «Обновить» для получения свежих данных.",
+                     "По этому файлу нельзя установить, какие изменения действительно произошли в GitHub.",
+                     "Источник не проверен: импортированные сведения нельзя считать подтверждением готовности или прогресса.",0,0,0,0,0);
+-        if (previous == null || previous.optBoolean("restoredFromBackup", false) ||
++        if (previous == null || SnapshotCodec.isImported(previous) ||
+                 !current.optString("repo").equalsIgnoreCase(previous.optString("repo")))
+             return new Summary("Первый снимок сохранён",
+                     "Это первая достоверная проверка для сравнения. Обновите данные позже, чтобы увидеть изменения.",
+diff --git a/app/src/test/java/app/unocontrol/GitHubLoad111Test.java b/app/src/test/java/app/unocontrol/GitHubLoad111Test.java
+new file mode 100644
+--- /dev/null
++++ b/app/src/test/java/app/unocontrol/GitHubLoad111Test.java
+@@ -0,0 +1,93 @@
++package app.unocontrol;
++
++import org.json.JSONObject;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++import java.io.ByteArrayInputStream;
++import java.io.InputStream;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.net.URLConnection;
++import java.net.URLStreamHandler;
++import java.nio.charset.StandardCharsets;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++public class GitHubLoad111Test {
++    private static final String REPO = "example/gitteller";
++    private static final ThreadLocal<Boolean> FAIL_COMMITS = new ThreadLocal<>();
++
++    @BeforeClass public static void installFixtureTransport() {
++        // Unit-test JVM only. Every request is intercepted and no credentials are used.
++        URL.setURLStreamHandlerFactory(protocol -> {
++            if (!"https".equals(protocol)) return null;
++            return new URLStreamHandler() {
++                @Override protected URLConnection openConnection(URL url) {
++                    if (!"api.github.com".equals(url.getHost()) || FAIL_COMMITS.get() == null)
++                        throw new AssertionError("Unexpected HTTPS request in fixture: " + url);
++                    return response(url, FAIL_COMMITS.get());
++                }
++            };
++        });
++    }
++
++    private static HttpURLConnection response(URL url, boolean failCommits) {
++        String root = "/repos/" + REPO;
++        String path = url.getPath();
++        String body;
++        if (path.equals(root)) body = "{\"full_name\":\"example/gitteller\",\"id\":1,\"default_branch\":\"main\"}";
++        else if (path.equals(root + "/commits") || path.equals(root + "/branches")
++                || path.equals(root + "/issues") || path.equals(root + "/pulls")) body = "[]";
++        else throw new AssertionError("Unexpected fixture path: " + path);
++        int status = path.equals(root + "/commits") && failCommits ? 403 : 200;
++
++        return new HttpURLConnection(url) {
++            @Override public int getResponseCode() { return status; }
++            @Override public InputStream getInputStream() {
++                return new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8));
++            }
++            @Override public void connect() {}
++            @Override public void disconnect() {}
++            @Override public boolean usingProxy() { return false; }
++        };
++    }
++
++    @Test public void historyFailureMarksFirstLoadPartial() throws Exception {
++        JSONObject current = load(true, null);
++        assertTrue(current.getBoolean("branchesComplete"));
++        assertTrue(current.getBoolean("issuesComplete"));
++        assertTrue(current.getBoolean("pullsComplete"));
++        assertFalse(current.getBoolean("commitsFetched"));
++        assertFalse(current.getBoolean("commitsStale"));
++        assertEquals("PARTIAL", current.getString("origin"));
++    }
++
++    @Test public void historyFailureKeepsPreviousHistoryAndMarksItStale() throws Exception {
++        JSONObject previous = load(false, null);
++        previous.getJSONArray("commits").put(new JSONObject().put("message", "Earlier entry"));
++        JSONObject current = load(true, previous);
++        assertFalse(current.getBoolean("commitsFetched"));
++        assertTrue(current.getBoolean("commitsStale"));
++        assertEquals("PARTIAL", current.getString("origin"));
++        assertEquals("Earlier entry", current.getJSONArray("commits").getJSONObject(0).getString("message"));
++    }
++
++    @Test public void successfulEmptyHistoryResponseStaysLive() throws Exception {
++        JSONObject current = load(false, null);
++        assertTrue(current.getBoolean("commitsFetched"));
++        assertFalse(current.getBoolean("commitsComplete"));
++        assertEquals("LIVE", current.getString("origin"));
++    }
++
++    private static JSONObject load(boolean failCommits, JSONObject previous) throws Exception {
++        FAIL_COMMITS.set(failCommits);
++        try {
++            return new GithubClient("").load(REPO, previous).snapshot;
++        } finally {
++            FAIL_COMMITS.remove();
++        }
++    }
++}
+diff --git a/app/src/test/java/app/unocontrol/GitTeller111RegressionTest.java b/app/src/test/java/app/unocontrol/GitTeller111RegressionTest.java
+new file mode 100644
+--- /dev/null
++++ b/app/src/test/java/app/unocontrol/GitTeller111RegressionTest.java
+@@ -0,0 +1,124 @@
++package app.unocontrol;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++import org.junit.Test;
++
++import java.lang.reflect.Field;
++import java.lang.reflect.Method;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++public class GitTeller111RegressionTest {
++    private static final String REPO = "example/gitteller";
++    private static final String BRANCH = "research/topic";
++    private static final String BEFORE = "a".repeat(40);
++    private static final String AFTER = "b".repeat(40);
++
++    private static JSONObject snapshot(String sha) throws Exception {
++        return new JSONObject().put("repo", REPO)
++                .put("branchesComplete", true).put("issuesComplete", true).put("pullsComplete", true)
++                .put("commitsFetched", true)
++                .put("branches", new JSONArray().put(new JSONObject().put("name", BRANCH).put("sha", sha)))
++                .put("issues", new JSONArray()).put("pulls", new JSONArray()).put("commits", new JSONArray());
++    }
++
++    @Test public void ownerWhereRejectsImportedBaseline() throws Exception {
++        JSONObject previous = snapshot(BEFORE).put("restoredFromBackup", true).put("origin", "IMPORTED");
++        assertFalse(HumanReport.ownerWhere(snapshot(AFTER), previous).contains("Сдвинулись направления"));
++    }
++
++    @Test public void ownerWhereLabelsImportedCurrent() throws Exception {
++        JSONObject current = snapshot(AFTER).put("restoredFromBackup", true).put("origin", "IMPORTED");
++        assertTrue(HumanReport.ownerWhere(current, snapshot(BEFORE)).contains("импорт"));
++    }
++
++    @Test public void originAloneIdentifiesAnImportedSnapshot() throws Exception {
++        JSONObject imported = snapshot(BEFORE).put("origin", "IMPORTED");
++        assertFalse(HumanReport.ownerWhere(snapshot(AFTER), imported).contains("Сдвинулись направления"));
++        assertTrue(HumanReport.ownerWhere(imported, snapshot(AFTER)).contains("импорт"));
++        assertFalse(HumanReport.branchPointerLine(BRANCH, snapshot(AFTER), imported).contains("сдвинулась"));
++        assertEquals(0, ChangeSet.between(imported, snapshot(AFTER)).length());
++        assertEquals(0, Summary.of(snapshot(AFTER), imported).advanced);
++    }
++
++    @Test public void ownerWhereRejectsOtherReposAndKeepsLiveComparisons() throws Exception {
++        assertFalse(HumanReport.ownerWhere(snapshot(AFTER), snapshot(BEFORE).put("repo", "other/repo"))
++                .contains("Сдвинулись направления"));
++        assertTrue(HumanReport.ownerWhere(snapshot(AFTER), snapshot(BEFORE).put("repo", "EXAMPLE/GitTeller"))
++                .contains("Сдвинулись направления"));
++    }
++
++    @Test public void failedCommitFetchIsPartialInReportsEvenForOldLiveOrigin() throws Exception {
++        JSONObject current = snapshot(AFTER).put("commitsFetched", false).put("origin", "LIVE");
++        assertTrue(HumanReport.ownerStatus(current, snapshot(BEFORE), Summary.of(current, snapshot(BEFORE)))
++                .contains("Часть данных недоступна"));
++        assertTrue(HumanReport.syncStatus(current).contains("Проверка частичная"));
++    }
++
++    @Test public void unknownCommitFetchIsPartialInLegacyReports() throws Exception {
++        JSONObject current = snapshot(AFTER);
++        current.remove("commitsFetched");
++        assertTrue(HumanReport.ownerStatus(current, null, Summary.of(current, null))
++                .contains("Часть данных недоступна"));
++        assertTrue(HumanReport.syncStatus(current).contains("Проверка частичная"));
++    }
++
++    @Test public void recentHistoryResponseAndCachedListsAreNotFetchFailures() throws Exception {
++        JSONObject current = snapshot(AFTER).put("commitsComplete", false).put("historyPartial", true)
++                .put("branchesCached", true);
++        assertFalse(HumanReport.ownerStatus(current, current, Summary.of(current, current))
++                .contains("Часть данных недоступна"));
++        assertTrue(HumanReport.syncStatus(current).contains("GitHub подтвердил"));
++    }
++
++    @Test public void branchSeenExplainsWhichSnapshotHadTheBranch() throws Exception {
++        JSONObject previous = snapshot(BEFORE).put("branches", new JSONArray());
++        JSONObject current = snapshot(AFTER).put("branchesComplete", false);
++        String kind = ChangeSet.between(previous, current).getJSONObject(0).getString("kind");
++        assertEquals("branch_seen", kind);
++        String meaning = HumanReport.eventMeaning(kind);
++        assertTrue(meaning.contains("обнаружена в текущем") || meaning.contains("обнаружено сейчас"));
++        assertTrue(meaning.contains("не было в предыдущем полном") || meaning.contains("отсутствовало в прошлом полном"));
++        assertTrue(meaning.contains("Дата создания и автор неизвестны"));
++        assertEquals(0, ChangeSet.between(previous.put("branchesComplete", false), current).length());
++    }
++
++    @Test public void branchDetailsShowKnownPointerMoveEvenWithPartialLists() throws Exception {
++        for (boolean currentComplete : new boolean[]{false, true}) {
++            for (boolean previousComplete : new boolean[]{false, true}) {
++                JSONObject current = snapshot(AFTER).put("branchesComplete", currentComplete);
++                JSONObject previous = snapshot(BEFORE).put("branchesComplete", previousComplete);
++                assertTrue(branchDetail(current, previous).contains("сдвинулась"));
++            }
++        }
++    }
++
++    @Test public void partialListsSupportNeitherDeletionNorCreationFromAbsence() throws Exception {
++        JSONObject previous = snapshot(BEFORE);
++        JSONObject current = snapshot(AFTER).put("branchesComplete", false).put("branches", new JSONArray());
++        assertEquals(0, ChangeSet.between(previous, current).length());
++        assertTrue(HumanReport.branchPointerLine(BRANCH, current, previous).contains("Удаление не подтверждено"));
++        assertTrue(branchDetail(previous, current).contains("Новым его называть нельзя"));
++        assertTrue(branchDetail(previous, previous).contains("не сдвинулась"));
++    }
++
++    private static String branchDetail(JSONObject current, JSONObject previous) throws Exception {
++        SectionActivity section = new SectionActivity();
++        for (String name : new String[]{"current", "previous"}) {
++            Field field = SectionActivity.class.getDeclaredField(name);
++            field.setAccessible(true);
++            field.set(section, name.equals("current") ? current : previous);
++        }
++        for (Method delta : SectionActivity.class.getDeclaredMethods()) {
++            if (!delta.getName().equals("branchDelta")) continue;
++            delta.setAccessible(true);
++            if (delta.getParameterCount() == 1) return (String) delta.invoke(section, BRANCH);
++            return (String) delta.invoke(section, BRANCH,
++                    current.getJSONArray("branches").getJSONObject(0).getString("sha"));
++        }
++        throw new AssertionError("Branch details have no branchDelta method");
++    }
++}
+diff --git a/local.properties b/local.properties
+--- a/local.properties
++++ b/local.properties
+@@ -1 +1 @@
+-sdk.dir=/tmp/android-sdk
++# Set sdk.dir to your local SDK path, or configure ANDROID_HOME.
