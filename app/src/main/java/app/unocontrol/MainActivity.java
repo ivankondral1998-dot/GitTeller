@@ -322,11 +322,12 @@ public final class MainActivity extends Activity {
         applyPalette();
         boolean keepDrawer = drawer.open || reopenDrawer;
         if (homeScroll != null) savedScroll = homeScroll.getScrollY();
+        if (drawerLayer != null && homeRoot != null) homeRoot.removeView(drawerLayer);
         drawer.markClosed();
         drawerLayer = null;
         ensureShell();
-        homeRoot.removeAllViews();
         homeRoot.setBackgroundColor(BG);
+        if (homeScroll != null && homeScroll.getParent() == homeRoot) homeRoot.removeView(homeScroll);
         ScrollView scroll=new ScrollView(this);
         scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
         LinearLayout wrap=vertical();
@@ -334,8 +335,10 @@ public final class MainActivity extends Activity {
         scroll.addView(wrap);
         FrameLayout.LayoutParams scrollBox = new FrameLayout.LayoutParams(-1,-1);
         scrollBox.bottomMargin = bannerReady ? dp(56) : 0;
-        homeRoot.addView(scroll, scrollBox);
-        if (bannerSlot != null) homeRoot.addView(bannerSlot, new FrameLayout.LayoutParams(-1,-2, Gravity.BOTTOM));
+        homeRoot.addView(scroll, 0, scrollBox);
+        if (bannerSlot.getParent() != homeRoot) {
+            homeRoot.addView(bannerSlot, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+        }
         homeScroll = scroll;
         content=wrap;
         final int restore = savedScroll;

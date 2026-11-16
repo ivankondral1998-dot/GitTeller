@@ -1,18 +1,18 @@
 package app.unocontrol;
 
 import android.app.Activity;
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import com.yandex.mobile.ads.banner.BannerAdEventListener;
+import com.yandex.mobile.ads.banner.BannerAdSize;
 import com.yandex.mobile.ads.banner.BannerAdView;
 import com.yandex.mobile.ads.common.AdError;
 import com.yandex.mobile.ads.common.AdRequest;
+import com.yandex.mobile.ads.common.AdRequestConfiguration;
 import com.yandex.mobile.ads.common.AdRequestError;
-import com.yandex.mobile.ads.common.AdSize;
 import com.yandex.mobile.ads.common.ImpressionData;
 import com.yandex.mobile.ads.interstitial.InterstitialAd;
 import com.yandex.mobile.ads.interstitial.InterstitialAdEventListener;
@@ -20,8 +20,11 @@ import com.yandex.mobile.ads.interstitial.InterstitialAdLoadListener;
 import com.yandex.mobile.ads.interstitial.InterstitialAdLoader;
 
 /**
- * Banner and interstitial. Every call fails open: a missing ad never blocks
- * GitHub refresh. Frequency lives in gitteller_v1, never in the token vault.
+ * Banner and interstitial for Mobile Ads 7.18.1.
+ * Banner: setAdUnitId + BannerAdSize.stickySize + AdRequest.Builder().
+ * Interstitial: InterstitialAdLoader.setAdLoadListener + AdRequestConfiguration.
+ * Every call fails open: a missing ad never blocks GitHub refresh.
+ * Frequency lives in gitteller_v1, never in the token vault.
  */
 final class Ads {
     private static final String KEY = "ads_interstitial_at";
@@ -30,6 +33,8 @@ final class Ads {
     private InterstitialAdLoader loader;
     private InterstitialAd interstitial;
     private boolean showing;
+    private boolean loadingAd;
+    private boolean alive = true;
 
     void attachBanner(Activity activity, FrameLayout slot) {
         if (activity == null || slot == null) return;
@@ -39,9 +44,10 @@ final class Ads {
                 banner = null;
             }
             BannerAdView view = new BannerAdView(activity);
-            int width = Math.max(320, activity.getResources().getDisplayMetrics().widthPixels
-                    / Math.max(1, activity.getResources().getDisplayMetrics().densityDpi / 160));
-            view.setAdSize(AdSize.stickySize(activity, Math.min(width, 400)));
+            float density = activity.getResources().getDisplayMetrics().density;
+            int adWidth = Math.round(activity.getResources().getDisplayMetrics().widthPixels / Math.max(density, 1f));
+            if (adWidth < 320) adWidth = 320;
+            view.setAdSize(BannerAdSize.stickySize(activity, adWidth));
             view.setAdUnitId(AdUnits.BANNER);
             view.setBannerAdEventListener(new BannerAdEventListener() {
                 @Override public void onAdLoaded() { slot.setVisibility(android.view.View.VISIBLE); }
@@ -55,7 +61,7 @@ final class Ads {
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
             slot.addView(view, lp);
-            view.loadAd(new AdRequest.Builder(AdUnits.BANNER).build());
+            view.loadAd(new AdRequest.Builder().build());
             banner = view;
         } catch (Throwable ignored) {
             slot.setVisibility(android.view.View.GONE);
@@ -63,24 +69,37 @@ final class Ads {
     }
 
     void preload(Activity activity) {
-        if (activity == null || interstitial != null) return;
+        if (!alive || activity == null || interstitial != null || loadingAd) return;
         try {
             if (loader == null) loader = new InterstitialAdLoader(activity);
-            loader.loadAd(new AdRequest.Builder(AdUnits.INTERSTITIAL).build(), new InterstitialAdLoadListener() {
-                @Override public void onAdLoaded(InterstitialAd ad) { interstitial = ad; }
-                @Override public void onAdFailedToLoad(AdRequestError error) { interstitial = null; }
+            loadingAd = true;
+            loader.setAdLoadListener(new InterstitialAdLoadListener() {
+                @Override public void onAdLoaded(InterstitialAd ad) {
+                    loadingAd = false;
+                    if (!alive) return;
+                    interstitial = ad;
+                }
+                @Override public void onAdFailedToLoad(AdRequestError error) {
+                    loadingAd = false;
+                    interstitial = null;
+                }
             });
+            loader.loadAd(new AdRequestConfiguration.Builder(AdUnits.INTERSTITIAL).build());
         } catch (Throwable ignored) {
+            loadingAd = false;
             interstitial = null;
         }
     }
 
     /** Show only if due and loaded. onFinished runs once, whether or not an ad appeared. */
     boolean showInterstitialIfDue(Activity activity, SharedPreferences prefs, Runnable onFinished) {
-        if (activity == null || showing) return false;
+        if (!alive || activity == null || showing) return false;
         long now = System.currentTimeMillis();
         long last = prefs == null ? 0L : prefs.getLong(KEY, 0L);
-        if (!AdPolicy.due(now, last) || interstitial == null) return false;
+        if (!AdPolicy.due(now, last) || interstitial == null) {
+            if (interstitial == null) preload(activity);
+            return false;
+        }
         try {
             showing = true;
             final boolean[] done = {false};
@@ -114,9 +133,12 @@ final class Ads {
     }
 
     void destroy() {
+        alive = false;
         try { if (banner != null) banner.destroy(); } catch (Throwable ignored) {}
+        try { if (loader != null) loader.cancelLoading(); } catch (Throwable ignored) {}
         banner = null;
         interstitial = null;
         loader = null;
+        loadingAd = false;
     }
 }

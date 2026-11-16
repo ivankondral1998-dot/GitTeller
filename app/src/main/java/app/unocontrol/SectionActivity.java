@@ -625,6 +625,10 @@ public final class SectionActivity extends Activity {
         b.setPadding(dp(12),dp(10),dp(12),dp(10));
         box.addView(b,params);b.setOnClickListener(v->action.run());
     }
+    private void button(LinearLayout box,String label,String subtitle,Runnable action){
+        if(subtitle!=null && !subtitle.isEmpty()){line(box,subtitle,14,false,muted);gap(box,6);}
+        button(box,label,action);
+    }
     private String sectionTime(String cacheFlag, String atKey) {
         String when = HumanReport.humanDate(current.optLong(atKey, 0));
         String cache = current.optBoolean(cacheFlag, false)
@@ -632,7 +636,8 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.14-dev", "Два режима, поиск по сохранённым данным и правая панель. Ссылка GitHub открывается отдельной кнопкой и только на выбранный проект. Реклама Яндекса: баннер внизу главного экрана, большой ролик не чаще раза в час при «Обновить». Если реклама не загрузилась, обновление всё равно выполняется. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.14-dev", "Два режима, поиск по сохранённым данным и правая панель. Ссылка GitHub открывается отдельной кнопкой и только на выбранный проект. Это не коммерческий релиз и не проверка готовности программы.");
+        note("Реклама", "Реклама Яндекса. Баннер внизу. Большой ролик не чаще раза в час при «Обновить». Если реклама не загрузилась, обновление всё равно выполняется.");
         note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются на главном экране. Выбор сохраняется на устройстве. Права GitHub не меняются.");
         note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
