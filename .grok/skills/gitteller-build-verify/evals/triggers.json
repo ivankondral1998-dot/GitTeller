@@ -1,0 +1,10 @@
+{
+  "skill": "gitteller-build-verify",
+  "test_cases": [
+    {"input": "assemble the debug APK and check signature", "should_trigger": true},
+    {"input": "run unit tests and record SHA-256", "should_trigger": true},
+    {"input": "prepare handoff package for owner", "should_trigger": true},
+    {"input": "fix closed equals merged", "should_trigger": false},
+    {"input": "add search icon", "should_trigger": false}
+  ]
+}

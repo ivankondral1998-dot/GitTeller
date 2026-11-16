@@ -1,0 +1,10 @@
+{
+  "skill": "gitteller-event-model",
+  "test_cases": [
+    {"input": "fix the closed=merged bug in GitTeller", "should_trigger": true},
+    {"input": "how should we model PR merge vs close", "should_trigger": true},
+    {"input": "write HumanReport for branch changes", "should_trigger": true},
+    {"input": "build the APK", "should_trigger": false},
+    {"input": "add a search button", "should_trigger": false}
+  ]
+}

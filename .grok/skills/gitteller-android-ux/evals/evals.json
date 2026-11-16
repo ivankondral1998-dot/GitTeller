@@ -1,0 +1,20 @@
+{
+  "skill": "gitteller-android-ux",
+  "test_cases": [
+    {
+      "name": "search_always_visible",
+      "input": "Add global search to GitTeller",
+      "assertions": ["Search affordance on home of both modes", "Also reachable from drawer", "Searches only local loaded data"]
+    },
+    {
+      "name": "coverage_block",
+      "input": "Show the user how complete the data is",
+      "assertions": ["Compact coverage block on home both modes", "Clear link to Why incomplete screen", "Does not mask partial data as all good"]
+    },
+    {
+      "name": "back_navigation",
+      "input": "Fix drawer and Back behavior",
+      "assertions": ["System Back closes drawer correctly", "Scrim blocks clicks", "Scroll position preserved where expected"]
+    }
+  ]
+}

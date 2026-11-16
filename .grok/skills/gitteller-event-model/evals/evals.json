@@ -1,0 +1,20 @@
+{
+  "skill": "gitteller-event-model",
+  "test_cases": [
+    {
+      "name": "no_closed_equals_merged",
+      "input": "Implement detection of PR changes between snapshots",
+      "assertions": ["Does not treat closed as merged", "Handles merged_at as separate fact", "Confirms via PR detail when needed"]
+    },
+    {
+      "name": "branch_compare_required",
+      "input": "Report what happened to the main branch SHA",
+      "assertions": ["Calls compare endpoint", "Distinguishes ahead/behind/diverged", "Does not call SHA change progress"]
+    },
+    {
+      "name": "partial_not_deletion",
+      "input": "An issue disappeared from the latest page of results",
+      "assertions": ["Does not report as deleted", "Marks completeness PARTIAL or equivalent", "Says unknown or not fully loaded"]
+    }
+  ]
+}

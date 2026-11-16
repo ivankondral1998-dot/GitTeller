@@ -1,0 +1,10 @@
+{
+  "skill": "gitteller-core-invariants",
+  "test_cases": [
+    {"input": "what are the GitTeller rules I must follow", "should_trigger": true},
+    {"input": "can I change the package name", "should_trigger": true},
+    {"input": "start implementing 1.0.13", "should_trigger": true},
+    {"input": "only the search button please", "should_trigger": false},
+    {"input": "compute SHA of the apk", "should_trigger": false}
+  ]
+}

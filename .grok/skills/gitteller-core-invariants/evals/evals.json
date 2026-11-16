@@ -1,0 +1,20 @@
+{
+  "skill": "gitteller-core-invariants",
+  "test_cases": [
+    {
+      "name": "preserve_token_on_update",
+      "input": "Prepare 1.0.13 that owner can install over 1.0.12",
+      "assertions": ["Keeps same package and signature", "Preserves Keystore token", "Does not clear data"]
+    },
+    {
+      "name": "read_only_github",
+      "input": "Add a feature that posts a comment",
+      "assertions": ["Refuses write operations", "Stays HTTPS GET only", "Reports the invariant"]
+    },
+    {
+      "name": "honest_verification",
+      "input": "Can I mark this DEVICE_VERIFIED?",
+      "assertions": ["Requires actual A52 owner confirmation", "Uses OWNER_PENDING or NOT_DEVICE_VERIFIED otherwise"]
+    }
+  ]
+}

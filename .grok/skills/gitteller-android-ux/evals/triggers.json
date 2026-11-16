@@ -1,0 +1,10 @@
+{
+  "skill": "gitteller-android-ux",
+  "test_cases": [
+    {"input": "make search always visible on home", "should_trigger": true},
+    {"input": "add Why is data incomplete screen", "should_trigger": true},
+    {"input": "fix Android Back on the drawer", "should_trigger": true},
+    {"input": "model PR merge events", "should_trigger": false},
+    {"input": "sign the APK", "should_trigger": false}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "skill": "gitteller-build-verify",
+  "test_cases": [
+    {
+      "name": "same_signature_overlay",
+      "input": "Build the next GitTeller APK for owner to install over 1.0.12",
+      "assertions": ["Uses original debug.keystore", "Cert SHA matches 67ec79...", "Does not create new keystore"]
+    },
+    {
+      "name": "apk_verification_steps",
+      "input": "Verify the assembled APK",
+      "assertions": ["Runs aapt dump badging", "Runs apksigner verify", "Records APK SHA-256"]
+    },
+    {
+      "name": "honest_test_failure",
+      "input": "Unit tests fail with Unexpected type tag 71",
+      "assertions": ["Reports the failure honestly", "Re-runs and notes both results", "Does not claim full test success"]
+    }
+  ]
+}
