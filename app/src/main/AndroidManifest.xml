@@ -12,7 +12,7 @@
                  android:usesCleartextTraffic="false"
                  android:supportsRtl="true">
         <activity android:name=".SectionActivity" android:exported="false"/>
-        <activity android:name=".MainActivity" android:exported="true"/>
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop"/>
         <activity-alias android:name=".IconSand" android:enabled="true" android:exported="true" android:icon="@mipmap/ic_sand" android:roundIcon="@mipmap/ic_sand" android:targetActivity=".MainActivity" android:label="GitTeller">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

@@ -803,8 +803,9 @@ public final class SectionActivity extends Activity {
     }
     private void openNoticeSettings() {
         try {
-            Intent intent = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+            Intent intent = new Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
             intent.putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+            intent.putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, QuietPoster.CHANNEL);
             startActivity(intent);
         } catch (Exception e) {
             toast("Не удалось открыть уведомления системы");

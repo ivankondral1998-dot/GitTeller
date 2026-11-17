@@ -28,6 +28,15 @@ public class PaletteQuietTest {
         assertTrue(Palette.dark(Palette.SYSTEM, 0x20));
     }
 
+    @Test public void quietScheduleDoesNotShrinkAFutureCheck() {
+        long now = 1_000_000L;
+        assertEquals(-1L, Watch.scheduleDelay(now, now + Watch.INTERVAL_MS, false));
+        assertEquals(-1L, Watch.scheduleDelay(now, now, false));
+        assertEquals(Watch.FIRST_MS, Watch.scheduleDelay(now, 0L, false));
+        assertEquals(Watch.INTERVAL_MS, Watch.scheduleDelay(now, now - 1L, true));
+        assertEquals(Watch.INTERVAL_MS / 2, Watch.scheduleDelay(now, now + Watch.INTERVAL_MS / 2, true));
+    }
+
     @Test public void backgroundCheckKeepsItsBaselineOnlyWhileItIsStillSaved() {
         assertTrue(Watch.baselineStillSaved("same", "same"));
         assertFalse(Watch.baselineStillSaved("old snapshot", "newer manual refresh"));

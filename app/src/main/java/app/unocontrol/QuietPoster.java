@@ -37,7 +37,9 @@ final class QuietPoster {
             manager.createNotificationChannel(channel);
         }
         Intent open = new Intent(context, MainActivity.class);
-        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        String repo = current.optString("repo", "").trim();
+        if (!repo.isEmpty()) open.putExtra(Watch.EXTRA_REPO, repo);
         PendingIntent tap = PendingIntent.getActivity(context, 7, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
@@ -62,6 +64,10 @@ final class QuietPoster {
         if (context == null) return false;
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null && !manager.areNotificationsEnabled()) return false;
+        if (Build.VERSION.SDK_INT >= 26 && manager != null) {
+            android.app.NotificationChannel channel = manager.getNotificationChannel(CHANNEL);
+            if (channel != null && channel.getImportance() == NotificationManager.IMPORTANCE_NONE) return false;
+        }
         if (Build.VERSION.SDK_INT >= 33
                 && context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) return false;

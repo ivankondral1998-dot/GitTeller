@@ -106,11 +106,34 @@ public final class MainActivity extends Activity {
         }
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         Watch.ensure(this);
+        applyNotifiedRepo(getIntent());
         draw();
         ads.preload(this);
         if (savedInstanceState == null && !prefs.getBoolean("guide_seen", false)) {
             homeRoot.post(() -> openPage("guide"));
         }
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (applyNotifiedRepo(intent) && !isFinishing()) draw();
+    }
+
+    /** Opens the project named on a quiet-notice tap. Returns true when the screen must redraw. */
+    private boolean applyNotifiedRepo(Intent intent) {
+        if (intent == null || prefs == null) return false;
+        String named = intent.getStringExtra(Watch.EXTRA_REPO);
+        if (named == null) return false;
+        named = named.trim();
+        if (!named.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || named.contains("..")) return false;
+        if (!named.equals(repo)) abandonSync();
+        if (!prefs.edit().putString("repo", named).commit()) return false;
+        String raw = prefs.getString(key(named, "current"), "");
+        if (raw == null) raw = "";
+        if (named.equals(repo) && raw.equals(seenCurrent)) return false;
+        readProject(named);
+        return true;
     }
 
     @Override protected void onSaveInstanceState(Bundle out) {
