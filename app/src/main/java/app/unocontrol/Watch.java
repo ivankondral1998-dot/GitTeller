@@ -75,8 +75,8 @@ final class Watch {
         if (jobs == null) return;
         android.app.job.JobInfo job = new android.app.job.JobInfo.Builder(42,
                 new android.content.ComponentName(context, WatchJob.class))
+                // Never force an offline run by overriding the network constraint.
                 .setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY)
-                .setOverrideDeadline(60_000L)
                 .build();
         jobs.schedule(job);
     }
@@ -102,8 +102,8 @@ final class Watch {
             synchronized (WRITE) {
                 String saved = prefs.getString(key + ":current", "");
                 if (saved == null) saved = "";
-                if (!baselineStillSaved(baseline, saved)) return;
-                if (QuietNotice.worthTelling(fresh, current)) QuietPoster.postIfNew(context, fresh, current);
+                // The user may disable checks while a GitHub request is in flight.
+                if (!enabled(prefs) || !baselineStillSaved(baseline, saved)) return;
                 SharedPreferences.Editor edit = prefs.edit()
                         .putString(key + ":previous", current.toString())
                         .putString(key + ":current", fresh.toString())
@@ -114,7 +114,10 @@ final class Watch {
                 } catch (Exception ignored) {
                     // A broken local feed must not discard the fresh snapshot.
                 }
-                edit.commit();
+                // Never announce an event whose new snapshot was not saved.
+                if (edit.commit() && QuietNotice.worthTelling(fresh, current)) {
+                    QuietPoster.postIfNew(context, fresh, current);
+                }
             }
         } catch (Exception ignored) {
             // A missed check is not a reason to buzz or to drop the last good snapshot.
