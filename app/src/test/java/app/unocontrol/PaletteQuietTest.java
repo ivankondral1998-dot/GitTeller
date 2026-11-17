@@ -28,6 +28,13 @@ public class PaletteQuietTest {
         assertTrue(Palette.dark(Palette.SYSTEM, 0x20));
     }
 
+    @Test public void backgroundCheckKeepsItsBaselineOnlyWhileItIsStillSaved() {
+        assertTrue(Watch.baselineStillSaved("same", "same"));
+        assertFalse(Watch.baselineStillSaved("old snapshot", "newer manual refresh"));
+        assertFalse(Watch.baselineStillSaved(null, "imported"));
+        assertTrue(Watch.baselineStillSaved("", ""));
+    }
+
     @Test public void quietNoticeStaysSilentWithoutARealChange() throws Exception {
         JSONObject first = snap("demo/app", "aaa");
         assertFalse(QuietNotice.worthTelling(first, null));

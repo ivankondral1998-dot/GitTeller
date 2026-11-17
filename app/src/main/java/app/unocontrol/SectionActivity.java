@@ -39,6 +39,8 @@ public final class SectionActivity extends Activity {
     private SharedPreferences prefs;
     private JSONObject current, previous;
     private String repo, page, seenCurrent;
+    private String seenLook = "sand";
+    private String seenMode = Palette.SYSTEM;
     private TokenVault vault;
     private int detailEpoch;
     private int compareEpoch;
@@ -48,6 +50,8 @@ public final class SectionActivity extends Activity {
         prefs=getSharedPreferences("gitteller_v1",MODE_PRIVATE);
         repo=prefs.getString("repo","octocat/Hello-World");
         seenCurrent=prefs.getString(key(repo,"current"),"");
+        seenLook=prefs.getString(Palette.PREF,"sand");
+        seenMode=prefs.getString(Palette.DAY_NIGHT,Palette.SYSTEM);
         current=parse(seenCurrent);
         previous=parse(prefs.getString(key(repo,"previous"),""));
         vault=new TokenVault(this);
@@ -66,11 +70,18 @@ public final class SectionActivity extends Activity {
         if(prefs==null) return;
         String selected=prefs.getString("repo",repo);
         String raw=prefs.getString(key(selected,"current"),"");
-        if(selected.equals(repo) && raw.equals(seenCurrent==null?"":seenCurrent)) return;
-        repo=selected;
-        seenCurrent=raw;
-        current=parse(raw);
-        previous=parse(prefs.getString(key(repo,"previous"),""));
+        String look=prefs.getString(Palette.PREF,"sand");
+        String mode=prefs.getString(Palette.DAY_NIGHT,Palette.SYSTEM);
+        boolean appearance=!java.util.Objects.equals(look, seenLook) || !java.util.Objects.equals(mode, seenMode);
+        if(selected.equals(repo) && raw.equals(seenCurrent==null?"":seenCurrent) && !appearance) return;
+        if(!selected.equals(repo) || !raw.equals(seenCurrent==null?"":seenCurrent)) {
+            repo=selected;
+            seenCurrent=raw;
+            current=parse(raw);
+            previous=parse(prefs.getString(key(repo,"previous"),""));
+        }
+        seenLook=look;
+        seenMode=mode;
         paint();render();
     }
     private static String key(String repo,String suffix) {return repo.toLowerCase(java.util.Locale.ROOT)+":"+suffix;}

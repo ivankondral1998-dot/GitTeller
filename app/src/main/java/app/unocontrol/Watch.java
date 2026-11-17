@@ -15,8 +15,17 @@ final class Watch {
     static final String PREF = "quiet_watch";
     static final long INTERVAL_MS = 6L * 60L * 60L * 1000L;
     static final String ACTION = "app.unocontrol.QUIET_WATCH";
+    /** Snapshot writers share this so a slow check cannot replace a newer save. */
+    static final Object WRITE = new Object();
 
     private Watch() {}
+
+    /** False once a manual refresh or import has replaced the snapshot this check started from. */
+    static boolean baselineStillSaved(String started, String savedNow) {
+        if (started == null) started = "";
+        if (savedNow == null) savedNow = "";
+        return started.equals(savedNow);
+    }
 
     static boolean enabled(SharedPreferences prefs) {
         return prefs == null || prefs.getBoolean(PREF, true);
@@ -41,7 +50,9 @@ final class Watch {
         if (!enabled(prefs)) return;
         String repo = prefs.getString("repo", "octocat/Hello-World");
         String key = repo.toLowerCase(java.util.Locale.ROOT);
-        JSONObject current = parse(prefs.getString(key + ":current", ""));
+        String baseline = prefs.getString(key + ":current", "");
+        if (baseline == null) baseline = "";
+        JSONObject current = parse(baseline);
         if (current == null || SnapshotCodec.isImported(current)) return;
         String token = "";
         try {
@@ -52,18 +63,23 @@ final class Watch {
         }
         try {
             JSONObject fresh = new GithubClient(token).load(repo, current).snapshot;
-            if (QuietNotice.worthTelling(fresh, current)) QuietPoster.postIfNew(context, fresh, current);
-            SharedPreferences.Editor edit = prefs.edit()
-                    .putString(key + ":previous", current.toString())
-                    .putString(key + ":current", fresh.toString())
-                    .remove(key + ":lastError");
-            try {
-                JSONArray prior = parseArray(prefs.getString(key + ":feed", ""));
-                edit.putString(key + ":feed", EventFeed.remember(prior, current, fresh).toString());
-            } catch (Exception ignored) {
-                // A broken local feed must not discard the fresh snapshot.
+            synchronized (WRITE) {
+                String saved = prefs.getString(key + ":current", "");
+                if (saved == null) saved = "";
+                if (!baselineStillSaved(baseline, saved)) return;
+                if (QuietNotice.worthTelling(fresh, current)) QuietPoster.postIfNew(context, fresh, current);
+                SharedPreferences.Editor edit = prefs.edit()
+                        .putString(key + ":previous", current.toString())
+                        .putString(key + ":current", fresh.toString())
+                        .remove(key + ":lastError");
+                try {
+                    JSONArray prior = parseArray(prefs.getString(key + ":feed", ""));
+                    edit.putString(key + ":feed", EventFeed.remember(prior, current, fresh).toString());
+                } catch (Exception ignored) {
+                    // A broken local feed must not discard the fresh snapshot.
+                }
+                edit.commit();
             }
-            edit.commit();
         } catch (Exception ignored) {
             // A missed check is not a reason to buzz or to drop the last good snapshot.
         }

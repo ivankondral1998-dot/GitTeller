@@ -72,6 +72,8 @@ public final class MainActivity extends Activity {
     private String lastError;
     private JSONArray feed = new JSONArray();
     private String seenCurrent = "";
+    private String seenLook = "sand";
+    private String seenMode = Palette.SYSTEM;
     private EditText searchField;
     private LinearLayout searchResults;
     private String searchQuery = "";
@@ -913,6 +915,22 @@ public final class MainActivity extends Activity {
         feed = parseArray(prefs.getString(key(repo, "feed"), ""));
         lastError = prefs.getString(key(repo, "lastError"), "");
         if (lastError != null && lastError.isEmpty()) lastError = null;
+        rememberLook();
+    }
+
+    private void rememberLook() {
+        seenLook = prefs.getString(Palette.PREF, "sand");
+        if (seenLook == null || seenLook.isEmpty()) seenLook = "sand";
+        seenMode = prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM);
+        if (seenMode == null || seenMode.isEmpty()) seenMode = Palette.SYSTEM;
+    }
+
+    private boolean lookChanged() {
+        String look = prefs.getString(Palette.PREF, "sand");
+        if (look == null || look.isEmpty()) look = "sand";
+        String mode = prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM);
+        if (mode == null || mode.isEmpty()) mode = Palette.SYSTEM;
+        return !seenLook.equals(look) || !seenMode.equals(mode);
     }
 
     @Override protected void onResume() {
@@ -924,15 +942,24 @@ public final class MainActivity extends Activity {
         if (raw == null) raw = "";
         String err = prefs.getString(key(selected, "lastError"), "");
         if (err != null && err.isEmpty()) err = null;
+        boolean appearance = lookChanged();
         if (!selected.equals(repo)) {
             abandonSync();
             readProject(selected);
             draw();
             return;
         }
-        if (loading) return;
-        if (raw.equals(seenCurrent) && java.util.Objects.equals(err, lastError)) return;
-        readProject(selected);
+        if (loading) {
+            if (appearance) {
+                rememberLook();
+                draw();
+            }
+            return;
+        }
+        boolean data = !raw.equals(seenCurrent) || !java.util.Objects.equals(err, lastError);
+        if (!data && !appearance) return;
+        if (data) readProject(selected);
+        else rememberLook();
         draw();
     }
 
@@ -987,12 +1014,14 @@ public final class MainActivity extends Activity {
                     previous=current;
                     current=fresh;
                     lastError=null;
-                    rememberFeed(previous, current);
-                    prefs.edit().putString(key(repo,"previous"),previous==null?"":previous.toString())
-                            .putString(key(repo,"current"),current.toString())
-                            .putString(key(repo,"feed"), feed.toString())
-                            .remove(key(repo,"lastError")).commit();
-                    seenCurrent = current == null ? "" : current.toString();
+                    synchronized (Watch.WRITE) {
+                        rememberFeed(previous, current);
+                        prefs.edit().putString(key(repo,"previous"),previous==null?"":previous.toString())
+                                .putString(key(repo,"current"),current.toString())
+                                .putString(key(repo,"feed"), feed.toString())
+                                .remove(key(repo,"lastError")).commit();
+                        seenCurrent = current == null ? "" : current.toString();
+                    }
                     QuietPoster.postIfNew(this, current, previous);
                     loading=false;draw();toast("Данные обновлены");
                 });
@@ -1064,10 +1093,14 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Отмена",(d,w)->{})
                 .setPositiveButton("Восстановить",(d,w)->{
                     if(loading){toast("Дождитесь завершения синхронизации");return;}
-                    if(!prefs.edit().putString(key(restoredRepo,"current"),finalFresh.toString())
-                            .putString(key(restoredRepo,"previous"),finalOld==null?"":finalOld.toString())
-                            .remove(key(restoredRepo,"feed"))
-                            .putString("repo",restoredRepo).commit()){
+                    boolean saved;
+                    synchronized (Watch.WRITE) {
+                        saved = prefs.edit().putString(key(restoredRepo,"current"),finalFresh.toString())
+                                .putString(key(restoredRepo,"previous"),finalOld==null?"":finalOld.toString())
+                                .remove(key(restoredRepo,"feed"))
+                                .putString("repo",restoredRepo).commit();
+                    }
+                    if(!saved){
                         toast("Не удалось сохранить архив");return;
                     }
                     repo=restoredRepo;current=finalFresh;previous=finalOld;feed=new JSONArray();
