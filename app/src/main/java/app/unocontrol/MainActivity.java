@@ -820,6 +820,7 @@ public final class MainActivity extends Activity {
         });
         drawerItem(items, "Как пользоваться", () -> { closeDrawer(false); openPage("guide"); });
         drawerItem(items, "От разработчика", () -> { closeDrawer(false); openPage("developer-notes"); });
+        drawerItem(items, "Планы развития", () -> { closeDrawer(false); openPage("roadmap"); });
         drawerItem(items, "Разделы проекта", () -> { closeDrawer(false); openPage("index"); });
         drawerItem(items, "Обновить", () -> { closeDrawer(false); sync(); });
         drawerItem(items, "Сменить проект", () -> { closeDrawer(false); openPage("projects"); });
