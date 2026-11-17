@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** Infrequent quiet check. Failures stay silent and do not replace a saved snapshot. */
@@ -52,11 +53,17 @@ final class Watch {
         try {
             JSONObject fresh = new GithubClient(token).load(repo, current).snapshot;
             if (QuietNotice.worthTelling(fresh, current)) QuietPoster.postIfNew(context, fresh, current);
-            prefs.edit()
+            SharedPreferences.Editor edit = prefs.edit()
                     .putString(key + ":previous", current.toString())
                     .putString(key + ":current", fresh.toString())
-                    .remove(key + ":lastError")
-                    .commit();
+                    .remove(key + ":lastError");
+            try {
+                JSONArray prior = parseArray(prefs.getString(key + ":feed", ""));
+                edit.putString(key + ":feed", EventFeed.remember(prior, current, fresh).toString());
+            } catch (Exception ignored) {
+                // A broken local feed must not discard the fresh snapshot.
+            }
+            edit.commit();
         } catch (Exception ignored) {
             // A missed check is not a reason to buzz or to drop the last good snapshot.
         }
@@ -67,6 +74,14 @@ final class Watch {
         intent.setAction(ACTION);
         return PendingIntent.getBroadcast(context, 9, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    private static JSONArray parseArray(String raw) {
+        try {
+            return raw == null || raw.isEmpty() ? new JSONArray() : new JSONArray(raw);
+        } catch (Exception e) {
+            return new JSONArray();
+        }
     }
 
     private static JSONObject parse(String raw) {

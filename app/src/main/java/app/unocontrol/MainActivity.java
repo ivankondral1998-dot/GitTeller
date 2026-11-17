@@ -72,6 +72,7 @@ public final class MainActivity extends Activity {
     private boolean loading;
     private String lastError;
     private JSONArray feed = new JSONArray();
+    private String seenCurrent = "";
     private LinearLayout content;
     private Button refresh;
     private FrameLayout homeRoot;
@@ -91,12 +92,7 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(0);
         prefs = getSharedPreferences("gitteller_v1", MODE_PRIVATE);
         vault = new TokenVault(this);
-        repo = prefs.getString("repo", DEFAULT_REPO);
-        current = parse(prefs.getString(key(repo, "current"), ""));
-        previous = parse(prefs.getString(key(repo, "previous"), ""));
-        lastError = prefs.getString(key(repo, "lastError"), "");
-        if (lastError != null && lastError.isEmpty()) lastError = null;
-        feed = parseArray(prefs.getString(key(repo, "feed"), ""));
+        readProject(prefs.getString("repo", DEFAULT_REPO));
         if (savedInstanceState != null) {
             savedScroll = savedInstanceState.getInt("scroll", 0);
             reopenDrawer = savedInstanceState.getBoolean("drawer", false);
@@ -144,8 +140,7 @@ public final class MainActivity extends Activity {
     private void rememberFeed(JSONObject older, JSONObject newer) {
         try {
             JSONArray prior = parseArray(prefs.getString(key(repo, "feed"), ""));
-            JSONArray news = ChangeSet.between(older, newer);
-            feed = EventFeed.merge(prior, news, newer.optLong("capturedAt", System.currentTimeMillis()));
+            feed = EventFeed.remember(prior, older, newer);
         } catch (Exception ignored) {
             // A broken local feed must not discard the fresh snapshot.
         }
@@ -851,20 +846,35 @@ public final class MainActivity extends Activity {
         return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
     }
 
+    private void readProject(String selected) {
+        repo = selected;
+        seenCurrent = prefs.getString(key(repo, "current"), "");
+        if (seenCurrent == null) seenCurrent = "";
+        current = parse(seenCurrent);
+        previous = parse(prefs.getString(key(repo, "previous"), ""));
+        feed = parseArray(prefs.getString(key(repo, "feed"), ""));
+        lastError = prefs.getString(key(repo, "lastError"), "");
+        if (lastError != null && lastError.isEmpty()) lastError = null;
+    }
+
     @Override protected void onResume() {
         super.onResume();
         if (prefs == null) return;
         String selected = prefs.getString("repo", DEFAULT_REPO);
+        String raw = prefs.getString(key(selected, "current"), "");
+        if (raw == null) raw = "";
+        String err = prefs.getString(key(selected, "lastError"), "");
+        if (err != null && err.isEmpty()) err = null;
         if (!selected.equals(repo)) {
             abandonSync();
-            repo = selected;
-            current = parse(prefs.getString(key(repo,"current"),""));
-            previous = parse(prefs.getString(key(repo,"previous"),""));
-            feed = parseArray(prefs.getString(key(repo,"feed"),""));
-            lastError = prefs.getString(key(repo,"lastError"), "");
-            if (lastError != null && lastError.isEmpty()) lastError = null;
+            readProject(selected);
             draw();
+            return;
         }
+        if (loading) return;
+        if (raw.equals(seenCurrent) && java.util.Objects.equals(err, lastError)) return;
+        readProject(selected);
+        draw();
     }
 
     private String accessStatus() {
@@ -923,6 +933,7 @@ public final class MainActivity extends Activity {
                             .putString(key(repo,"current"),current.toString())
                             .putString(key(repo,"feed"), feed.toString())
                             .remove(key(repo,"lastError")).commit();
+                    seenCurrent = current == null ? "" : current.toString();
                     QuietPoster.postIfNew(this, current, previous);
                     loading=false;draw();toast("Данные обновлены");
                 });
@@ -1000,7 +1011,10 @@ public final class MainActivity extends Activity {
                             .putString("repo",restoredRepo).commit()){
                         toast("Не удалось сохранить архив");return;
                     }
-                    repo=restoredRepo;current=finalFresh;previous=finalOld;feed=new JSONArray();draw();toast("Данные восстановлены из архива");
+                    repo=restoredRepo;current=finalFresh;previous=finalOld;feed=new JSONArray();
+                    seenCurrent=finalFresh.toString();
+                    lastError=null;
+                    draw();toast("Данные восстановлены из архива");
                 }).show();
     }
 
@@ -1021,13 +1035,7 @@ public final class MainActivity extends Activity {
                 if("sync".equals(action)) {sync();return;}
                 if("changed".equals(action)) {
                     abandonSync();
-                    String selected=prefs.getString("repo",DEFAULT_REPO);
-                    repo=selected;
-                    current=parse(prefs.getString(key(repo,"current"),""));
-                    previous=parse(prefs.getString(key(repo,"previous"),""));
-                    feed=parseArray(prefs.getString(key(repo,"feed"),""));
-                    lastError=prefs.getString(key(repo,"lastError"), "");
-                    if (lastError != null && lastError.isEmpty()) lastError = null;
+                    readProject(prefs.getString("repo",DEFAULT_REPO));
                     draw();return;
                 }
             }

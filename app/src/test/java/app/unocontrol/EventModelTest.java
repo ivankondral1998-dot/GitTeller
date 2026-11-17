@@ -34,6 +34,16 @@ public class EventModelTest {
         return b.toString();
     }
 
+    @Test public void rememberedFeedKeepsTheChangeAfterTheBaselineMoves() throws Exception {
+        JSONObject before = snap(new JSONArray(), new JSONArray());
+        JSONObject after = snap(new JSONArray(), new JSONArray());
+        after.put("branches", new JSONArray().put(new JSONObject().put("name", "main").put("sha", SHA2)));
+        JSONArray feed = EventFeed.remember(new JSONArray(), before, after);
+        assertTrue(kinds(feed).contains("branch_moved"));
+        JSONArray later = EventFeed.remember(feed, after, after);
+        assertTrue(kinds(later).contains("branch_moved"));
+    }
+
     @Test public void matchedBranchChangeAppearsEvenWithPartialLists() throws Exception {
         JSONObject before = snap(new JSONArray(),new JSONArray()).put("branchesComplete",false);
         JSONObject after = snap(new JSONArray(),new JSONArray()).put("branchesComplete",false);
