@@ -23,4 +23,20 @@ public class DeveloperNotesTest {
         assertNull(DeveloperNotes.at(-1));
         assertNull(DeveloperNotes.at(notes.length));
     }
+
+    @Test public void distinctTopicsArePresent() {
+        DeveloperNotes.Entry[] notes = DeveloperNotes.all();
+        assertEquals("Original note and three new subjects", 4, notes.length);
+        assertEquals("Не доверяйте ИИ на слово", notes[0].title);
+        assertEquals("Почему появился GitTeller", notes[1].title);
+        assertEquals("Ошибки, которым меня научила разработка", notes[2].title);
+        assertEquals("Мои исследования за пределами GitTeller", notes[3].title);
+        for (int i = 0; i < notes.length; i++) {
+            for (int j = i + 1; j < notes.length; j++) {
+                assertNotEquals(notes[i].title, notes[j].title);
+            }
+        }
+        assertEquals(notes[0], DeveloperNotes.at(0));
+        assertEquals(notes[3], DeveloperNotes.at(3));
+    }
 }
