@@ -18,6 +18,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -43,6 +44,7 @@ import java.text.DateFormat;
 import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /** Real Android views. No HTML, CSS or WebView. */
 public final class MainActivity extends Activity {
@@ -69,15 +71,25 @@ public final class MainActivity extends Activity {
     private boolean loading;
     private String lastError;
     private JSONArray feed = new JSONArray();
+    private String seenCurrent = "";
+    private String seenLook = "sand";
+    private String seenMode = Palette.SYSTEM;
+    private EditText searchField;
+    private LinearLayout searchResults;
+    private String searchQuery = "";
+    private boolean focusSearch;
     private LinearLayout content;
     private Button refresh;
     private FrameLayout homeRoot;
     private ScrollView homeScroll;
     private int savedScroll;
     private boolean reopenDrawer;
+    private boolean noticeHandled;
     private final DrawerMotion drawer = new DrawerMotion();
     private View drawerLayer;
     private float dragX;
+    private final Ads ads = new Ads();
+    private FrameLayout bannerSlot;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -86,17 +98,49 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(0);
         prefs = getSharedPreferences("gitteller_v1", MODE_PRIVATE);
         vault = new TokenVault(this);
-        repo = prefs.getString("repo", DEFAULT_REPO);
-        current = parse(prefs.getString(key(repo, "current"), ""));
-        previous = parse(prefs.getString(key(repo, "previous"), ""));
-        lastError = prefs.getString(key(repo, "lastError"), "");
-        if (lastError != null && lastError.isEmpty()) lastError = null;
-        feed = parseArray(prefs.getString(key(repo, "feed"), ""));
+        readProject(prefs.getString("repo", DEFAULT_REPO));
         if (savedInstanceState != null) {
             savedScroll = savedInstanceState.getInt("scroll", 0);
             reopenDrawer = savedInstanceState.getBoolean("drawer", false);
+            searchQuery = savedInstanceState.getString("query", "");
+            if (searchQuery == null) searchQuery = "";
+            noticeHandled = savedInstanceState.getBoolean("notice_handled", false);
         }
+        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        Watch.ensure(this);
+        if (!noticeHandled) applyNotifiedRepo(getIntent());
+        noticeHandled = true;
         draw();
+        ads.preload(this);
+        if (savedInstanceState == null && !prefs.getBoolean("guide_seen", false)) {
+            homeRoot.post(() -> openPage("guide"));
+        }
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (applyNotifiedRepo(intent) && !isFinishing()) draw();
+    }
+
+    /** Opens the project named on a quiet-notice tap. Returns true when the screen must redraw. */
+    private boolean applyNotifiedRepo(Intent intent) {
+        if (intent == null || prefs == null) return false;
+        String named = intent.getStringExtra(Watch.EXTRA_REPO);
+        if (named == null) return false;
+        named = named.trim();
+        if (!named.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || named.contains("..")) {
+            intent.removeExtra(Watch.EXTRA_REPO);
+            return false;
+        }
+        intent.removeExtra(Watch.EXTRA_REPO);
+        if (!named.equals(repo)) abandonSync();
+        if (!prefs.edit().putString("repo", named).commit()) return false;
+        String raw = prefs.getString(key(named, "current"), "");
+        if (raw == null) raw = "";
+        if (named.equals(repo) && raw.equals(seenCurrent)) return false;
+        readProject(named);
+        return true;
     }
 
     @Override protected void onSaveInstanceState(Bundle out) {
@@ -104,6 +148,8 @@ public final class MainActivity extends Activity {
         if (homeScroll != null) savedScroll = homeScroll.getScrollY();
         out.putInt("scroll", savedScroll);
         out.putBoolean("drawer", drawer.open);
+        out.putString("query", searchQuery);
+        out.putBoolean("notice_handled", noticeHandled);
     }
 
     @Override public void onBackPressed() {
@@ -129,39 +175,40 @@ public final class MainActivity extends Activity {
     private void rememberFeed(JSONObject older, JSONObject newer) {
         try {
             JSONArray prior = parseArray(prefs.getString(key(repo, "feed"), ""));
-            JSONArray news = ChangeSet.between(older, newer);
-            feed = EventFeed.merge(prior, news, newer.optLong("capturedAt", System.currentTimeMillis()));
+            feed = EventFeed.remember(prior, older, newer);
         } catch (Exception ignored) {
             // A broken local feed must not discard the fresh snapshot.
         }
     }
 
     private void applyPalette() {
-        int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        boolean dark = night != Configuration.UI_MODE_NIGHT_NO;
-        if (dark) {
-            BG = Color.rgb(12,18,25);
-            PANEL = Color.rgb(23,33,44);
-            PANEL_2 = Color.rgb(30,43,56);
-            TEXT = Color.rgb(238,242,247);
-            MUTED = Color.rgb(158,172,188);
-            ACCENT = Color.rgb(218,174,127);
-            WARN = Color.rgb(239,198,128);
-            STROKE = Color.rgb(47,63,80);
-            getWindow().getDecorView().setSystemUiVisibility(0);
-        } else {
-            BG = Color.rgb(246,243,236);
-            PANEL = Color.rgb(255,255,255);
-            PANEL_2 = Color.rgb(236,230,220);
-            TEXT = Color.rgb(28,32,38);
-            MUTED = Color.rgb(90,98,108);
-            ACCENT = Color.rgb(140,96,48);
-            WARN = Color.rgb(140,84,20);
-            STROKE = Color.rgb(214,206,194);
-            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        int night = getResources().getConfiguration().uiMode;
+        boolean dark = Palette.dark(Palette.normalizeMode(prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM)), night);
+        Palette.Colors c = Palette.colors(Palette.find(prefs.getString(Palette.PREF, "sand")), dark);
+        BG = c.bg;
+        PANEL = c.panel;
+        PANEL_2 = c.panel2;
+        TEXT = c.text;
+        MUTED = c.muted;
+        ACCENT = c.accent;
+        WARN = c.warn;
+        STROKE = c.stroke;
+        paintBars(dark, BG);
+    }
+
+    private void paintBars(boolean dark, int color) {
+        getWindow().setStatusBarColor(color);
+        getWindow().setNavigationBarColor(color);
+        int light = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        getWindow().getDecorView().setSystemUiVisibility(dark ? 0 : light);
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                int bits = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(dark ? 0 : bits, bits);
+            }
         }
-        getWindow().setStatusBarColor(BG);
-        getWindow().setNavigationBarColor(BG);
     }
 
     private int dp(float v) { return (int)(v * getResources().getDisplayMetrics().density + 0.5f); }
@@ -194,9 +241,9 @@ public final class MainActivity extends Activity {
     }
     private LinearLayout panel(LinearLayout parent){
         LinearLayout card=vertical();
-        card.setPadding(dp(18),dp(18),dp(18),dp(18));
-        card.setBackground(shape(PANEL,18,STROKE));
-        LinearLayout.LayoutParams p=lp(-1,-2);p.bottomMargin=dp(12);
+        card.setPadding(dp(14),dp(12),dp(14),dp(12));
+        card.setBackground(shape(PANEL,16,STROKE));
+        LinearLayout.LayoutParams p=lp(-1,-2);p.bottomMargin=dp(8);
         parent.addView(card,p);
         return card;
     }
@@ -206,17 +253,18 @@ public final class MainActivity extends Activity {
     }
 
     private void modePicker(LinearLayout parent) {
-        LinearLayout controls = new LinearLayout(this);
-        controls.setOrientation(LinearLayout.HORIZONTAL);
-        controls.setContentDescription("Переключатель режима GitTeller");
         String selected = developerMode() ? UiMode.DEVELOPER : UiMode.NOVICE;
         String[] modes = {UiMode.NOVICE, UiMode.DEVELOPER};
         String[] captions = {"Режим чайника", "Режим разработчика"};
         for (int i = 0; i < modes.length; i++) {
             final String mode = modes[i];
-            final boolean active = selected.equals(mode);
-            TextView option = txt(captions[i], 13, active ? BG : TEXT, active);
+            boolean active = selected.equals(mode);
+            TextView option = txt(captions[i], 15, active ? BG : TEXT, active);
             option.setGravity(Gravity.CENTER);
+            option.setMinHeight(dp(48));
+            option.setMaxLines(1);
+            option.setEllipsize(TextUtils.TruncateAt.END);
+            option.setPadding(dp(12), 0, dp(12), 0);
             option.setBackground(shape(active ? ACCENT : PANEL, 12, active ? 0 : STROKE));
             option.setContentDescription(captions[i] + (active ? ", выбран" : ", выбрать"));
             option.setClickable(true);
@@ -227,13 +275,12 @@ public final class MainActivity extends Activity {
                     toast("Не удалось сохранить выбранный режим");
                     return;
                 }
-                draw();
+                v.post(() -> { if (!isFinishing()) draw(); });
             });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
-            if (i == 0) params.rightMargin = dp(8);
-            controls.addView(option, params);
+            LinearLayout.LayoutParams params = lp(-1, 48);
+            if (i == 0) params.bottomMargin = dp(8);
+            parent.addView(option, params);
         }
-        parent.addView(controls, lp(-1,-2));
     }
 
     private void question(LinearLayout parent, String title, String body, Runnable open, String reason) {
@@ -242,11 +289,11 @@ public final class MainActivity extends Activity {
         addLine(card, body, 16, TEXT, false, 6);
         TextView more = txt("Подробнее ›", 14, MUTED, true);
         more.setContentDescription("Подробнее: " + title);
-        more.setPadding(0, dp(10), 0, dp(10));
+        more.setPadding(0, dp(6), 0, dp(4));
         more.setClickable(true);
         more.setFocusable(true);
         more.setOnClickListener(v -> open.run());
-        space(card, 12);
+        space(card, 6);
         card.addView(more, lp(-1,-2));
         if (reason != null) {
             TextView why = txt("Почему так?", 14, ACCENT, false);
@@ -261,9 +308,9 @@ public final class MainActivity extends Activity {
                 explanation.setVisibility(show ? View.VISIBLE : View.GONE);
                 why.setText(show ? "Скрыть объяснение" : "Почему так?");
             });
-            space(card, 10);
+            space(card, 4);
             card.addView(why, lp(-1,-2));
-            space(card, 8);
+            space(card, 4);
             card.addView(explanation, lp(-1,-2));
         }
     }
@@ -316,20 +363,26 @@ public final class MainActivity extends Activity {
 
     private void draw() {
         applyPalette();
+        rememberLook();
         boolean keepDrawer = drawer.open || reopenDrawer;
         if (homeScroll != null) savedScroll = homeScroll.getScrollY();
+        if (drawerLayer != null && homeRoot != null) homeRoot.removeView(drawerLayer);
         drawer.markClosed();
         drawerLayer = null;
-        FrameLayout root=new FrameLayout(this);
-        root.setBackgroundColor(BG);
+        ensureShell();
+        homeRoot.setBackgroundColor(BG);
+        if (homeScroll != null && homeScroll.getParent() == homeRoot) homeRoot.removeView(homeScroll);
         ScrollView scroll=new ScrollView(this);
         scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
         LinearLayout wrap=vertical();
-        wrap.setPadding(dp(20),dp(22),dp(20),dp(34));
+        wrap.setPadding(dp(16),dp(14),dp(16),dp(24));
         scroll.addView(wrap);
-        root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
-        setContentView(root);
-        homeRoot = root;
+        FrameLayout.LayoutParams scrollBox = new FrameLayout.LayoutParams(-1,-1);
+        scrollBox.bottomMargin = bannerInset();
+        homeRoot.addView(scroll, 0, scrollBox);
+        if (bannerSlot.getParent() != homeRoot) {
+            homeRoot.addView(bannerSlot, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+        }
         homeScroll = scroll;
         content=wrap;
         final int restore = savedScroll;
@@ -338,19 +391,10 @@ public final class MainActivity extends Activity {
         LinearLayout head=new LinearLayout(this);
         head.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout brand=vertical();
+        String shortRepo=repo.length()>42?repo.substring(0,39)+"…":repo;
         brand.addView(txt("GitTeller",17,TEXT,true));
-        addLine(brand,developerMode() ? "Анализ GitHub" : "GitHub простыми словами",12,MUTED,false,5);
+        addLine(brand,shortRepo,13,MUTED,false,2);
         head.addView(brand,new LinearLayout.LayoutParams(0,-2,1f));
-        TextView search=txt("⌕",22,TEXT,false);
-        search.setGravity(Gravity.CENTER);
-        search.setContentDescription("Поиск по сохранённым данным проекта");
-        search.setBackground(shape(PANEL,14,STROKE));
-        search.setClickable(true);
-        search.setFocusable(true);
-        LinearLayout.LayoutParams searchBox=lp(48,48);
-        searchBox.rightMargin=dp(8);
-        head.addView(search,searchBox);
-        search.setOnClickListener(v -> openPage("search"));
         TextView menu=txt("⋮",27,TEXT,false);
         menu.setGravity(Gravity.CENTER);menu.setContentDescription("Открыть панель разделов");
         menu.setBackground(shape(PANEL,14,STROKE));
@@ -359,131 +403,369 @@ public final class MainActivity extends Activity {
         head.addView(menu,lp(48,48));
         menu.setOnClickListener(v -> toggleDrawer());
         wrap.addView(head,lp(-1,-2));
-        space(wrap,16);
-        modePicker(wrap);
-        space(wrap,18);
-        addLine(wrap,developerMode() ? "Панель разработчика" : "Что происходит с проектом",22,TEXT,true,0);
-        String shortRepo=repo.length()>48?repo.substring(0,45)+"…":repo;
-        addLine(wrap,"Проект: "+shortRepo,18,TEXT,true,6);
-        space(wrap,8);
-        coverageStrip(wrap);
+        space(wrap,10);
+        searchField = new EditText(this);
+        searchField.setSingleLine(true);
+        searchField.setHint("Поиск по сохранённому");
+        searchField.setHintTextColor(MUTED);
+        searchField.setTextColor(TEXT);
+        searchField.setTextSize(15);
+        searchField.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        searchField.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        searchField.setBackground(shape(PANEL,14,STROKE));
+        searchField.setPadding(dp(12), dp(10), dp(12), dp(10));
+        searchField.setMinHeight(dp(48));
+        searchField.setContentDescription("Поиск по сохранённым данным этого проекта");
+        searchField.setText(searchQuery);
+        if (!searchQuery.isEmpty()) searchField.setSelection(searchQuery.length());
+        searchField.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                searchQuery = s == null ? "" : s.toString();
+                showSearchHits();
+            }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+        wrap.addView(searchField, lp(-1, -2));
+        space(wrap, 8);
+        searchResults = vertical();
+        wrap.addView(searchResults, lp(-1, -2));
+        showSearchHits();
+        if (focusSearch) {
+            focusSearch = false;
+            searchField.post(this::revealSearch);
+        }
+        space(wrap, 6);
 
         Summary summary=Summary.of(current,previous);
-        if (current != null && !loading) {
-            addLine(wrap,HumanReport.ownerStatus(current,previous,summary),14,MUTED,false,0);
+        String step = HumanReport.nextStep(current,previous,summary,lastError);
+        if (loading) {
+            addLine(wrap,"Идёт чтение GitHub. Старые сведения пока на месте.",14,MUTED,false,0);
+            space(wrap,8);
+        } else if (current == null) {
+            LinearLayout start=panel(wrap);
+            addLine(start,"Здесь видно, что изменилось в проекте. Код читать не нужно.",15,TEXT,false,0);
+            TextView guide=txt("Как пользоваться",14,ACCENT,true);
+            guide.setMinHeight(dp(44));
+            guide.setGravity(Gravity.CENTER_VERTICAL);
+            guide.setContentDescription("Как пользоваться");
+            guide.setOnClickListener(v -> openPage("guide"));
+            space(start,4);
+            start.addView(guide,lp(-1,-2));
+        } else if (developerMode()) {
+            developerDashboard(wrap);
+            recentStrip(wrap);
+        } else {
+            answerBoard(wrap, summary);
+            recentStrip(wrap);
+        }
+        coverageStrip(wrap);
+        if (lastError != null && !loading) {
+            addLine(wrap,"Последняя попытка не удалась. "+lastError,13,WARN,false,0);
             space(wrap,8);
         }
+
         refresh=new Button(this);
         refresh.setText(loading?"Обновление…":"Обновить");
         refresh.setAllCaps(false);
         refresh.setTextSize(16);
         refresh.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
         refresh.setTextColor(BG);
-        refresh.setBackground(shape(ACCENT,15,0));
+        refresh.setBackground(shape(ACCENT,14,0));
         refresh.setEnabled(!loading);
         refresh.setContentDescription("Обновить данные с GitHub");
-        wrap.addView(refresh,lp(-1,56));
+        wrap.addView(refresh,lp(-1,48));
         refresh.setOnClickListener(v->sync());
-        space(wrap,8);
-        Button switchProject=new Button(this);
-        switchProject.setText("Сменить проект");
-        switchProject.setAllCaps(false);
-        switchProject.setTextSize(15);
-        switchProject.setTextColor(TEXT);
-        switchProject.setBackground(shape(PANEL,15,STROKE));
+        if ("Посмотреть задачу".equals(step) && !loading) {
+            TextView task=txt("Посмотреть задачу",14,ACCENT,false);
+            task.setMinHeight(dp(44));
+            task.setGravity(Gravity.CENTER_VERTICAL);
+            task.setContentDescription("Посмотреть задачу");
+            task.setOnClickListener(v->openPage("tasks"));
+            wrap.addView(task,lp(-1,-2));
+        }
+        LinearLayout links=new LinearLayout(this);
+        links.setOrientation(LinearLayout.HORIZONTAL);
+        TextView switchProject=txt("Сменить проект",14,ACCENT,false);
+        switchProject.setMinHeight(dp(44));
+        switchProject.setGravity(Gravity.CENTER_VERTICAL);
         switchProject.setContentDescription("Сменить репозиторий GitHub");
-        wrap.addView(switchProject,lp(-1,48));
-        switchProject.setOnClickListener(v->openPage("access"));
-        space(wrap,16);
-
-        String step = HumanReport.nextStep(current,previous,summary,lastError);
-        if (loading) {
-            LinearLayout hero=panel(wrap);
-            addLine(hero,"Идёт чтение GitHub",20,TEXT,true,0);
-            addLine(hero,"Подождите. Старые сведения проекта пока не меняются.",16,TEXT,false,10);
-        } else {
-            if (developerMode()) {
-                developerDashboard(wrap);
-            } else {
-                boolean has = current != null;
-                boolean comparable = has && previous != null && !SnapshotCodec.isImported(current)
-                        && !SnapshotCodec.isImported(previous)
-                        && current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
-                boolean complete = comparable && current.optBoolean("branchesComplete",false)
-                        && previous.optBoolean("branchesComplete",false)
-                        && current.optBoolean("issuesComplete",false) && previous.optBoolean("issuesComplete",false)
-                        && current.optBoolean("pullsComplete",false) && previous.optBoolean("pullsComplete",false);
-                question(wrap,"Что изменилось", HumanReport.ownerChanged(current,previous,summary),
-                        ()->openPage("changes"), UiMode.reason("changed",has,comparable,complete));
-                question(wrap,"Где работа", HumanReport.ownerWhere(current,previous),
-                        ()->openPage("branches"), UiMode.reason("where",has,comparable,complete));
-                question(wrap,"Какие проблемы", HumanReport.ownerProblems(current),
-                        ()->openPage("problems"), UiMode.reason("problems",has,comparable,complete));
-                question(wrap,"Кто выполнял", HumanReport.ownerWho(current),
-                        ()->openPage("commits"), UiMode.reason("who",has,comparable,complete));
-            }
-            if (lastError != null) {
-                LinearLayout warn=panel(wrap);
-                addLine(warn,"Последняя попытка не удалась. "+lastError,14,WARN,false,0);
-            }
-            if (current != null && (current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
-                    || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
-                    || SnapshotCodec.isImported(current))) {
-                LinearLayout stale=panel(wrap);
-                addLine(stale,"Часть сведений с прошлой удачной загрузки или из файла.",14,WARN,false,0);
-                TextView why=txt("Почему данные неполные?",14,ACCENT,true);
-                why.setMinHeight(dp(48));
-                why.setGravity(Gravity.CENTER_VERTICAL);
-                why.setContentDescription("Почему данные неполные");
-                why.setOnClickListener(v -> openPage("incomplete"));
-                space(stale,6);
-                stale.addView(why,lp(-1,-2));
-            }
+        switchProject.setOnClickListener(v->openPage("projects"));
+        links.addView(switchProject, new LinearLayout.LayoutParams(0,-2,1f));
+        if (current == null && !loading) {
+            TextView connect=txt("Подключить",14,TEXT,true);
+            connect.setMinHeight(dp(44));
+            connect.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+            connect.setContentDescription("Подключить проект или токен");
+            connect.setOnClickListener(v->openPage("access"));
+            links.addView(connect, lp(-2,-2));
+        } else if (current != null) {
+            TextView connectLink=txt("Токен",14,MUTED,false);
+            connectLink.setMinHeight(dp(44));
+            connectLink.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+            connectLink.setContentDescription("Подключить проект или токен");
+            connectLink.setOnClickListener(v->openPage("access"));
+            links.addView(connectLink, lp(-2,-2));
         }
-        if (!loading && !"Повторить загрузку".equals(step)) {
-            Button next=new Button(this);
-            next.setText(step);
-            next.setAllCaps(false);
-            next.setTextSize(15);
-            next.setTextColor(TEXT);
-            next.setBackground(shape(PANEL_2,15,STROKE));
-            wrap.addView(next,lp(-1,48));
-            next.setOnClickListener(v->{
-                if ("Посмотреть задачу".equals(step)) openPage("tasks");
-                else if ("Проверить доступ".equals(step)) openPage("access");
-                else if ("Открыть изменения".equals(step)) openPage("changes");
-                else if ("Открыть направления".equals(step)) openPage("branches");
-                else sync();
-            });
-        }
-        space(wrap,14);
-        TextView footer=txt("Чтение GitHub. Это не проверка готовности программы.",12,MUTED,false);
+        wrap.addView(links,lp(-1,-2));
+        TextView footer=txt("Чтение GitHub. Это не проверка готовности.",12,MUTED,false);
         footer.setGravity(Gravity.CENTER);
         wrap.addView(footer,lp(-1,-2));
         reopenDrawer = false;
         if (keepDrawer) openDrawer(false);
     }
 
+    private void answerBoard(LinearLayout parent, Summary summary) {
+        boolean comparable = previous != null && !SnapshotCodec.isImported(current)
+                && !SnapshotCodec.isImported(previous)
+                && current.optString("repo").equalsIgnoreCase(previous.optString("repo"));
+        boolean complete = comparable && current.optBoolean("branchesComplete", false)
+                && previous.optBoolean("branchesComplete", false)
+                && current.optBoolean("issuesComplete", false) && previous.optBoolean("issuesComplete", false)
+                && current.optBoolean("pullsComplete", false) && previous.optBoolean("pullsComplete", false);
+        LinearLayout card = panel(parent);
+        answerRow(card, "Что изменилось", HumanReport.ownerChanged(current, previous, summary),
+                () -> openPage("changes"), UiMode.reason("changed", true, comparable, complete), true);
+        answerRow(card, "Где работа", HumanReport.ownerWhere(current, previous),
+                () -> openPage("branches"), UiMode.reason("where", true, comparable, complete), true);
+        answerRow(card, "Какие проблемы", HumanReport.ownerProblems(current),
+                () -> openPage("problems"), UiMode.reason("problems", true, comparable, complete), true);
+        answerRow(card, "Кто выполнял", HumanReport.ownerWho(current),
+                () -> openPage("commits"), UiMode.reason("who", true, comparable, complete), false);
+    }
+
+    private void answerRow(LinearLayout card, String title, String body, Runnable open, String reason, boolean divider) {
+        LinearLayout block = vertical();
+        block.setMinimumHeight(dp(44));
+        block.setClickable(true);
+        block.setFocusable(true);
+        block.setContentDescription(body == null || body.isEmpty() ? title : title + ". " + body);
+        block.setOnClickListener(v -> open.run());
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name = txt(title, 15, TEXT, true);
+        name.setMaxLines(1);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+        row.addView(txt("›", 18, MUTED, false), lp(-2, -2));
+        block.addView(row, lp(-1, -2));
+        if (body != null && !body.isEmpty()) {
+            block.addView(txt(body, 13, MUTED, false), lp(-1, -2));
+        }
+        card.addView(block, lp(-1, -2));
+        if (reason != null && !reason.isEmpty()) {
+            TextView why = txt("Почему так?", 12, ACCENT, false);
+            why.setMinHeight(dp(32));
+            why.setGravity(Gravity.CENTER_VERTICAL);
+            why.setClickable(true);
+            why.setFocusable(true);
+            why.setContentDescription("Объяснить основание вывода: " + title);
+            TextView explanation = txt(reason, 13, MUTED, false);
+            explanation.setVisibility(View.GONE);
+            why.setOnClickListener(v -> {
+                boolean show = explanation.getVisibility() != View.VISIBLE;
+                explanation.setVisibility(show ? View.VISIBLE : View.GONE);
+                why.setText(show ? "Скрыть" : "Почему так?");
+            });
+            card.addView(why, lp(-1, -2));
+            card.addView(explanation, lp(-1, -2));
+        }
+        if (divider) {
+            View line = new View(this);
+            line.setBackgroundColor(STROKE);
+            LinearLayout.LayoutParams rule = new LinearLayout.LayoutParams(-1, Math.max(1, dp(1)));
+            rule.topMargin = dp(8);
+            rule.bottomMargin = dp(8);
+            card.addView(line, rule);
+        }
+    }
+
+    private void recentStrip(LinearLayout parent) {
+        java.util.List<HomeFeed.Row> rows = HomeFeed.latest(current, System.currentTimeMillis(), 5);
+        if (rows.isEmpty()) return;
+        LinearLayout card = panel(parent);
+        addLine(card, "Свежее", 15, TEXT, true, 0);
+        for (HomeFeed.Row row : rows) {
+            LinearLayout block = vertical();
+            block.setMinimumHeight(dp(44));
+            block.setClickable(true);
+            block.setFocusable(true);
+            String desc = row.meta == null || row.meta.isEmpty() ? row.title : row.title + ". " + row.meta;
+            block.setContentDescription(desc);
+            final String page = row.page;
+            block.setOnClickListener(v -> openPage(page));
+            TextView title = txt(row.title, 14, TEXT, false);
+            title.setMaxLines(1);
+            title.setEllipsize(TextUtils.TruncateAt.END);
+            block.addView(title, lp(-1, -2));
+            if (row.meta != null && !row.meta.isEmpty()) {
+                TextView meta = txt(row.meta, 12, MUTED, false);
+                meta.setMaxLines(1);
+                meta.setEllipsize(TextUtils.TruncateAt.END);
+                block.addView(meta, lp(-1, -2));
+            }
+            space(card, 6);
+            card.addView(block, lp(-1, -2));
+        }
+        addLine(card, "Не вся история.", 12, MUTED, false, 6);
+    }
+
     private void coverageStrip(LinearLayout parent) {
         LinearLayout card = panel(parent);
-        addLine(card, "Что известно", 16, TEXT, true, 0);
-        addLine(card, Coverage.compact(current, developerMode()), 14, MUTED, false, 8);
-        if (current != null) {
-            addLine(card, "Последняя запись снимка: " + formatTime(current.optLong("capturedAt", 0))
-                    + ". Само обновление не запускается.", 13, MUTED, false, 8);
+        if (!developerMode()) {
+            addLine(card, "Что известно", 15, TEXT, true, 0);
+            TextView known = txt(Coverage.compact(current, false), 13, MUTED, false);
+            space(card, 6);
+            card.addView(known, lp(-1, -2));
+            if (current != null) {
+                addLine(card, "Обновлено вручную: " + formatTime(current.optLong("capturedAt", 0)) + ".", 12, MUTED, false, 6);
+            }
         }
-        TextView link = txt("Почему данные неполные?", 15, ACCENT, true);
-        link.setMinHeight(dp(48));
+        if (snapshotAged()) {
+            addLine(card, "Часть сведений с прошлой загрузки или из файла.", 13, WARN, false, 6);
+        }
+        TextView link = txt("Почему данные неполные?", 14, ACCENT, true);
+        link.setMinHeight(dp(40));
         link.setGravity(Gravity.CENTER_VERTICAL);
         link.setContentDescription("Почему данные неполные");
         link.setOnClickListener(v -> openPage("incomplete"));
-        space(card, 4);
+        space(card, 2);
         card.addView(link, lp(-1, -2));
+    }
+
+    private boolean snapshotAged() {
+        if (current == null || loading) return false;
+        return current.optBoolean("issuesStale", false) || current.optBoolean("pullsStale", false)
+                || current.optBoolean("branchesStale", false) || current.optBoolean("commitsStale", false)
+                || SnapshotCodec.isImported(current);
     }
 
     private static String formatTime(long millis){
         if(millis<=0) return "нет даты";
         return DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(new Date(millis));
+    }
+
+    private void ensureShell() {
+        if (homeRoot != null && bannerSlot != null) return;
+        homeRoot = new FrameLayout(this);
+        bannerSlot = new FrameLayout(this);
+        bannerSlot.setVisibility(View.GONE);
+        setContentView(homeRoot);
+        ads.attachBanner(this, bannerSlot, this::fitBanner);
+    }
+
+    private int bannerInset() {
+        return bannerSlot != null && bannerSlot.getVisibility() == View.VISIBLE ? dp(56) : 0;
+    }
+
+    private void fitBanner() {
+        if (homeScroll == null || !(homeScroll.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams box = (FrameLayout.LayoutParams) homeScroll.getLayoutParams();
+        int margin = bannerInset();
+        if (box.bottomMargin == margin) return;
+        box.bottomMargin = margin;
+        homeScroll.setLayoutParams(box);
+    }
+
+    private void askNoticeOnce() {
+        if (prefs == null || !prefs.getBoolean("guide_seen", false)) return;
+        if (android.os.Build.VERSION.SDK_INT < 33) return;
+        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        if (prefs.getBoolean("asked_notice", false)) return;
+        prefs.edit().putBoolean("asked_notice", true).apply();
+        requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 41);
+    }
+
+    private void revealSearch() {
+        if (searchField == null || isFinishing()) return;
+        searchField.requestFocus();
+        android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.showSoftInput(searchField, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+    }
+
+    private void showSearchHits() {
+        if (searchResults == null) return;
+        searchResults.removeAllViews();
+        ViewGroup.LayoutParams raw = searchResults.getLayoutParams();
+        if (raw instanceof LinearLayout.LayoutParams) {
+            ((LinearLayout.LayoutParams) raw).bottomMargin = 0;
+        }
+        if (ProjectSearch.norm(searchQuery).isEmpty()) {
+            searchResults.setVisibility(View.GONE);
+            return;
+        }
+        searchResults.setVisibility(View.VISIBLE);
+        searchResults.setPadding(dp(14), dp(12), dp(14), dp(12));
+        searchResults.setBackground(shape(PANEL, 16, STROKE));
+        if (raw instanceof LinearLayout.LayoutParams) {
+            ((LinearLayout.LayoutParams) raw).bottomMargin = dp(8);
+        }
+        ProjectSearch.Report report = ProjectSearch.find(current, feed, searchQuery, localRepos());
+        addLine(searchResults, "Сохранённые данные, не весь GitHub", 12, MUTED, false, 0);
+        if (report.hits.isEmpty()) {
+            addLine(searchResults, ProjectSearch.noMatch(), 14, TEXT, false, 8);
+            return;
+        }
+        int shown = 0;
+        for (ProjectSearch.Hit hit : report.hits) {
+            if (shown == 8) break;
+            final ProjectSearch.Hit picked = hit;
+            TextView row = txt(hit.title, 15, TEXT, false);
+            row.setMinHeight(dp(44));
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setMaxLines(2);
+            row.setEllipsize(TextUtils.TruncateAt.END);
+            String detail = hit.detail == null || hit.detail.isEmpty() ? hit.group : hit.group + ". " + hit.detail;
+            row.setContentDescription(detail);
+            row.setClickable(true);
+            row.setFocusable(true);
+            row.setOnClickListener(v -> openSearchHit(picked));
+            space(searchResults, 4);
+            searchResults.addView(row, lp(-1, -2));
+            TextView meta = txt(detail, 12, MUTED, false);
+            meta.setMaxLines(1);
+            meta.setEllipsize(TextUtils.TruncateAt.END);
+            searchResults.addView(meta, lp(-1, -2));
+            shown++;
+        }
+        int hidden = report.hits.size() - shown + report.omitted;
+        if (hidden > 0) addLine(searchResults, "Ещё " + hidden + ". Уточните запрос.", 12, MUTED, false, 8);
+    }
+
+    private void openSearchHit(ProjectSearch.Hit hit) {
+        if ("switch-repo".equals(hit.page)) {
+            if (hit.key == null || hit.key.isEmpty()) return;
+            if (!prefs.edit().putString("repo", hit.key).commit()) {
+                toast("Не удалось выбрать проект");
+                return;
+            }
+            abandonSync();
+            searchQuery = "";
+            readProject(hit.key);
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                if (!isFinishing()) draw();
+            });
+            return;
+        }
+        Intent intent = new Intent(this, SectionActivity.class);
+        intent.putExtra("page", hit.page);
+        if (hit.index >= 0) intent.putExtra("idx", hit.index);
+        if (hit.key != null && !hit.key.isEmpty()) intent.putExtra("key", hit.key);
+        if (hit.marker != null && !hit.marker.isEmpty()) intent.putExtra("eventId", hit.marker);
+        startActivityForResult(intent, REQUEST_SECTION);
+    }
+
+    private java.util.List<String> localRepos() {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        for (String stored : prefs.getAll().keySet()) {
+            if (!stored.endsWith(":current")) continue;
+            String name = stored.substring(0, stored.length() - ":current".length());
+            if (!name.isEmpty()) out.add(name);
+        }
+        return out;
     }
 
     private void openPage(String page) {
@@ -525,11 +807,20 @@ public final class MainActivity extends Activity {
         panel.addView(close, lp(-1, 48));
         addLine(panel, "GitTeller", 13, MUTED, false, 0);
         space(panel, 8);
+        modePicker(panel);
+        space(panel, 8);
         ScrollView list = new ScrollView(this);
         LinearLayout items = vertical();
         list.addView(items);
         panel.addView(list, new LinearLayout.LayoutParams(-1, 0, 1f));
-        drawerItem(items, "Поиск", () -> { closeDrawer(false); openPage("search"); });
+        drawerItem(items, "Поиск", () -> {
+            closeDrawer(false);
+            focusSearch = true;
+            if (searchField != null) searchField.post(this::revealSearch);
+        });
+        drawerItem(items, "Как пользоваться", () -> { closeDrawer(false); openPage("guide"); });
+        drawerItem(items, "От разработчика", () -> { closeDrawer(false); openPage("developer-notes"); });
+        drawerItem(items, "Планы развития", () -> { closeDrawer(false); openPage("roadmap"); });
         drawerItem(items, "Разделы проекта", () -> { closeDrawer(false); openPage("index"); });
         drawerItem(items, "Обновить", () -> { closeDrawer(false); sync(); });
         drawerItem(items, "Сменить проект", () -> { closeDrawer(false); openPage("projects"); });
@@ -649,20 +940,61 @@ public final class MainActivity extends Activity {
         return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
     }
 
+    private void readProject(String selected) {
+        repo = selected;
+        seenCurrent = prefs.getString(key(repo, "current"), "");
+        if (seenCurrent == null) seenCurrent = "";
+        current = parse(seenCurrent);
+        previous = parse(prefs.getString(key(repo, "previous"), ""));
+        feed = parseArray(prefs.getString(key(repo, "feed"), ""));
+        lastError = prefs.getString(key(repo, "lastError"), "");
+        if (lastError != null && lastError.isEmpty()) lastError = null;
+        rememberLook();
+    }
+
+    private void rememberLook() {
+        seenLook = prefs.getString(Palette.PREF, "sand");
+        if (seenLook == null || seenLook.isEmpty()) seenLook = "sand";
+        seenMode = prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM);
+        if (seenMode == null || seenMode.isEmpty()) seenMode = Palette.SYSTEM;
+    }
+
+    private boolean lookChanged() {
+        String look = prefs.getString(Palette.PREF, "sand");
+        if (look == null || look.isEmpty()) look = "sand";
+        String mode = prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM);
+        if (mode == null || mode.isEmpty()) mode = Palette.SYSTEM;
+        return !seenLook.equals(look) || !seenMode.equals(mode);
+    }
+
     @Override protected void onResume() {
         super.onResume();
         if (prefs == null) return;
+        askNoticeOnce();
         String selected = prefs.getString("repo", DEFAULT_REPO);
+        String raw = prefs.getString(key(selected, "current"), "");
+        if (raw == null) raw = "";
+        String err = prefs.getString(key(selected, "lastError"), "");
+        if (err != null && err.isEmpty()) err = null;
+        boolean appearance = lookChanged();
         if (!selected.equals(repo)) {
             abandonSync();
-            repo = selected;
-            current = parse(prefs.getString(key(repo,"current"),""));
-            previous = parse(prefs.getString(key(repo,"previous"),""));
-            feed = parseArray(prefs.getString(key(repo,"feed"),""));
-            lastError = prefs.getString(key(repo,"lastError"), "");
-            if (lastError != null && lastError.isEmpty()) lastError = null;
+            readProject(selected);
             draw();
+            return;
         }
+        if (loading) {
+            if (appearance) {
+                rememberLook();
+                draw();
+            }
+            return;
+        }
+        boolean data = !raw.equals(seenCurrent) || !java.util.Objects.equals(err, lastError);
+        if (!data && !appearance) return;
+        if (data) readProject(selected);
+        else rememberLook();
+        draw();
     }
 
     private String accessStatus() {
@@ -684,6 +1016,12 @@ public final class MainActivity extends Activity {
 
     private void sync(){
         if(loading)return;
+        if (ads.showInterstitialIfDue(this, prefs, this::syncNow)) return;
+        syncNow();
+    }
+
+    private void syncNow(){
+        if(loading || isFinishing() || isDestroyed()) return;
         final int epoch=syncEpoch;
         final String selected=repo;
         final String access;
@@ -698,6 +1036,7 @@ public final class MainActivity extends Activity {
             return;
         }
         loading=true;draw();
+        try {
         worker.execute(()->{
             GithubClient client=new GithubClient(access);
             inflight=client;
@@ -709,11 +1048,15 @@ public final class MainActivity extends Activity {
                     previous=current;
                     current=fresh;
                     lastError=null;
-                    rememberFeed(previous, current);
-                    prefs.edit().putString(key(repo,"previous"),previous==null?"":previous.toString())
-                            .putString(key(repo,"current"),current.toString())
-                            .putString(key(repo,"feed"), feed.toString())
-                            .remove(key(repo,"lastError")).apply();
+                    synchronized (Watch.WRITE) {
+                        rememberFeed(previous, current);
+                        prefs.edit().putString(key(repo,"previous"),previous==null?"":previous.toString())
+                                .putString(key(repo,"current"),current.toString())
+                                .putString(key(repo,"feed"), feed.toString())
+                                .remove(key(repo,"lastError")).commit();
+                        seenCurrent = current == null ? "" : current.toString();
+                    }
+                    QuietPoster.postIfNew(this, current, previous);
                     loading=false;draw();toast("Данные обновлены");
                 });
             }catch(Exception e){
@@ -733,6 +1076,9 @@ public final class MainActivity extends Activity {
                 if(inflight==client) inflight=null;
             }
         });
+        } catch (RejectedExecutionException ignored) {
+            loading = false;
+        }
     }
 
     private void exportBackup(){
@@ -781,13 +1127,20 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Отмена",(d,w)->{})
                 .setPositiveButton("Восстановить",(d,w)->{
                     if(loading){toast("Дождитесь завершения синхронизации");return;}
-                    if(!prefs.edit().putString(key(restoredRepo,"current"),finalFresh.toString())
-                            .putString(key(restoredRepo,"previous"),finalOld==null?"":finalOld.toString())
-                            .remove(key(restoredRepo,"feed"))
-                            .putString("repo",restoredRepo).commit()){
+                    boolean saved;
+                    synchronized (Watch.WRITE) {
+                        saved = prefs.edit().putString(key(restoredRepo,"current"),finalFresh.toString())
+                                .putString(key(restoredRepo,"previous"),finalOld==null?"":finalOld.toString())
+                                .remove(key(restoredRepo,"feed"))
+                                .putString("repo",restoredRepo).commit();
+                    }
+                    if(!saved){
                         toast("Не удалось сохранить архив");return;
                     }
-                    repo=restoredRepo;current=finalFresh;previous=finalOld;feed=new JSONArray();draw();toast("Данные восстановлены из архива");
+                    repo=restoredRepo;current=finalFresh;previous=finalOld;feed=new JSONArray();
+                    seenCurrent=finalFresh.toString();
+                    lastError=null;
+                    draw();toast("Данные восстановлены из архива");
                 }).show();
     }
 
@@ -808,13 +1161,7 @@ public final class MainActivity extends Activity {
                 if("sync".equals(action)) {sync();return;}
                 if("changed".equals(action)) {
                     abandonSync();
-                    String selected=prefs.getString("repo",DEFAULT_REPO);
-                    repo=selected;
-                    current=parse(prefs.getString(key(repo,"current"),""));
-                    previous=parse(prefs.getString(key(repo,"previous"),""));
-                    feed=parseArray(prefs.getString(key(repo,"feed"),""));
-                    lastError=prefs.getString(key(repo,"lastError"), "");
-                    if (lastError != null && lastError.isEmpty()) lastError = null;
+                    readProject(prefs.getString("repo",DEFAULT_REPO));
                     draw();return;
                 }
             }
@@ -851,5 +1198,5 @@ public final class MainActivity extends Activity {
         }
     }
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
-    @Override protected void onDestroy(){super.onDestroy();abandonSync();worker.shutdownNow();}
+    @Override protected void onDestroy(){super.onDestroy();abandonSync();ads.destroy();worker.shutdownNow();}
 }
