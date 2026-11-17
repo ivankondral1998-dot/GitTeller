@@ -57,6 +57,10 @@ public final class SectionActivity extends Activity {
             getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         paint();render();
     }
+    @Override protected void onPause() {
+        super.onPause();
+        if ("guide".equals(page) && prefs != null) prefs.edit().putBoolean("guide_seen", true).apply();
+    }
     @Override protected void onResume() {
         super.onResume();
         if(prefs==null) return;
@@ -658,10 +662,10 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.19-dev", "Главный экран короче. День и ночь переключаются в панели и здесь. Тихое уведомление — одна строка, без звука. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.20-dev", "День, ночь и цвет иконки — здесь. Экран меняется сразу и приложение не закрывается. Значок на рабочем столе обновляется после выхода. Это не коммерческий релиз и не проверка готовности программы.");
         note("Реклама", "Реклама Яндекса. Баннер внизу. Большой ролик не чаще раза в час при «Обновить». Если реклама не загрузилась, обновление всё равно выполняется.");
         note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются в правой панели. На главном по умолчанию простой вид: четыре ответа. Подробности не удалены, они в панели. Выбор сохраняется на устройстве. Права GitHub не меняются.");
-        note("Оформление", "День, ночь или как в телефоне. Десять цветов меняют экран и иконку. На иконке написано GitTeller. На Samsung цвет на рабочем столе иногда обновляется не сразу.");
+        note("Оформление", "День, ночь или как в телефоне. Десять цветов меняют экран сразу. Значок GitTeller на рабочем столе сменится после выхода из приложения, чтобы оно не закрылось.");
         appearanceControls();
         note("Тихое уведомление", Watch.enabled(prefs)
                 ? "Включено. Без звука, не на весь экран. Строка появляется, только если с прошлой проверки что-то изменилось. Подробности — в раскрытой шторке. Проверка примерно раз в 6 часов. Разрешение спрашивается один раз."
@@ -670,8 +674,11 @@ public final class SectionActivity extends Activity {
                 "Звук не включается", () -> {
                     prefs.edit().putBoolean(Watch.PREF, !Watch.enabled(prefs)).commit();
                     Watch.ensure(this);
-                    paint();
-                    render();
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        if (isFinishing()) return;
+                        paint();
+                        render();
+                    });
                 });
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
         note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");
@@ -684,7 +691,7 @@ public final class SectionActivity extends Activity {
         note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
     }
     private void about(){
-        note("GitTeller 1.0.19-dev", "Нативное чтение GitHub. versionCode 35. Десять спокойных цветов, день и ночь, тихая строка в шторке. Это не коммерческий релиз и не приёмка на телефоне.");
+        note("GitTeller 1.0.20-dev", "Нативное чтение GitHub. versionCode 36. Поиск на главном экране, день и ночь в настройках, тихая строка в шторке. Это не коммерческий релиз и не приёмка на телефоне.");
         note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
         note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
@@ -828,21 +835,25 @@ public final class SectionActivity extends Activity {
         startActivity(i);
     }
     private void guide(){
-        note("Что это","GitTeller смотрит за проектом на GitHub. GitHub — место, где лежит код и заметки людей или агентов, которые над ним работают. Приложение ничего туда не пишет.");
-        note("Что смотреть на главном","Четыре ответа: что изменилось, где работа, какие проблемы, кто выполнял. Это сведения из GitHub, не проверка, что программа работает.");
-        note("Когда нужен токен","Публичный проект читается без токена. Приватный — только с ключом на чтение. Ключ хранится на этом телефоне и никуда не отправляется.");
+        note("Что это","GitTeller смотрит, что люди и агенты сделали в одном проекте на GitHub. GitHub — место, где лежит работа над проектом. Приложение только читает. Оно ничего туда не пишет и не запускает.");
+        note("С чего начать","1. Откройте «Подключение GitHub» и впишите адрес вида имя/проект.\n2. Если проект открыт всем, токен не нужен.\n3. Если проект закрытый, нужен ключ только на чтение. Как его получить — кнопка ниже.\n4. Вернитесь на главный экран и нажмите «Обновить».");
+        note("Главный экран","Четыре ответа: что изменилось, где работа, какие проблемы, кто выполнял. Под ними короткое «Свежее» из уже загруженного. Это сведения GitHub, не проверка, что программа работает.");
+        note("Поиск","Поле «Поиск по сохранённому» стоит на главном экране. Нажмите его и вводите: ветку, номер задачи, текст, имя. Список появляется тут же, отдельное окно не открывается. Ищется только то, что уже загружено на телефон, не весь GitHub.");
+        note("Обновить","Само ничего не запрашивает. Кнопка «Обновить» читает GitHub заново. Если реклама не загрузилась, чтение всё равно идёт.");
+        note("Тихая строка","Если включено в настройках, примерно раз в 6 часов приложение само проверяет проект. Уведомление — одна строка, без звука и без полноэкранной страницы. Подробности только в раскрытой шторке. Если ничего не изменилось, уведомления нет.");
+        note("День, ночь и цвет","Это в «Настройках», не в боковой панели. Экран меняется сразу. Значок GitTeller на рабочем столе меняется после выхода из приложения: так оно не закрывается в момент выбора.");
+        note("Два режима","«Режим чайника» — короткие ответы. «Режим разработчика» — те же данные подробнее. Переключатель в боковой панели. Права GitHub от режима не зависят.");
+        note("Токен","Ключ только на чтение хранится на этом телефоне и никуда не отправляется. Никому его не присылайте, в том числе создателю приложения.");
         action("Как получить токен","Пошагово, без жаргона",()->go("token-help"));
-        note("Чего приложение не делает","Не пишет в репозиторий, не запускает тесты, не доказывает готовность кода и не считает пустой список успехом.");
+        note("Чего не будет","Приложение не пишет в репозиторий, не собирает проект, не доказывает готовность и не считает пустой список успехом. Надпись на значке — GitTeller.");
+        button(card(), "Понятно, на главный", () -> finish());
     }
 
     private void appearanceControls() {
         String mode = Palette.normalizeMode(prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM));
-        LinearLayout modes = new LinearLayout(this);
-        modes.setOrientation(LinearLayout.HORIZONTAL);
-        addMode(modes, "День", Palette.DAY, mode);
-        addMode(modes, "Ночь", Palette.NIGHT, mode);
-        addMode(modes, "Как в телефоне", Palette.SYSTEM, mode);
-        body.addView(modes, lp(-1, -2));
+        addMode("День", Palette.DAY, mode);
+        addMode("Ночь", Palette.NIGHT, mode);
+        addMode("Как в телефоне", Palette.SYSTEM, mode);
         gap(body, 8);
         HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -862,14 +873,17 @@ public final class SectionActivity extends Activity {
             chip.setBackground(d);
             chip.setContentDescription("Цвет " + look.title + (chosen.equals(look.id) ? ", выбран" : ""));
             chip.setOnClickListener(v -> {
+                if (look.id.equals(chosen)) return;
                 if (!prefs.edit().putString(Palette.PREF, look.id).commit()) {
                     toast("Не удалось сохранить цвет");
                     return;
                 }
-                IconPins.apply(this, look.id);
                 setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
-                paint();
-                render();
+                v.post(() -> {
+                    if (isFinishing()) return;
+                    paint();
+                    render();
+                });
             });
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2);
             p.rightMargin = dp(8);
@@ -880,24 +894,30 @@ public final class SectionActivity extends Activity {
         gap(body, 8);
     }
 
-    private void addMode(LinearLayout row, String label, String id, String current) {
+    private void addMode(String label, String id, String current) {
         boolean active = id.equals(current);
-        TextView option = text(label, 13, active, active ? bg : ink);
+        TextView option = text(label, 15, active, active ? bg : ink);
         option.setGravity(Gravity.CENTER);
-        option.setMinHeight(dp(44));
+        option.setMinHeight(dp(48));
+        option.setMaxLines(1);
+        option.setEllipsize(TextUtils.TruncateAt.END);
         option.setBackground(background(active ? accent : panel));
         option.setOnClickListener(v -> {
+            if (id.equals(current)) return;
             if (!prefs.edit().putString(Palette.DAY_NIGHT, id).commit()) {
                 toast("Не удалось сохранить оформление");
                 return;
             }
             setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
-            paint();
-            render();
+            v.post(() -> {
+                if (isFinishing()) return;
+                paint();
+                render();
+            });
         });
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
-        p.rightMargin = dp(6);
-        row.addView(option, p);
+        LinearLayout.LayoutParams p = lp(-1, 48);
+        p.bottomMargin = dp(8);
+        body.addView(option, p);
     }
 
     private void tokenHelp(){

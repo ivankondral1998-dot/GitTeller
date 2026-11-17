@@ -28,7 +28,6 @@ import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -73,6 +72,10 @@ public final class MainActivity extends Activity {
     private String lastError;
     private JSONArray feed = new JSONArray();
     private String seenCurrent = "";
+    private EditText searchField;
+    private LinearLayout searchResults;
+    private String searchQuery = "";
+    private boolean focusSearch;
     private LinearLayout content;
     private Button refresh;
     private FrameLayout homeRoot;
@@ -96,18 +99,16 @@ public final class MainActivity extends Activity {
         if (savedInstanceState != null) {
             savedScroll = savedInstanceState.getInt("scroll", 0);
             reopenDrawer = savedInstanceState.getBoolean("drawer", false);
+            searchQuery = savedInstanceState.getString("query", "");
+            if (searchQuery == null) searchQuery = "";
         }
-        IconPins.apply(this, prefs.getString(Palette.PREF, "sand"));
+        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         Watch.ensure(this);
-        if (android.os.Build.VERSION.SDK_INT >= 33
-                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
-                != android.content.pm.PackageManager.PERMISSION_GRANTED
-                && !prefs.getBoolean("asked_notice", false)) {
-            prefs.edit().putBoolean("asked_notice", true).apply();
-            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 41);
-        }
         draw();
         ads.preload(this);
+        if (savedInstanceState == null && !prefs.getBoolean("guide_seen", false)) {
+            homeRoot.post(() -> openPage("guide"));
+        }
     }
 
     @Override protected void onSaveInstanceState(Bundle out) {
@@ -115,6 +116,7 @@ public final class MainActivity extends Activity {
         if (homeScroll != null) savedScroll = homeScroll.getScrollY();
         out.putInt("scroll", savedScroll);
         out.putBoolean("drawer", drawer.open);
+        out.putString("query", searchQuery);
     }
 
     @Override public void onBackPressed() {
@@ -218,17 +220,18 @@ public final class MainActivity extends Activity {
     }
 
     private void modePicker(LinearLayout parent) {
-        LinearLayout controls = new LinearLayout(this);
-        controls.setOrientation(LinearLayout.HORIZONTAL);
-        controls.setContentDescription("Переключатель режима GitTeller");
         String selected = developerMode() ? UiMode.DEVELOPER : UiMode.NOVICE;
         String[] modes = {UiMode.NOVICE, UiMode.DEVELOPER};
         String[] captions = {"Режим чайника", "Режим разработчика"};
         for (int i = 0; i < modes.length; i++) {
             final String mode = modes[i];
-            final boolean active = selected.equals(mode);
-            TextView option = txt(captions[i], 13, active ? BG : TEXT, active);
+            boolean active = selected.equals(mode);
+            TextView option = txt(captions[i], 15, active ? BG : TEXT, active);
             option.setGravity(Gravity.CENTER);
+            option.setMinHeight(dp(48));
+            option.setMaxLines(1);
+            option.setEllipsize(TextUtils.TruncateAt.END);
+            option.setPadding(dp(12), 0, dp(12), 0);
             option.setBackground(shape(active ? ACCENT : PANEL, 12, active ? 0 : STROKE));
             option.setContentDescription(captions[i] + (active ? ", выбран" : ", выбрать"));
             option.setClickable(true);
@@ -239,79 +242,12 @@ public final class MainActivity extends Activity {
                     toast("Не удалось сохранить выбранный режим");
                     return;
                 }
-                draw();
+                v.post(() -> { if (!isFinishing()) draw(); });
             });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
-            if (i == 0) params.rightMargin = dp(8);
-            controls.addView(option, params);
+            LinearLayout.LayoutParams params = lp(-1, 48);
+            if (i == 0) params.bottomMargin = dp(8);
+            parent.addView(option, params);
         }
-        parent.addView(controls, lp(-1,-2));
-    }
-
-    private void dayNightRow(LinearLayout parent) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        String mode = Palette.normalizeMode(prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM));
-        String[] ids = {Palette.DAY, Palette.NIGHT, Palette.SYSTEM};
-        String[] labels = {"День", "Ночь", "Как в телефоне"};
-        for (int i = 0; i < ids.length; i++) {
-            final String id = ids[i];
-            boolean active = mode.equals(id);
-            TextView option = txt(labels[i], 12, active ? BG : TEXT, active);
-            option.setGravity(Gravity.CENTER);
-            option.setMinHeight(dp(40));
-            option.setBackground(shape(active ? ACCENT : PANEL, 12, active ? 0 : STROKE));
-            option.setContentDescription(labels[i]);
-            option.setOnClickListener(v -> {
-                if (!prefs.edit().putString(Palette.DAY_NIGHT, id).commit()) {
-                    toast("Не удалось сохранить оформление");
-                    return;
-                }
-                draw();
-            });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(40), 1f);
-            if (i < ids.length - 1) params.rightMargin = dp(6);
-            row.addView(option, params);
-        }
-        parent.addView(row, lp(-1, -2));
-    }
-
-    private void iconColorRow(LinearLayout parent) {
-        addLine(parent, "Цвет иконки", 12, MUTED, false, 0);
-        space(parent, 6);
-        HorizontalScrollView scroll = new HorizontalScrollView(this);
-        scroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout colors = new LinearLayout(this);
-        colors.setOrientation(LinearLayout.HORIZONTAL);
-        String chosen = Palette.find(prefs.getString(Palette.PREF, "sand")).id;
-        for (Palette.Look look : Palette.all()) {
-            final String id = look.id;
-            boolean active = chosen.equals(id);
-            TextView chip = txt(look.title, 12, look.iconInk, active);
-            chip.setGravity(Gravity.CENTER);
-            chip.setMinHeight(dp(36));
-            chip.setPadding(dp(10), dp(8), dp(10), dp(8));
-            GradientDrawable d = new GradientDrawable();
-            d.setColor(look.icon);
-            d.setCornerRadius(dp(12));
-            if (active) d.setStroke(dp(2), TEXT);
-            chip.setBackground(d);
-            chip.setContentDescription("Цвет иконки " + look.title + (active ? ", выбран" : ""));
-            chip.setOnClickListener(v -> {
-                if (id.equals(chosen)) return;
-                if (!prefs.edit().putString(Palette.PREF, id).commit()) {
-                    toast("Не удалось сохранить цвет иконки");
-                    return;
-                }
-                IconPins.apply(this, id);
-                draw();
-            });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
-            params.rightMargin = dp(6);
-            colors.addView(chip, params);
-        }
-        scroll.addView(colors);
-        parent.addView(scroll, lp(-1, -2));
     }
 
     private void question(LinearLayout parent, String title, String body, Runnable open, String reason) {
@@ -425,16 +361,6 @@ public final class MainActivity extends Activity {
         brand.addView(txt("GitTeller",17,TEXT,true));
         addLine(brand,shortRepo,13,MUTED,false,2);
         head.addView(brand,new LinearLayout.LayoutParams(0,-2,1f));
-        TextView search=txt("⌕",22,TEXT,false);
-        search.setGravity(Gravity.CENTER);
-        search.setContentDescription("Поиск по сохранённым данным проекта");
-        search.setBackground(shape(PANEL,14,STROKE));
-        search.setClickable(true);
-        search.setFocusable(true);
-        LinearLayout.LayoutParams searchBox=lp(48,48);
-        searchBox.rightMargin=dp(8);
-        head.addView(search,searchBox);
-        search.setOnClickListener(v -> openPage("search"));
         TextView menu=txt("⋮",27,TEXT,false);
         menu.setGravity(Gravity.CENTER);menu.setContentDescription("Открыть панель разделов");
         menu.setBackground(shape(PANEL,14,STROKE));
@@ -443,7 +369,39 @@ public final class MainActivity extends Activity {
         head.addView(menu,lp(48,48));
         menu.setOnClickListener(v -> toggleDrawer());
         wrap.addView(head,lp(-1,-2));
-        space(wrap,14);
+        space(wrap,10);
+        searchField = new EditText(this);
+        searchField.setSingleLine(true);
+        searchField.setHint("Поиск по сохранённому");
+        searchField.setHintTextColor(MUTED);
+        searchField.setTextColor(TEXT);
+        searchField.setTextSize(15);
+        searchField.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        searchField.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        searchField.setBackground(shape(PANEL,14,STROKE));
+        searchField.setPadding(dp(12), dp(10), dp(12), dp(10));
+        searchField.setMinHeight(dp(48));
+        searchField.setContentDescription("Поиск по сохранённым данным этого проекта");
+        searchField.setText(searchQuery);
+        if (!searchQuery.isEmpty()) searchField.setSelection(searchQuery.length());
+        searchField.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                searchQuery = s == null ? "" : s.toString();
+                showSearchHits();
+            }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+        wrap.addView(searchField, lp(-1, -2));
+        space(wrap, 8);
+        searchResults = vertical();
+        wrap.addView(searchResults, lp(-1, -2));
+        showSearchHits();
+        if (focusSearch) {
+            focusSearch = false;
+            searchField.post(this::revealSearch);
+        }
+        space(wrap, 6);
 
         Summary summary=Summary.of(current,previous);
         String step = HumanReport.nextStep(current,previous,summary,lastError);
@@ -676,6 +634,106 @@ public final class MainActivity extends Activity {
         homeScroll.setLayoutParams(box);
     }
 
+    private void askNoticeOnce() {
+        if (prefs == null || !prefs.getBoolean("guide_seen", false)) return;
+        if (android.os.Build.VERSION.SDK_INT < 33) return;
+        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        if (prefs.getBoolean("asked_notice", false)) return;
+        prefs.edit().putBoolean("asked_notice", true).apply();
+        requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 41);
+    }
+
+    private void revealSearch() {
+        if (searchField == null || isFinishing()) return;
+        searchField.requestFocus();
+        android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.showSoftInput(searchField, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+    }
+
+    private void showSearchHits() {
+        if (searchResults == null) return;
+        searchResults.removeAllViews();
+        ViewGroup.LayoutParams raw = searchResults.getLayoutParams();
+        if (raw instanceof LinearLayout.LayoutParams) {
+            ((LinearLayout.LayoutParams) raw).bottomMargin = 0;
+        }
+        if (ProjectSearch.norm(searchQuery).isEmpty()) {
+            searchResults.setVisibility(View.GONE);
+            return;
+        }
+        searchResults.setVisibility(View.VISIBLE);
+        searchResults.setPadding(dp(14), dp(12), dp(14), dp(12));
+        searchResults.setBackground(shape(PANEL, 16, STROKE));
+        if (raw instanceof LinearLayout.LayoutParams) {
+            ((LinearLayout.LayoutParams) raw).bottomMargin = dp(8);
+        }
+        ProjectSearch.Report report = ProjectSearch.find(current, feed, searchQuery, localRepos());
+        addLine(searchResults, "Сохранённые данные, не весь GitHub", 12, MUTED, false, 0);
+        if (report.hits.isEmpty()) {
+            addLine(searchResults, ProjectSearch.noMatch(), 14, TEXT, false, 8);
+            return;
+        }
+        int shown = 0;
+        for (ProjectSearch.Hit hit : report.hits) {
+            if (shown == 8) break;
+            final ProjectSearch.Hit picked = hit;
+            TextView row = txt(hit.title, 15, TEXT, false);
+            row.setMinHeight(dp(44));
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setMaxLines(2);
+            row.setEllipsize(TextUtils.TruncateAt.END);
+            String detail = hit.detail == null || hit.detail.isEmpty() ? hit.group : hit.group + ". " + hit.detail;
+            row.setContentDescription(detail);
+            row.setClickable(true);
+            row.setFocusable(true);
+            row.setOnClickListener(v -> openSearchHit(picked));
+            space(searchResults, 4);
+            searchResults.addView(row, lp(-1, -2));
+            TextView meta = txt(detail, 12, MUTED, false);
+            meta.setMaxLines(1);
+            meta.setEllipsize(TextUtils.TruncateAt.END);
+            searchResults.addView(meta, lp(-1, -2));
+            shown++;
+        }
+        int hidden = report.hits.size() - shown + report.omitted;
+        if (hidden > 0) addLine(searchResults, "Ещё " + hidden + ". Уточните запрос.", 12, MUTED, false, 8);
+    }
+
+    private void openSearchHit(ProjectSearch.Hit hit) {
+        if ("switch-repo".equals(hit.page)) {
+            if (hit.key == null || hit.key.isEmpty()) return;
+            if (!prefs.edit().putString("repo", hit.key).commit()) {
+                toast("Не удалось выбрать проект");
+                return;
+            }
+            abandonSync();
+            searchQuery = "";
+            readProject(hit.key);
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                if (!isFinishing()) draw();
+            });
+            return;
+        }
+        Intent intent = new Intent(this, SectionActivity.class);
+        intent.putExtra("page", hit.page);
+        if (hit.index >= 0) intent.putExtra("idx", hit.index);
+        if (hit.key != null && !hit.key.isEmpty()) intent.putExtra("key", hit.key);
+        if (hit.marker != null && !hit.marker.isEmpty()) intent.putExtra("eventId", hit.marker);
+        startActivityForResult(intent, REQUEST_SECTION);
+    }
+
+    private java.util.List<String> localRepos() {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        for (String stored : prefs.getAll().keySet()) {
+            if (!stored.endsWith(":current")) continue;
+            String name = stored.substring(0, stored.length() - ":current".length());
+            if (!name.isEmpty()) out.add(name);
+        }
+        return out;
+    }
+
     private void openPage(String page) {
         Intent intent = new Intent(this, SectionActivity.class);
         intent.putExtra("page", page);
@@ -717,15 +775,15 @@ public final class MainActivity extends Activity {
         space(panel, 8);
         modePicker(panel);
         space(panel, 8);
-        dayNightRow(panel);
-        space(panel, 8);
-        iconColorRow(panel);
-        space(panel, 8);
         ScrollView list = new ScrollView(this);
         LinearLayout items = vertical();
         list.addView(items);
         panel.addView(list, new LinearLayout.LayoutParams(-1, 0, 1f));
-        drawerItem(items, "Поиск", () -> { closeDrawer(false); openPage("search"); });
+        drawerItem(items, "Поиск", () -> {
+            closeDrawer(false);
+            focusSearch = true;
+            if (searchField != null) searchField.post(this::revealSearch);
+        });
         drawerItem(items, "Как пользоваться", () -> { closeDrawer(false); openPage("guide"); });
         drawerItem(items, "Разделы проекта", () -> { closeDrawer(false); openPage("index"); });
         drawerItem(items, "Обновить", () -> { closeDrawer(false); sync(); });
@@ -860,6 +918,7 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (prefs == null) return;
+        askNoticeOnce();
         String selected = prefs.getString("repo", DEFAULT_REPO);
         String raw = prefs.getString(key(selected, "current"), "");
         if (raw == null) raw = "";
