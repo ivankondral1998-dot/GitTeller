@@ -332,6 +332,7 @@ public final class MainActivity extends Activity {
 
     private void draw() {
         applyPalette();
+        rememberLook();
         boolean keepDrawer = drawer.open || reopenDrawer;
         if (homeScroll != null) savedScroll = homeScroll.getScrollY();
         if (drawerLayer != null && homeRoot != null) homeRoot.removeView(drawerLayer);
@@ -618,7 +619,7 @@ public final class MainActivity extends Activity {
         if (homeRoot != null && bannerSlot != null) return;
         homeRoot = new FrameLayout(this);
         bannerSlot = new FrameLayout(this);
-        bannerSlot.setVisibility(android.view.View.GONE);
+        bannerSlot.setVisibility(View.GONE);
         setContentView(homeRoot);
         ads.attachBanner(this, bannerSlot, this::fitBanner);
     }

@@ -14,6 +14,7 @@ import org.json.JSONObject;
 final class Watch {
     static final String PREF = "quiet_watch";
     static final long INTERVAL_MS = 6L * 60L * 60L * 1000L;
+    static final long FIRST_MS = 15L * 60L * 1000L;
     static final String ACTION = "app.unocontrol.QUIET_WATCH";
     /** Snapshot writers share this so a slow check cannot replace a newer save. */
     static final Object WRITE = new Object();
@@ -42,7 +43,7 @@ final class Watch {
             return;
         }
         alarms.setInexactRepeating(AlarmManager.ELAPSED_REALTIME,
-                SystemClock.elapsedRealtime() + INTERVAL_MS, INTERVAL_MS, pi);
+                SystemClock.elapsedRealtime() + FIRST_MS, INTERVAL_MS, pi);
     }
 
     static void run(Context context) {

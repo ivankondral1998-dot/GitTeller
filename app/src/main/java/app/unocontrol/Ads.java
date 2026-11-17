@@ -56,8 +56,11 @@ final class Ads {
                 @Override public void onReturnedToApplication() {}
             });
             slot.removeAllViews();
+            int h = px(activity, 50);
+            slot.setClipChildren(true);
+            slot.setClipToPadding(true);
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+                    ViewGroup.LayoutParams.MATCH_PARENT, h, Gravity.CENTER);
             slot.addView(view, lp);
             view.loadAd(new AdRequest.Builder().build());
             banner = view;
@@ -67,9 +70,28 @@ final class Ads {
     }
 
     private static void showSlot(Activity activity, FrameLayout slot, boolean visible, Runnable onVisibility) {
+        int h = px(slot.getContext(), 50);
+        android.view.ViewGroup.LayoutParams box = slot.getLayoutParams();
+        if (box != null) {
+            box.height = visible ? h : 0;
+            slot.setLayoutParams(box);
+        }
+        if (slot.getChildCount() > 0) {
+            android.view.View child = slot.getChildAt(0);
+            android.view.ViewGroup.LayoutParams childBox = child.getLayoutParams();
+            if (childBox != null) {
+                childBox.height = h;
+                child.setLayoutParams(childBox);
+            }
+        }
         slot.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
         if (onVisibility == null || activity == null) return;
         activity.runOnUiThread(onVisibility);
+    }
+
+    private static int px(android.content.Context context, int dp) {
+        if (context == null) return dp;
+        return (int) (dp * context.getResources().getDisplayMetrics().density + 0.5f);
     }
 
     void preload(Activity activity) {

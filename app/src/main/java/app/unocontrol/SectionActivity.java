@@ -19,6 +19,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -44,6 +45,10 @@ public final class SectionActivity extends Activity {
     private TokenVault vault;
     private int detailEpoch;
     private int compareEpoch;
+    private final Ads ads = new Ads();
+    private ScrollView pageScroll;
+    private boolean noticesAllowed;
+    private boolean pendingNotice;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -59,21 +64,43 @@ public final class SectionActivity extends Activity {
         if(page==null)page="index";
         if("access".equals(page) || "search".equals(page))
             getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        noticesAllowed = QuietPoster.allowed(this);
         paint();render();
     }
     @Override protected void onPause() {
         super.onPause();
         if ("guide".equals(page) && prefs != null) prefs.edit().putBoolean("guide_seen", true).apply();
     }
+    @Override protected void onDestroy() {
+        ads.destroy();
+        super.onDestroy();
+    }
+    @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(code, permissions, results);
+        if (code != 41 || isFinishing()) return;
+        noticesAllowed = QuietPoster.allowed(this);
+        if (pendingNotice && noticesAllowed && Watch.enabled(prefs)) {
+            pendingNotice = false;
+            if (QuietNotice.worthTelling(current, previous)) QuietPoster.postIfNew(this, current, previous);
+        }
+        rerender();
+    }
     @Override protected void onResume() {
         super.onResume();
         if(prefs==null) return;
+        boolean allow = QuietPoster.allowed(this);
+        if (pendingNotice && allow && Watch.enabled(prefs)) {
+            pendingNotice = false;
+            if (QuietNotice.worthTelling(current, previous)) QuietPoster.postIfNew(this, current, previous);
+        }
         String selected=prefs.getString("repo",repo);
         String raw=prefs.getString(key(selected,"current"),"");
         String look=prefs.getString(Palette.PREF,"sand");
         String mode=prefs.getString(Palette.DAY_NIGHT,Palette.SYSTEM);
         boolean appearance=!java.util.Objects.equals(look, seenLook) || !java.util.Objects.equals(mode, seenMode);
-        if(selected.equals(repo) && raw.equals(seenCurrent==null?"":seenCurrent) && !appearance) return;
+        boolean allowChanged = allow != noticesAllowed;
+        noticesAllowed = allow;
+        if(selected.equals(repo) && raw.equals(seenCurrent==null?"":seenCurrent) && !appearance && !allowChanged) return;
         if(!selected.equals(repo) || !raw.equals(seenCurrent==null?"":seenCurrent)) {
             repo=selected;
             seenCurrent=raw;
@@ -158,6 +185,7 @@ public final class SectionActivity extends Activity {
             case "accuracy":return "Надёжность сведений";
             case "access":return "Подключение GitHub";
             case "settings":return "Настройки";
+            case "appearance":return "Оформление";
             case "why":return "Почему это не доказательство";
             case "incomplete":return "Почему данные неполные?";
             case "search":return "Поиск";
@@ -174,6 +202,7 @@ public final class SectionActivity extends Activity {
         }
     }
     private void render(){
+        int keep = pageScroll == null ? 0 : pageScroll.getScrollY();
         LinearLayout root=col();root.setBackgroundColor(bg);
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(12),dp(14),dp(12),dp(12));
@@ -185,7 +214,19 @@ public final class SectionActivity extends Activity {
         root.addView(header,lp(-1,-2));
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
         body=col();body.setPadding(dp(16),dp(4),dp(16),dp(20));scroll.addView(body);
-        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));setContentView(root);
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
+        pageScroll = scroll;
+        FrameLayout slot = null;
+        if (bannerPage()) {
+            slot = new FrameLayout(this);
+            slot.setVisibility(View.GONE);
+            slot.setClipChildren(true);
+            slot.setClipToPadding(true);
+            root.addView(slot, new LinearLayout.LayoutParams(-1, dp(50)));
+        }
+        setContentView(root);
+        if (slot != null) ads.attachBanner(this, slot, null);
+        if (keep > 0) scroll.post(() -> scroll.scrollTo(0, keep));
         TextView project=line(body,repo,13,false,muted);project.setMaxLines(1);project.setEllipsize(TextUtils.TruncateAt.END);gap(body,8);
         switch(page) {
             case "overview":overview();break;
@@ -198,6 +239,7 @@ public final class SectionActivity extends Activity {
             case "accuracy":accuracy();break;
             case "access":access();break;
             case "settings":case "data":settings();break;
+            case "appearance":appearance();break;
             case "about":about();break;
             case "guide":guide();break;
             case "token-help":tokenHelp();break;
@@ -226,7 +268,7 @@ public final class SectionActivity extends Activity {
         action("Предложения изменений","Что предлагают внести и внесено ли это",()->go("pulls"));
         action("Надёжность сведений","Что загружено полностью, а что нет",()->go("accuracy"));
         action("Подключение GitHub","Репозиторий и доступ только на чтение",()->go("access"));
-        action("Настройки","Копии данных и ограничения приложения",()->go("settings"));
+        action("Настройки","Оформление, уведомление и копии",()->go("settings"));
         action("Поиск","По сохранённым данным этого проекта",()->go("search"));
         action("Почему данные неполные?","Причина по каждому списку, без ложного успеха",()->go("incomplete"));
     }
@@ -672,37 +714,116 @@ public final class SectionActivity extends Activity {
                 ? " Первая страница не изменилась, показан прошлый список." : "";
         return " Время раздела: " + when + "." + cache;
     }
+    private boolean bannerPage() {
+        return showsBanner(page);
+    }
+
+    /** Small banner on GitHub facts and on plain explanations. Not on settings or menus. */
+    static boolean showsBanner(String page) {
+        if (page == null) return false;
+        switch (page) {
+            case "overview":
+            case "changes":
+            case "problems":
+            case "branches":
+            case "branch-detail":
+            case "commits":
+            case "commit-detail":
+            case "tasks":
+            case "issue-detail":
+            case "pulls":
+            case "pull-detail":
+            case "accuracy":
+            case "search":
+            case "about":
+            case "guide":
+            case "token-help":
+            case "why":
+            case "incomplete":
+                return true;
+            default:
+                return false;
+        }
+    }
     private void settings(){
-        note("GitTeller 1.0.20-dev", "День, ночь и цвет иконки — здесь. Экран меняется сразу и приложение не закрывается. Значок на рабочем столе обновляется после выхода. Это не коммерческий релиз и не проверка готовности программы.");
-        note("Реклама", "Реклама Яндекса. Баннер внизу. Большой ролик не чаще раза в час при «Обновить». Если реклама не загрузилась, обновление всё равно выполняется.");
-        note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются в правой панели. На главном по умолчанию простой вид: четыре ответа. Подробности не удалены, они в панели. Выбор сохраняется на устройстве. Права GitHub не меняются.");
-        note("Оформление", "День, ночь или как в телефоне. Десять цветов меняют экран сразу. Значок GitTeller на рабочем столе сменится после выхода из приложения, чтобы оно не закрылось.");
-        appearanceControls();
-        note("Тихое уведомление", Watch.enabled(prefs)
-                ? "Включено. Без звука, не на весь экран. Строка появляется, только если с прошлой проверки что-то изменилось. Подробности — в раскрытой шторке. Проверка примерно раз в 6 часов. Разрешение спрашивается один раз."
-                : "Выключено. Приложение молчит, пока его не откроют.");
-        action(Watch.enabled(prefs) ? "Выключить тихое уведомление" : "Включить тихое уведомление",
-                "Звук не включается", () -> {
-                    prefs.edit().putBoolean(Watch.PREF, !Watch.enabled(prefs)).commit();
-                    Watch.ensure(this);
-                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                        if (isFinishing()) return;
-                        paint();
-                        render();
-                    });
-                });
-        note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
-        note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");
-        action("Сохранить копию проекта","Создать JSON без токена",()->requestData("export"));
-        action("Восстановить из JSON","Заменяет данные выбранного репозитория только после подтверждения",()->requestData("import"));
-        action("Поделиться кратким отчётом","Текст для себя. Токен и тела записей не входят", this::shareReport);
-        action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
-        note("Проекты на этом телефоне","Данные и токены не смешиваются. Выбор проекта не удаляет остальные.");
+        action("Оформление", lookLine(), () -> go("appearance"));
+        quietRow();
+        action("Сохранить копию проекта","JSON без токена",()->requestData("export"));
+        action("Восстановить из JSON","Только после подтверждения",()->requestData("import"));
+        action("Поделиться кратким отчётом","Текст для себя, без токена", this::shareReport);
         projectChoices();
-        note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
+    }
+    private String lookLine() {
+        Palette.Look look = Palette.find(prefs.getString(Palette.PREF, "sand"));
+        String mode = Palette.normalizeMode(prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM));
+        String day = Palette.DAY.equals(mode) ? "день" : Palette.NIGHT.equals(mode) ? "ночь" : "как в телефоне";
+        return look.title + ", " + day;
+    }
+    private void quietRow() {
+        boolean on = Watch.enabled(prefs);
+        boolean allowed = QuietPoster.allowed(this);
+        if (on && !allowed) {
+            action("Тихое уведомление", "Система не показывает. Открыть разрешение", () -> {
+                pendingNotice = true;
+                askOrOpenNotice();
+            });
+            action("Выключить тихое уведомление", "Проверки остановятся", () -> flipQuiet(false));
+            return;
+        }
+        action(on ? "Выключить тихое уведомление" : "Включить тихое уведомление",
+                on ? "Включено, без звука" : "Сейчас выключено", () -> flipQuiet(!on));
+    }
+    private void flipQuiet(boolean next) {
+        if (!prefs.edit().putBoolean(Watch.PREF, next).commit()) {
+            toast("Не удалось сохранить");
+            return;
+        }
+        Watch.ensure(this);
+        if (next) armNotice();
+        rerender();
+    }
+    private void armNotice() {
+        if (QuietPoster.allowed(this)) {
+            if (QuietNotice.worthTelling(current, previous)) QuietPoster.postIfNew(this, current, previous);
+            return;
+        }
+        pendingNotice = true;
+        askOrOpenNotice();
+    }
+    private void askOrOpenNotice() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED
+                && !prefs.getBoolean("asked_notice", false)) {
+            prefs.edit().putBoolean("asked_notice", true).apply();
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 41);
+            return;
+        }
+        openNoticeSettings();
+    }
+    private void openNoticeSettings() {
+        try {
+            Intent intent = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+            intent.putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+            startActivity(intent);
+        } catch (Exception e) {
+            toast("Не удалось открыть уведомления системы");
+        }
+    }
+    private void rerender() {
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+            if (isFinishing()) return;
+            paint();
+            render();
+        });
+    }
+    private void appearance() {
+        line(body, "Значок на рабочем столе сменится после выхода из приложения.", 13, false, muted);
+        gap(body, 10);
+        appearanceControls();
     }
     private void about(){
-        note("GitTeller 1.0.20-dev", "Нативное чтение GitHub. versionCode 36. Поиск на главном экране, день и ночь в настройках, тихая строка в шторке. Это не коммерческий релиз и не приёмка на телефоне.");
+        note("GitTeller 1.0.21-dev", "versionCode 37. Чтение GitHub. Не коммерческий релиз и не приёмка на телефоне.");
         note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
         note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
@@ -850,9 +971,9 @@ public final class SectionActivity extends Activity {
         note("С чего начать","1. Откройте «Подключение GitHub» и впишите адрес вида имя/проект.\n2. Если проект открыт всем, токен не нужен.\n3. Если проект закрытый, нужен ключ только на чтение. Как его получить — кнопка ниже.\n4. Вернитесь на главный экран и нажмите «Обновить».");
         note("Главный экран","Четыре ответа: что изменилось, где работа, какие проблемы, кто выполнял. Под ними короткое «Свежее» из уже загруженного. Это сведения GitHub, не проверка, что программа работает.");
         note("Поиск","Поле «Поиск по сохранённому» стоит на главном экране. Нажмите его и вводите: ветку, номер задачи, текст, имя. Список появляется тут же, отдельное окно не открывается. Ищется только то, что уже загружено на телефон, не весь GitHub.");
-        note("Обновить","Само ничего не запрашивает. Кнопка «Обновить» читает GitHub заново. Если реклама не загрузилась, чтение всё равно идёт.");
-        note("Тихая строка","Если включено в настройках, примерно раз в 6 часов приложение само проверяет проект. Уведомление — одна строка, без звука и без полноэкранной страницы. Подробности только в раскрытой шторке. Если ничего не изменилось, уведомления нет.");
-        note("День, ночь и цвет","Это в «Настройках», не в боковой панели. Экран меняется сразу. Значок GitTeller на рабочем столе меняется после выхода из приложения: так оно не закрывается в момент выбора.");
+        note("Обновить","Кнопка «Обновить» читает GitHub заново. Реклама не стоит на экране проекта. Если ролик не загрузился, чтение всё равно идёт.");
+        note("Тихая строка","Включается в настройках. Первая проверка около 15 минут, дальше примерно раз в 6 часов. Одна строка, без звука. Если ничего не изменилось — строки нет. Если система запретила уведомления, кнопка открывает разрешение, а не делает вид, что всё включено.");
+        note("День, ночь и цвет","Отдельный экран «Оформление» внутри настроек. Выбор не уводит страницу наверх. Значок на рабочем столе меняется после выхода из приложения.");
         note("Два режима","«Режим чайника» — короткие ответы. «Режим разработчика» — те же данные подробнее. Переключатель в боковой панели. Права GitHub от режима не зависят.");
         note("Токен","Ключ только на чтение хранится на этом телефоне и никуда не отправляется. Никому его не присылайте, в том числе создателю приложения.");
         action("Как получить токен","Пошагово, без жаргона",()->go("token-help"));
@@ -890,11 +1011,7 @@ public final class SectionActivity extends Activity {
                     return;
                 }
                 setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
-                v.post(() -> {
-                    if (isFinishing()) return;
-                    paint();
-                    render();
-                });
+                rerender();
             });
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2);
             p.rightMargin = dp(8);
@@ -920,11 +1037,7 @@ public final class SectionActivity extends Activity {
                 return;
             }
             setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
-            v.post(() -> {
-                if (isFinishing()) return;
-                paint();
-                render();
-            });
+            rerender();
         });
         LinearLayout.LayoutParams p = lp(-1, 48);
         p.bottomMargin = dp(8);

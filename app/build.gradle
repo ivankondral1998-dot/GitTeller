@@ -7,8 +7,8 @@ android {
         applicationId 'app.gitteller.mobile'
         minSdk 26
         targetSdk 35
-        versionCode 36
-        versionName '1.0.20-dev'
+        versionCode 37
+        versionName '1.0.21-dev'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     def originalDebug = file("${System.getProperty('user.home')}/.android/debug.keystore")

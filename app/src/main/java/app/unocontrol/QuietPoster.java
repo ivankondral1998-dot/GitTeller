@@ -25,11 +25,9 @@ final class QuietPoster {
         String line = QuietNotice.oneLine(current, previous);
         String mark = current.optLong("capturedAt", 0) + "|" + previous.optLong("capturedAt", 0) + "|" + line;
         if (mark.equals(prefs.getString(MARK, ""))) return;
+        if (!allowed(context)) return;
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
-        if (Build.VERSION.SDK_INT >= 33
-                && context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
-                != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationChannel channel = new NotificationChannel(CHANNEL, "Тихие изменения", NotificationManager.IMPORTANCE_LOW);
             channel.setDescription("Одна строка, без звука. Подробности только в раскрытой шторке.");
@@ -57,5 +55,16 @@ final class QuietPoster {
                 .setDefaults(0);
         manager.notify(ID, builder.build());
         prefs.edit().putString(MARK, mark).apply();
+    }
+
+    /** App toggle is not enough: the system can still drop the shade line. */
+    static boolean allowed(Context context) {
+        if (context == null) return false;
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null && !manager.areNotificationsEnabled()) return false;
+        if (Build.VERSION.SDK_INT >= 33
+                && context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) return false;
+        return true;
     }
 }
