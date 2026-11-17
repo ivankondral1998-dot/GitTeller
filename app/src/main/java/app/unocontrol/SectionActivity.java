@@ -192,6 +192,8 @@ public final class SectionActivity extends Activity {
             case "projects":return "Сменить проект";
             case "about":return "О приложении";
             case "guide":return "Как пользоваться";
+            case "developer-notes":return "От разработчика";
+            case "developer-note":return "Совет разработчика";
             case "token-help":return "Как получить токен";
             case "data":return "Настройки";
             case "branch-detail":return "Направление работы";
@@ -242,6 +244,8 @@ public final class SectionActivity extends Activity {
             case "appearance":appearance();break;
             case "about":about();break;
             case "guide":guide();break;
+            case "developer-notes":developerNotes();break;
+            case "developer-note":developerNote();break;
             case "token-help":tokenHelp();break;
             case "why":why();break;
             case "search":search();break;
@@ -271,6 +275,7 @@ public final class SectionActivity extends Activity {
         action("Настройки","Оформление, уведомление и копии",()->go("settings"));
         action("Поиск","По сохранённым данным этого проекта",()->go("search"));
         action("Почему данные неполные?","Причина по каждому списку, без ложного успеха",()->go("incomplete"));
+        action("От разработчика","Короткие личные заметки о работе с ИИ",()->go("developer-notes"));
     }
     private void overview(){
         if(current==null){note("Нет данных","Вернитесь назад и нажмите «Обновить».");return;}
@@ -828,6 +833,28 @@ public final class SectionActivity extends Activity {
         note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
         note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
+        action("От разработчика","Личный опыт работы с несколькими ИИ без API",()->go("developer-notes"));
+    }
+    private void developerNotes() {
+        note("Личный опыт", "Короткие заметки разработчика. Это советы, а не доказательство качества программы.");
+        DeveloperNotes.Entry[] entries = DeveloperNotes.all();
+        for (int i = 0; i < entries.length; i++) {
+            final int selected = i;
+            DeveloperNotes.Entry entry = entries[i];
+            action(entry.title, entry.subtitle, () -> goItem("developer-note", selected));
+        }
+    }
+    private void developerNote() {
+        DeveloperNotes.Entry entry = DeveloperNotes.at(getIntent().getIntExtra("idx", -1));
+        if (entry == null) {
+            note("Заметка не найдена", "Вернитесь к списку авторских заметок.");
+            return;
+        }
+        line(body, entry.title, 20, true, ink);
+        gap(body, 5);
+        line(body, entry.subtitle, 13, false, muted);
+        gap(body, 15);
+        for (DeveloperNotes.Section section : entry.sections) note(section.title, section.text);
     }
     private void projects(){
         note("Проекты на этом телефоне","Список берётся из уже сохранённых снимков. Новый проект отсюда не придумывается.");
