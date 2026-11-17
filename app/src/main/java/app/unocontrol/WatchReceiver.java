@@ -10,10 +10,6 @@ public final class WatchReceiver extends BroadcastReceiver {
         if (!Watch.ACTION.equals(intent.getAction())) return;
         context.getSharedPreferences("gitteller_v1", Context.MODE_PRIVATE)
                 .edit().putLong(Watch.NEXT, System.currentTimeMillis() + Watch.INTERVAL_MS).apply();
-        PendingResult pending = goAsync();
-        new Thread(() -> {
-            try { Watch.run(context.getApplicationContext()); }
-            finally { pending.finish(); }
-        }, "gitteller-watch").start();
+        Watch.enqueue(context);
     }
 }

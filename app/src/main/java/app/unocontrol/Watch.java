@@ -35,28 +35,17 @@ final class Watch {
     }
 
     /**
-     * Negative means leave the existing alarm alone.
-     * A future deadline is kept. A due alarm is left to the receiver.
-     * Only a missing deadline, or a boot that wiped alarms, schedules a new one.
+     * Delay until the next quiet check. A saved future deadline is kept.
+     * An overdue deadline uses the regular interval, never the first 15 minutes.
+     * A missing deadline is the first arm.
      */
-    static long scheduleDelay(long now, long next, boolean force) {
-        if (!force && next > now) return -1L;
-        if (!force && next != 0L) return -1L;
-        if (force && next > now) return Math.max(60_000L, next - now);
-        if (force) return INTERVAL_MS;
-        return FIRST_MS;
+    static long scheduleDelay(long now, long next) {
+        if (next > now) return Math.max(60_000L, next - now);
+        if (next == 0L) return FIRST_MS;
+        return INTERVAL_MS;
     }
 
     static void ensure(Context context) {
-        hold(context, false);
-    }
-
-    /** Boot clears alarms. Put the next check back without shrinking it to the first delay. */
-    static void restoreAfterBoot(Context context) {
-        hold(context, true);
-    }
-
-    private static void hold(Context context, boolean force) {
         if (context == null) return;
         AlarmManager alarms = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (alarms == null) return;
@@ -69,11 +58,27 @@ final class Watch {
         }
         long now = System.currentTimeMillis();
         long next = prefs.getLong(NEXT, 0L);
-        long delay = scheduleDelay(now, next, force);
-        if (delay < 0L) return;
+        long delay = scheduleDelay(now, next);
         alarms.setInexactRepeating(AlarmManager.ELAPSED_REALTIME,
                 SystemClock.elapsedRealtime() + delay, INTERVAL_MS, pi);
-        prefs.edit().putLong(NEXT, now + delay).apply();
+        if (next <= now) prefs.edit().putLong(NEXT, now + delay).apply();
+    }
+
+    /** Boot clears alarms. The same restore uses the saved deadline, not a new 15-minute start. */
+    static void restoreAfterBoot(Context context) {
+        ensure(context);
+    }
+
+    static void enqueue(Context context) {
+        if (context == null) return;
+        android.app.job.JobScheduler jobs = (android.app.job.JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+        if (jobs == null) return;
+        android.app.job.JobInfo job = new android.app.job.JobInfo.Builder(42,
+                new android.content.ComponentName(context, WatchJob.class))
+                .setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY)
+                .setOverrideDeadline(60_000L)
+                .build();
+        jobs.schedule(job);
     }
 
     static void run(Context context) {

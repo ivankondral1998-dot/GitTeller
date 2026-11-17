@@ -84,6 +84,7 @@ public final class MainActivity extends Activity {
     private ScrollView homeScroll;
     private int savedScroll;
     private boolean reopenDrawer;
+    private boolean noticeHandled;
     private final DrawerMotion drawer = new DrawerMotion();
     private View drawerLayer;
     private float dragX;
@@ -103,10 +104,12 @@ public final class MainActivity extends Activity {
             reopenDrawer = savedInstanceState.getBoolean("drawer", false);
             searchQuery = savedInstanceState.getString("query", "");
             if (searchQuery == null) searchQuery = "";
+            noticeHandled = savedInstanceState.getBoolean("notice_handled", false);
         }
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         Watch.ensure(this);
-        applyNotifiedRepo(getIntent());
+        if (!noticeHandled) applyNotifiedRepo(getIntent());
+        noticeHandled = true;
         draw();
         ads.preload(this);
         if (savedInstanceState == null && !prefs.getBoolean("guide_seen", false)) {
@@ -126,7 +129,11 @@ public final class MainActivity extends Activity {
         String named = intent.getStringExtra(Watch.EXTRA_REPO);
         if (named == null) return false;
         named = named.trim();
-        if (!named.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || named.contains("..")) return false;
+        if (!named.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || named.contains("..")) {
+            intent.removeExtra(Watch.EXTRA_REPO);
+            return false;
+        }
+        intent.removeExtra(Watch.EXTRA_REPO);
         if (!named.equals(repo)) abandonSync();
         if (!prefs.edit().putString("repo", named).commit()) return false;
         String raw = prefs.getString(key(named, "current"), "");
@@ -142,6 +149,7 @@ public final class MainActivity extends Activity {
         out.putInt("scroll", savedScroll);
         out.putBoolean("drawer", drawer.open);
         out.putString("query", searchQuery);
+        out.putBoolean("notice_handled", noticeHandled);
     }
 
     @Override public void onBackPressed() {
