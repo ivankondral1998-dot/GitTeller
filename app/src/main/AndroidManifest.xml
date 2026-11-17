@@ -1,18 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application android:name=".GitTellerApp"
                  android:allowBackup="false"
                  android:label="GitTeller"
+                 android:icon="@mipmap/ic_sand"
+                 android:roundIcon="@mipmap/ic_sand"
                  android:theme="@style/GitTellerTheme"
                  android:usesCleartextTraffic="false"
                  android:supportsRtl="true">
         <activity android:name=".SectionActivity" android:exported="false"/>
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name=".MainActivity" android:exported="true"/>
+        <activity-alias android:name=".IconSand" android:enabled="true" android:exported="true" android:icon="@mipmap/ic_sand" android:roundIcon="@mipmap/ic_sand" android:targetActivity=".MainActivity" android:label="GitTeller">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias android:name=".IconSage" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_sage" android:roundIcon="@mipmap/ic_sage" android:targetActivity=".MainActivity" android:label="GitTeller">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".IconSea" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_sea" android:roundIcon="@mipmap/ic_sea" android:targetActivity=".MainActivity" android:label="GitTeller">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".IconSlate" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_slate" android:roundIcon="@mipmap/ic_slate" android:targetActivity=".MainActivity" android:label="GitTeller">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".IconClay" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_clay" android:roundIcon="@mipmap/ic_clay" android:targetActivity=".MainActivity" android:label="GitTeller">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".IconMoss" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_moss" android:roundIcon="@mipmap/ic_moss" android:targetActivity=".MainActivity" android:label="GitTeller">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".IconDusk" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_dusk" android:roundIcon="@mipmap/ic_dusk" android:targetActivity=".MainActivity" android:label="GitTeller">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".IconLagoon" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_lagoon" android:roundIcon="@mipmap/ic_lagoon" android:targetActivity=".MainActivity" android:label="GitTeller">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".IconStone" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_stone" android:roundIcon="@mipmap/ic_stone" android:targetActivity=".MainActivity" android:label="GitTeller">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".IconBerry" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_berry" android:roundIcon="@mipmap/ic_berry" android:targetActivity=".MainActivity" android:label="GitTeller">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <receiver android:name=".BootPin" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+        <receiver android:name=".WatchReceiver" android:exported="false"/>
     </application>
 </manifest>

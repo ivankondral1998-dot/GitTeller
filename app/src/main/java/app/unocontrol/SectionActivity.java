@@ -11,6 +11,7 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -18,6 +19,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.HorizontalScrollView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -71,15 +73,27 @@ public final class SectionActivity extends Activity {
     private static JSONObject parse(String s) {try{return s==null||s.isEmpty()?null:new JSONObject(s);}catch(Exception e){return null;}}
     private int dp(float v) {return (int)(v*getResources().getDisplayMetrics().density+.5f);}
     private void paint() {
-        boolean dark=(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)!=Configuration.UI_MODE_NIGHT_NO;
-        bg=dark?Color.rgb(12,18,25):Color.rgb(246,243,236);
-        panel=dark?Color.rgb(23,33,44):Color.WHITE;
-        ink=dark?Color.rgb(238,242,247):Color.rgb(28,32,38);
-        muted=dark?Color.rgb(164,178,194):Color.rgb(92,99,108);
-        stroke=dark?Color.rgb(47,63,80):Color.rgb(214,206,194);
-        accent=dark?Color.rgb(218,174,127):Color.rgb(133,88,42);
-        getWindow().setStatusBarColor(bg);getWindow().setNavigationBarColor(bg);
-        getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        int night = getResources().getConfiguration().uiMode;
+        boolean dark = Palette.dark(Palette.normalizeMode(prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM)), night);
+        Palette.Colors c = Palette.colors(Palette.find(prefs.getString(Palette.PREF, "sand")), dark);
+        bg = c.bg;
+        panel = c.panel;
+        ink = c.text;
+        muted = c.muted;
+        stroke = c.stroke;
+        accent = c.accent;
+        getWindow().setStatusBarColor(bg);
+        getWindow().setNavigationBarColor(bg);
+        int light = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        getWindow().getDecorView().setSystemUiVisibility(dark ? 0 : light);
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                int bits = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(dark ? 0 : bits, bits);
+            }
+        }
     }
     private GradientDrawable background(int color) {
         GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(17));d.setStroke(dp(1),stroke);return d;
@@ -644,10 +658,21 @@ public final class SectionActivity extends Activity {
         return " Время раздела: " + when + "." + cache;
     }
     private void settings(){
-        note("GitTeller 1.0.18-dev", "Главный экран короче. Ответ нажимается целиком. Подробный режим в правой панели. Это не коммерческий релиз и не проверка готовности программы.");
+        note("GitTeller 1.0.19-dev", "Главный экран короче. День и ночь переключаются в панели и здесь. Тихое уведомление — одна строка, без звука. Это не коммерческий релиз и не проверка готовности программы.");
         note("Реклама", "Реклама Яндекса. Баннер внизу. Большой ролик не чаще раза в час при «Обновить». Если реклама не загрузилась, обновление всё равно выполняется.");
         note("Режимы", "«Режим чайника» и «Режим разработчика» переключаются в правой панели. На главном по умолчанию простой вид: четыре ответа. Подробности не удалены, они в панели. Выбор сохраняется на устройстве. Права GitHub не меняются.");
-        note("Оформление", "Светлая или тёмная тема берётся из настроек телефона. Отдельный переключатель не нужен.");
+        note("Оформление", "День, ночь или как в телефоне. Десять цветов меняют экран и иконку. На иконке написано GitTeller. На Samsung цвет на рабочем столе иногда обновляется не сразу.");
+        appearanceControls();
+        note("Тихое уведомление", Watch.enabled(prefs)
+                ? "Включено. Без звука, не на весь экран. Строка появляется, только если с прошлой проверки что-то изменилось. Подробности — в раскрытой шторке. Проверка примерно раз в 6 часов. Разрешение спрашивается один раз."
+                : "Выключено. Приложение молчит, пока его не откроют.");
+        action(Watch.enabled(prefs) ? "Выключить тихое уведомление" : "Включить тихое уведомление",
+                "Звук не включается", () -> {
+                    prefs.edit().putBoolean(Watch.PREF, !Watch.enabled(prefs)).commit();
+                    Watch.ensure(this);
+                    paint();
+                    render();
+                });
         note("Безопасность", "Чтение GitHub только через HTTPS. Токены в Android Keystore, отдельно на каждый проект, не попадают в резервную копию JSON и не пишутся в журнал.");
         note("Резервные копии", "В архив попадают только сведения GitHub. Защищённый токен не экспортируется. Импортированный файл нельзя считать свежей проверкой.");
         action("Сохранить копию проекта","Создать JSON без токена",()->requestData("export"));
@@ -659,7 +684,7 @@ public final class SectionActivity extends Activity {
         note("Ограничения", "Приложение не запускает сборку и не проверяет работу на телефоне. Нехватка данных показывается как нехватка данных, а не как успех.");
     }
     private void about(){
-        note("GitTeller 1.0.18-dev", "Нативное чтение GitHub. versionCode 34. Это не коммерческий релиз и не приёмка на телефоне.");
+        note("GitTeller 1.0.19-dev", "Нативное чтение GitHub. versionCode 35. Десять спокойных цветов, день и ночь, тихая строка в шторке. Это не коммерческий релиз и не приёмка на телефоне.");
         note("Что умеет", "Два режима одних данных, поиск по уже загруженному, панель разделов и разбор, почему список неполный.");
         note("Чего не делает", "Не пишет в GitHub, не запускает тесты и не считает пустое место успехом.");
         action("Почему готовность нельзя доказать коммитом","Короткое объяснение",()->go("why"));
@@ -689,7 +714,7 @@ public final class SectionActivity extends Activity {
         boolean developer=UiMode.DEVELOPER.equals(UiMode.normalize(prefs.getString(UiMode.PREF, UiMode.NOVICE)));
         line(body, developer ? "Покрытие по полям снимка" : "Почему данные выглядят неполными", 18, true, ink);
         gap(body, 8);
-        line(body, "Обновление не запускается само. Кнопка ниже только открывает действие, запрос уйдёт после «Обновить».", 14, false, muted);
+        line(body, "Обновление по кнопке не уходит само. Тихая проверка, если она включена, только замечает изменение и молчит, когда ничего нового нет.", 14, false, muted);
         gap(body, 12);
         if(current==null){
             note("Снимка нет","Нажмите «Обновить» на главном экране. Пустой экран не означает пустой проект.");
@@ -809,6 +834,72 @@ public final class SectionActivity extends Activity {
         action("Как получить токен","Пошагово, без жаргона",()->go("token-help"));
         note("Чего приложение не делает","Не пишет в репозиторий, не запускает тесты, не доказывает готовность кода и не считает пустой список успехом.");
     }
+
+    private void appearanceControls() {
+        String mode = Palette.normalizeMode(prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM));
+        LinearLayout modes = new LinearLayout(this);
+        modes.setOrientation(LinearLayout.HORIZONTAL);
+        addMode(modes, "День", Palette.DAY, mode);
+        addMode(modes, "Ночь", Palette.NIGHT, mode);
+        addMode(modes, "Как в телефоне", Palette.SYSTEM, mode);
+        body.addView(modes, lp(-1, -2));
+        gap(body, 8);
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout colors = new LinearLayout(this);
+        colors.setOrientation(LinearLayout.HORIZONTAL);
+        String chosen = Palette.find(prefs.getString(Palette.PREF, "sand")).id;
+        for (Palette.Look look : Palette.all()) {
+            TextView chip = text(look.title, 13, chosen.equals(look.id), look.iconInk);
+            chip.setGravity(Gravity.CENTER);
+            chip.setMinWidth(dp(72));
+            chip.setMinHeight(dp(44));
+            chip.setPadding(dp(10), dp(8), dp(10), dp(8));
+            GradientDrawable d = new GradientDrawable();
+            d.setColor(look.icon);
+            d.setCornerRadius(dp(14));
+            if (chosen.equals(look.id)) d.setStroke(dp(2), ink);
+            chip.setBackground(d);
+            chip.setContentDescription("Цвет " + look.title + (chosen.equals(look.id) ? ", выбран" : ""));
+            chip.setOnClickListener(v -> {
+                if (!prefs.edit().putString(Palette.PREF, look.id).commit()) {
+                    toast("Не удалось сохранить цвет");
+                    return;
+                }
+                IconPins.apply(this, look.id);
+                setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
+                paint();
+                render();
+            });
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2);
+            p.rightMargin = dp(8);
+            colors.addView(chip, p);
+        }
+        scroll.addView(colors);
+        body.addView(scroll, lp(-1, -2));
+        gap(body, 8);
+    }
+
+    private void addMode(LinearLayout row, String label, String id, String current) {
+        boolean active = id.equals(current);
+        TextView option = text(label, 13, active, active ? bg : ink);
+        option.setGravity(Gravity.CENTER);
+        option.setMinHeight(dp(44));
+        option.setBackground(background(active ? accent : panel));
+        option.setOnClickListener(v -> {
+            if (!prefs.edit().putString(Palette.DAY_NIGHT, id).commit()) {
+                toast("Не удалось сохранить оформление");
+                return;
+            }
+            setResult(RESULT_OK, new Intent().putExtra("action", "changed"));
+            paint();
+            render();
+        });
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
+        p.rightMargin = dp(6);
+        row.addView(option, p);
+    }
+
     private void tokenHelp(){
         note("Что такое токен","Это как пароль только на чтение. С ним приложение видит приватный проект. Без права записи оно не может ничего изменить.");
         note("Когда он не нужен","Если проект открыт всем (публичный), поле токена можно оставить пустым. Достаточно адреса вида owner/repo.");

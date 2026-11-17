@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="icon_sand">#C4A574</color>
+    <color name="icon_sage">#6E8F78</color>
+    <color name="icon_sea">#5E86A0</color>
+    <color name="icon_slate">#7E8794</color>
+    <color name="icon_clay">#C4896A</color>
+    <color name="icon_moss">#5E7848</color>
+    <color name="icon_dusk">#7A6E96</color>
+    <color name="icon_lagoon">#3E7A76</color>
+    <color name="icon_stone">#A89880</color>
+    <color name="icon_berry">#8E5A70</color>
+</resources>

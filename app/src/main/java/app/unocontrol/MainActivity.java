@@ -28,6 +28,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -100,6 +101,15 @@ public final class MainActivity extends Activity {
             savedScroll = savedInstanceState.getInt("scroll", 0);
             reopenDrawer = savedInstanceState.getBoolean("drawer", false);
         }
+        IconPins.apply(this, prefs.getString(Palette.PREF, "sand"));
+        Watch.ensure(this);
+        if (android.os.Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED
+                && !prefs.getBoolean("asked_notice", false)) {
+            prefs.edit().putBoolean("asked_notice", true).apply();
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 41);
+        }
         draw();
         ads.preload(this);
     }
@@ -142,31 +152,33 @@ public final class MainActivity extends Activity {
     }
 
     private void applyPalette() {
-        int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        boolean dark = night != Configuration.UI_MODE_NIGHT_NO;
-        if (dark) {
-            BG = Color.rgb(12,18,25);
-            PANEL = Color.rgb(23,33,44);
-            PANEL_2 = Color.rgb(30,43,56);
-            TEXT = Color.rgb(238,242,247);
-            MUTED = Color.rgb(158,172,188);
-            ACCENT = Color.rgb(218,174,127);
-            WARN = Color.rgb(239,198,128);
-            STROKE = Color.rgb(47,63,80);
-            getWindow().getDecorView().setSystemUiVisibility(0);
-        } else {
-            BG = Color.rgb(246,243,236);
-            PANEL = Color.rgb(255,255,255);
-            PANEL_2 = Color.rgb(236,230,220);
-            TEXT = Color.rgb(28,32,38);
-            MUTED = Color.rgb(90,98,108);
-            ACCENT = Color.rgb(140,96,48);
-            WARN = Color.rgb(140,84,20);
-            STROKE = Color.rgb(214,206,194);
-            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        int night = getResources().getConfiguration().uiMode;
+        boolean dark = Palette.dark(Palette.normalizeMode(prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM)), night);
+        Palette.Colors c = Palette.colors(Palette.find(prefs.getString(Palette.PREF, "sand")), dark);
+        BG = c.bg;
+        PANEL = c.panel;
+        PANEL_2 = c.panel2;
+        TEXT = c.text;
+        MUTED = c.muted;
+        ACCENT = c.accent;
+        WARN = c.warn;
+        STROKE = c.stroke;
+        paintBars(dark, BG);
+    }
+
+    private void paintBars(boolean dark, int color) {
+        getWindow().setStatusBarColor(color);
+        getWindow().setNavigationBarColor(color);
+        int light = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        getWindow().getDecorView().setSystemUiVisibility(dark ? 0 : light);
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                int bits = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(dark ? 0 : bits, bits);
+            }
         }
-        getWindow().setStatusBarColor(BG);
-        getWindow().setNavigationBarColor(BG);
     }
 
     private int dp(float v) { return (int)(v * getResources().getDisplayMetrics().density + 0.5f); }
@@ -239,6 +251,72 @@ public final class MainActivity extends Activity {
             controls.addView(option, params);
         }
         parent.addView(controls, lp(-1,-2));
+    }
+
+    private void dayNightRow(LinearLayout parent) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        String mode = Palette.normalizeMode(prefs.getString(Palette.DAY_NIGHT, Palette.SYSTEM));
+        String[] ids = {Palette.DAY, Palette.NIGHT, Palette.SYSTEM};
+        String[] labels = {"День", "Ночь", "Как в телефоне"};
+        for (int i = 0; i < ids.length; i++) {
+            final String id = ids[i];
+            boolean active = mode.equals(id);
+            TextView option = txt(labels[i], 12, active ? BG : TEXT, active);
+            option.setGravity(Gravity.CENTER);
+            option.setMinHeight(dp(40));
+            option.setBackground(shape(active ? ACCENT : PANEL, 12, active ? 0 : STROKE));
+            option.setContentDescription(labels[i]);
+            option.setOnClickListener(v -> {
+                if (!prefs.edit().putString(Palette.DAY_NIGHT, id).commit()) {
+                    toast("Не удалось сохранить оформление");
+                    return;
+                }
+                draw();
+            });
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(40), 1f);
+            if (i < ids.length - 1) params.rightMargin = dp(6);
+            row.addView(option, params);
+        }
+        parent.addView(row, lp(-1, -2));
+    }
+
+    private void iconColorRow(LinearLayout parent) {
+        addLine(parent, "Цвет иконки", 12, MUTED, false, 0);
+        space(parent, 6);
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout colors = new LinearLayout(this);
+        colors.setOrientation(LinearLayout.HORIZONTAL);
+        String chosen = Palette.find(prefs.getString(Palette.PREF, "sand")).id;
+        for (Palette.Look look : Palette.all()) {
+            final String id = look.id;
+            boolean active = chosen.equals(id);
+            TextView chip = txt(look.title, 12, look.iconInk, active);
+            chip.setGravity(Gravity.CENTER);
+            chip.setMinHeight(dp(36));
+            chip.setPadding(dp(10), dp(8), dp(10), dp(8));
+            GradientDrawable d = new GradientDrawable();
+            d.setColor(look.icon);
+            d.setCornerRadius(dp(12));
+            if (active) d.setStroke(dp(2), TEXT);
+            chip.setBackground(d);
+            chip.setContentDescription("Цвет иконки " + look.title + (active ? ", выбран" : ""));
+            chip.setOnClickListener(v -> {
+                if (id.equals(chosen)) return;
+                if (!prefs.edit().putString(Palette.PREF, id).commit()) {
+                    toast("Не удалось сохранить цвет иконки");
+                    return;
+                }
+                IconPins.apply(this, id);
+                draw();
+            });
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
+            params.rightMargin = dp(6);
+            colors.addView(chip, params);
+        }
+        scroll.addView(colors);
+        parent.addView(scroll, lp(-1, -2));
     }
 
     private void question(LinearLayout parent, String title, String body, Runnable open, String reason) {
@@ -644,6 +722,10 @@ public final class MainActivity extends Activity {
         space(panel, 8);
         modePicker(panel);
         space(panel, 8);
+        dayNightRow(panel);
+        space(panel, 8);
+        iconColorRow(panel);
+        space(panel, 8);
         ScrollView list = new ScrollView(this);
         LinearLayout items = vertical();
         list.addView(items);
@@ -841,6 +923,7 @@ public final class MainActivity extends Activity {
                             .putString(key(repo,"current"),current.toString())
                             .putString(key(repo,"feed"), feed.toString())
                             .remove(key(repo,"lastError")).commit();
+                    QuietPoster.postIfNew(this, current, previous);
                     loading=false;draw();toast("Данные обновлены");
                 });
             }catch(Exception e){

@@ -14,5 +14,12 @@ public final class GitTellerApp extends Application {
         } catch (Throwable ignored) {
             // Ads are optional. The app works without them.
         }
+        try {
+            android.content.SharedPreferences prefs = getSharedPreferences("gitteller_v1", MODE_PRIVATE);
+            IconPins.apply(this, prefs.getString(Palette.PREF, "sand"));
+            Watch.ensure(this);
+        } catch (Throwable ignored) {
+            // A broken icon or alarm must not stop the app from opening.
+        }
     }
 }
