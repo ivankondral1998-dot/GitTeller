@@ -20,9 +20,10 @@ final class QuietPoster {
 
     static void postIfNew(Context context, JSONObject current, JSONObject previous) {
         if (context == null || !QuietNotice.worthTelling(current, previous)) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences("gitteller_v1", Context.MODE_PRIVATE);
+        if (!Watch.enabled(prefs)) return;
         String line = QuietNotice.oneLine(current, previous);
         String mark = current.optLong("capturedAt", 0) + "|" + previous.optLong("capturedAt", 0) + "|" + line;
-        android.content.SharedPreferences prefs = context.getSharedPreferences("gitteller_v1", Context.MODE_PRIVATE);
         if (mark.equals(prefs.getString(MARK, ""))) return;
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
