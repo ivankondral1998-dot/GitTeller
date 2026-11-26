@@ -820,9 +820,9 @@ public final class SectionActivity extends Activity {
     private void settings(){
         action("Оформление", lookLine(), () -> go("appearance"));
         quietRow();
-        action("Сохранить копию проекта","JSON без токена",()->requestData("export"));
+        action("Сохранить копию проекта","JSON без хранилища токенов. Названия и тексты проекта могут содержать секреты.",()->requestData("export"));
         action("Восстановить из JSON","Только после подтверждения",()->requestData("import"));
-        action("Поделиться кратким отчётом","Текст для себя, без токена", this::shareReport);
+        action("Поделиться кратким отчётом","Содержит названия и описания проекта. Проверьте перед отправкой.", this::shareReport);
         projectChoices();
     }
     private String lookLine() {

@@ -392,7 +392,7 @@ final class HumanReport {
     static String ownerProblems(JSONObject current) {
         if (current == null) return "Проблемы ещё не читались.";
         StringBuilder b = new StringBuilder();
-        b.append("Подтверждённых ошибок автоматических проверок в снимке нет: их запрашивают у конкретной записи. Пустое место здесь не означает успех. ");
+        b.append("Автоматические проверки не входят в общий снимок: их запрашивают у конкретной записи. Состояние CI всего проекта неизвестно. ");
         JSONArray issues = current.optJSONArray("issues");
         boolean complete = current.optBoolean("issuesComplete", false);
         if (!complete) b.append("Список задач неполный. ");

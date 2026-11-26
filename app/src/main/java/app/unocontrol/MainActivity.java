@@ -65,6 +65,7 @@ public final class MainActivity extends Activity {
     private SharedPreferences prefs;
     private JSONObject current, previous;
     private String repo = DEFAULT_REPO;
+    private String exportRepo;
     private TokenVault vault;
     private volatile int syncEpoch;
     private volatile GithubClient inflight;
@@ -105,6 +106,7 @@ public final class MainActivity extends Activity {
             searchQuery = savedInstanceState.getString("query", "");
             if (searchQuery == null) searchQuery = "";
             noticeHandled = savedInstanceState.getBoolean("notice_handled", false);
+            exportRepo = savedInstanceState.getString("export_repo");
         }
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         Watch.ensure(this);
@@ -150,6 +152,7 @@ public final class MainActivity extends Activity {
         out.putBoolean("drawer", drawer.open);
         out.putString("query", searchQuery);
         out.putBoolean("notice_handled", noticeHandled);
+        out.putString("export_repo", exportRepo);
     }
 
     @Override public void onBackPressed() {
@@ -1021,6 +1024,12 @@ public final class MainActivity extends Activity {
     }
 
     private void sync(){
+        String active = prefs.getString("repo", DEFAULT_REPO);
+        if (!active.equals(repo)) {
+            abandonSync();
+            readProject(active);
+            draw();
+        }
         if(loading)return;
         final int epoch = syncEpoch;
         final String selected = repo;
@@ -1032,6 +1041,7 @@ public final class MainActivity extends Activity {
 
     private void syncNow(){
         if(loading || isFinishing() || isDestroyed()) return;
+        if (!repo.equals(prefs.getString("repo", DEFAULT_REPO))) return;
         final int epoch=syncEpoch;
         final String selected=repo;
         final String baseline;
@@ -1064,6 +1074,12 @@ public final class MainActivity extends Activity {
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
                     if(epoch!=syncEpoch || !selected.equals(repo)) return;
+                    if (!selected.equals(prefs.getString("repo", DEFAULT_REPO))) {
+                        abandonSync();
+                        readProject(prefs.getString("repo", DEFAULT_REPO));
+                        draw();
+                        return;
+                    }
                     boolean saved = false;
                     boolean stale;
                     synchronized (Watch.WRITE) {
@@ -1095,6 +1111,12 @@ public final class MainActivity extends Activity {
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
                     if(epoch!=syncEpoch || !selected.equals(repo)) return;
+                    if (!selected.equals(prefs.getString("repo", DEFAULT_REPO))) {
+                        abandonSync();
+                        readProject(prefs.getString("repo", DEFAULT_REPO));
+                        draw();
+                        return;
+                    }
                     loading=false;
                     synchronized (Watch.WRITE) {
                         if (!Watch.baselineStillSaved(baseline, prefs.getString(key(selected, "current"), ""))) {
@@ -1121,7 +1143,14 @@ public final class MainActivity extends Activity {
     }
 
     private void exportBackup(){
+        String selected = prefs.getString("repo", DEFAULT_REPO);
+        if (!selected.equals(repo)) {
+            abandonSync();
+            readProject(selected);
+            draw();
+        }
         if(current==null){toast("Сначала получите данные GitHub");return;}
+        exportRepo = repo;
         Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("application/json");
@@ -1129,19 +1158,25 @@ public final class MainActivity extends Activity {
         startActivityForResult(i,REQUEST_EXPORT);
     }
 
-    private void writeBackup(Uri uri){
+    private void writeBackup(Uri uri, String selected){
         try{
+            if (selected == null || selected.isEmpty())
+                throw new IllegalStateException("Проект для экспорта не определён. Повторите экспорт.");
+            java.util.Map<String, ?> state = prefs.getAll();
+            JSONObject now = parse(Watch.stateString(state, key(selected, "current")));
+            JSONObject old = parse(Watch.stateString(state, key(selected, "previous")));
+            if (now == null) throw new IllegalStateException("Нет сохранённого снимка выбранного проекта.");
             JSONObject archive=new JSONObject();
             archive.put("format","GITTELLER_V1");
-            archive.put("repo",repo);
-            archive.put("current",current==null?JSONObject.NULL:SnapshotCodec.sanitizeSnapshot(current,repo));
-            archive.put("previous",previous==null?JSONObject.NULL:SnapshotCodec.sanitizeSnapshot(previous,repo));
+            archive.put("repo",selected);
+            archive.put("current",SnapshotCodec.sanitizeSnapshot(now,selected));
+            archive.put("previous",old==null?JSONObject.NULL:SnapshotCodec.sanitizeSnapshot(old,selected));
             byte[] bytes=archive.toString().getBytes(StandardCharsets.UTF_8);
             try(OutputStream out=getContentResolver().openOutputStream(uri,"w")){
                 if(out==null)throw new IllegalStateException("Не удаётся создать файл.");
                 out.write(bytes);
             }
-            toast("Архив сохранён без токена");
+            toast("Архив сохранён. Хранилище токенов не экспортировано.");
         }catch(Exception e){new AlertDialog.Builder(this).setTitle("Экспорт не выполнен")
                 .setMessage(GithubClient.safeMessage(e)).setPositiveButton("Закрыть",(d,w)->{}).show();}
     }
@@ -1173,7 +1208,7 @@ public final class MainActivity extends Activity {
                                 finalFresh, finalOld, new JSONArray(), restoredRepo);
                     }
                     if(!saved){
-                        toast("Не удалось сохранить архив");return;
+                        toast("Не удалось сохранить архив. Состояние данных на диске не подтверждено.");return;
                     }
                     abandonSync();
                     repo=restoredRepo;current=finalFresh;previous=finalOld;feed=new JSONArray();
@@ -1206,8 +1241,14 @@ public final class MainActivity extends Activity {
             }
             return;
         }
+        if(requestCode==REQUEST_EXPORT){
+            String selected = exportRepo;
+            exportRepo = null;
+            if (resultCode == RESULT_OK && data != null && data.getData() != null)
+                writeBackup(data.getData(), selected);
+            return;
+        }
         if(resultCode!=RESULT_OK || data==null || data.getData()==null)return;
-        if(requestCode==REQUEST_EXPORT){writeBackup(data.getData());return;}
         if(requestCode!=REQUEST_IMPORT)return;
         Uri uri=data.getData();
         try(InputStream in=getContentResolver().openInputStream(uri)){
@@ -1223,7 +1264,8 @@ public final class MainActivity extends Activity {
             if(!"UNO_CONTROL_V1".equals(object.optString("format")) || object.optJSONObject("state")==null)
                 throw new IllegalArgumentException("Неизвестный формат резервной копии.");
             // Isolated archive. Do not replace a fresh GitHub snapshot with legacy claims.
-            getSharedPreferences("uno_legacy_archive",MODE_PRIVATE).edit().putString("imported",raw).apply();
+            if (!getSharedPreferences("uno_legacy_archive",MODE_PRIVATE).edit().putString("imported",raw).commit())
+                throw new IllegalStateException("Android сообщил об ошибке записи старого архива. Сохранение не подтверждено.");
             JSONObject legacy=object.optJSONObject("state");
             int tasks=legacy.optJSONArray("tasks")==null?0:legacy.optJSONArray("tasks").length();
             new AlertDialog.Builder(this).setTitle("Архив сохранён отдельно")

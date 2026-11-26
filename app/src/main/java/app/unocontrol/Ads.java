@@ -45,6 +45,7 @@ final class Ads {
                 try { old.destroy(); } catch (Throwable ignored) {}
             }
             BannerAdView view = new BannerAdView(activity);
+            banner = view; // Also release a partially configured view if setup throws.
             // Small fixed banner (320x50), not sticky (sticky takes up to 15% of screen).
             view.setAdSize(BannerAdSize.fixedSize(activity, 320, 50));
             view.setAdUnitId(AdUnits.BANNER);
@@ -63,7 +64,6 @@ final class Ads {
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, h, Gravity.CENTER);
             slot.addView(view, lp);
-            banner = view;
             view.loadAd(new AdRequest.Builder().build());
         } catch (Throwable ignored) {
             BannerAdView failed = banner;
@@ -113,13 +113,18 @@ final class Ads {
             loadingAd = true;
             loader.setAdLoadListener(new InterstitialAdLoadListener() {
                 @Override public void onAdLoaded(InterstitialAd ad) {
-                    loadingAd = false;
-                    if (!alive) return;
-                    interstitial = ad;
+                    activity.runOnUiThread(() -> {
+                        if (!alive) return;
+                        loadingAd = false;
+                        interstitial = ad;
+                    });
                 }
                 @Override public void onAdFailedToLoad(AdRequestError error) {
-                    loadingAd = false;
-                    interstitial = null;
+                    activity.runOnUiThread(() -> {
+                        if (!alive) return;
+                        loadingAd = false;
+                        interstitial = null;
+                    });
                 }
             });
             loader.loadAd(new AdRequestConfiguration.Builder(AdUnits.INTERSTITIAL).build());
@@ -153,8 +158,8 @@ final class Ads {
             };
             interstitial.setAdEventListener(new InterstitialAdEventListener() {
                 @Override public void onAdShown() { markShown(prefs, System.currentTimeMillis()); }
-                @Override public void onAdFailedToShow(AdError error) { once.run(); }
-                @Override public void onAdDismissed() { once.run(); }
+                @Override public void onAdFailedToShow(AdError error) { activity.runOnUiThread(once); }
+                @Override public void onAdDismissed() { activity.runOnUiThread(once); }
                 @Override public void onAdClicked() {}
                 @Override public void onAdImpression(ImpressionData data) {}
             });
