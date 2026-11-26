@@ -18,6 +18,7 @@ final class Watch {
     static final String ACTION = "app.unocontrol.QUIET_WATCH";
     static final String EXTRA_REPO = "quiet_repo";
     static final String NEXT = "quiet_next_at";
+    static final int JOB_ID = 42;
     /** Snapshot writers share this so a slow check cannot replace a newer save. */
     static final Object WRITE = new Object();
 
@@ -28,6 +29,11 @@ final class Watch {
         if (started == null) started = "";
         if (savedNow == null) savedNow = "";
         return started.equals(savedNow);
+    }
+
+    static String stateString(java.util.Map<String, ?> state, String key) {
+        Object value = state.get(key);
+        return value instanceof String ? (String) value : "";
     }
 
     static boolean enabled(SharedPreferences prefs) {
@@ -53,6 +59,8 @@ final class Watch {
         SharedPreferences prefs = context.getSharedPreferences("gitteller_v1", Context.MODE_PRIVATE);
         if (!enabled(prefs)) {
             alarms.cancel(pi);
+            android.app.job.JobScheduler jobs = (android.app.job.JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            if (jobs != null) jobs.cancel(JOB_ID);
             prefs.edit().remove(NEXT).apply();
             return;
         }
@@ -71,9 +79,11 @@ final class Watch {
 
     static void enqueue(Context context) {
         if (context == null) return;
+        SharedPreferences prefs = context.getSharedPreferences("gitteller_v1", Context.MODE_PRIVATE);
+        if (!enabled(prefs)) return;
         android.app.job.JobScheduler jobs = (android.app.job.JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if (jobs == null) return;
-        android.app.job.JobInfo job = new android.app.job.JobInfo.Builder(42,
+        android.app.job.JobInfo job = new android.app.job.JobInfo.Builder(JOB_ID,
                 new android.content.ComponentName(context, WatchJob.class))
                 // Never force an offline run by overriding the network constraint.
                 .setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY)

@@ -39,6 +39,7 @@ public final class SectionActivity extends Activity {
     private LinearLayout body;
     private SharedPreferences prefs;
     private JSONObject current, previous;
+    private JSONArray savedFeed = new JSONArray();
     private String repo, page, seenCurrent;
     private String seenLook = "sand";
     private String seenMode = Palette.SYSTEM;
@@ -67,11 +68,9 @@ public final class SectionActivity extends Activity {
             }
             repo = bound;
         }
-        seenCurrent=prefs.getString(key(repo,"current"),"");
+        readSnapshot(prefs.getAll());
         seenLook=prefs.getString(Palette.PREF,"sand");
         seenMode=prefs.getString(Palette.DAY_NIGHT,Palette.SYSTEM);
-        current=parse(seenCurrent);
-        previous=parse(prefs.getString(key(repo,"previous"),""));
         vault=new TokenVault(this);
         String detailField = ProjectSearch.detailField(page);
         if (detailField != null && !getIntent().hasExtra("key")) {
@@ -112,7 +111,8 @@ public final class SectionActivity extends Activity {
             if (QuietNotice.worthTelling(current, previous)) QuietPoster.postIfNew(this, current, previous);
         }
         String selected=ProjectSearch.detailField(page) == null ? prefs.getString("repo",repo) : repo;
-        String raw=prefs.getString(key(selected,"current"),"");
+        java.util.Map<String, ?> state = prefs.getAll();
+        String raw=Watch.stateString(state, key(selected,"current"));
         String look=prefs.getString(Palette.PREF,"sand");
         String mode=prefs.getString(Palette.DAY_NIGHT,Palette.SYSTEM);
         boolean appearance=!java.util.Objects.equals(look, seenLook) || !java.util.Objects.equals(mode, seenMode);
@@ -121,14 +121,24 @@ public final class SectionActivity extends Activity {
         if(selected.equals(repo) && raw.equals(seenCurrent==null?"":seenCurrent) && !appearance && !allowChanged) return;
         if(!selected.equals(repo) || !raw.equals(seenCurrent==null?"":seenCurrent)) {
             repo=selected;
-            seenCurrent=raw;
-            current=parse(raw);
-            previous=parse(prefs.getString(key(repo,"previous"),""));
+            readSnapshot(state);
         }
         seenLook=look;
         seenMode=mode;
         paint();render();
     }
+    private void readSnapshot(java.util.Map<String, ?> state) {
+        seenCurrent = Watch.stateString(state, key(repo, "current"));
+        current = parse(seenCurrent);
+        previous = parse(Watch.stateString(state, key(repo, "previous")));
+        try {
+            String raw = Watch.stateString(state, key(repo, "feed"));
+            savedFeed = raw.isEmpty() ? new JSONArray() : new JSONArray(raw);
+        } catch (Exception ignored) {
+            savedFeed = new JSONArray();
+        }
+    }
+
     private static String key(String repo,String suffix) {return repo.toLowerCase(java.util.Locale.ROOT)+":"+suffix;}
     private static JSONObject parse(String s) {try{return s==null||s.isEmpty()?null:new JSONObject(s);}catch(Exception e){return null;}}
     private int dp(float v) {return (int)(v*getResources().getDisplayMetrics().density+.5f);}
@@ -468,10 +478,7 @@ public final class SectionActivity extends Activity {
         return true;
     }
     private JSONArray parseFeed() {
-        try {
-            String raw=prefs.getString(key(repo,"feed"),"");
-            return raw==null || raw.isEmpty() ? new JSONArray() : new JSONArray(raw);
-        } catch (Exception e) { return new JSONArray(); }
+        return savedFeed;
     }
     private void loadBranchStory(String branch) {
         final int epoch = ++detailEpoch;

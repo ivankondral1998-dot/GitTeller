@@ -946,13 +946,15 @@ public final class MainActivity extends Activity {
 
     private void readProject(String selected) {
         repo = selected;
-        seenCurrent = prefs.getString(key(repo, "current"), "");
-        if (seenCurrent == null) seenCurrent = "";
+        // getAll captures all preference values under one framework lock.
+        // Separate getString calls can read different generations of a quiet refresh.
+        java.util.Map<String, ?> state = prefs.getAll();
+        seenCurrent = Watch.stateString(state, key(repo, "current"));
         current = parse(seenCurrent);
-        previous = parse(prefs.getString(key(repo, "previous"), ""));
-        feed = parseArray(prefs.getString(key(repo, "feed"), ""));
-        lastError = prefs.getString(key(repo, "lastError"), "");
-        if (lastError != null && lastError.isEmpty()) lastError = null;
+        previous = parse(Watch.stateString(state, key(repo, "previous")));
+        feed = parseArray(Watch.stateString(state, key(repo, "feed")));
+        lastError = Watch.stateString(state, key(repo, "lastError"));
+        if (lastError.isEmpty()) lastError = null;
         rememberLook();
     }
 

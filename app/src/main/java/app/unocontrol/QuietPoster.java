@@ -19,11 +19,26 @@ final class QuietPoster {
     private QuietPoster() {}
 
     static void postIfNew(Context context, JSONObject current, JSONObject previous) {
-        if (context == null || !QuietNotice.worthTelling(current, previous)) return;
+        if (context == null) return;
+        // Notification failures must not invalidate an already committed refresh.
+        try {
+            synchronized (Watch.WRITE) {
+                postSaved(context, current, previous);
+            }
+        } catch (RuntimeException ignored) {
+            // Android can revoke notification permission between the check and notify().
+        }
+    }
+
+    private static void postSaved(Context context, JSONObject current, JSONObject previous) {
+        if (!QuietNotice.worthTelling(current, previous)) return;
         android.content.SharedPreferences prefs = context.getSharedPreferences("gitteller_v1", Context.MODE_PRIVATE);
+        String repoKey = current.optString("repo").toLowerCase(java.util.Locale.ROOT);
+        if (!Watch.baselineStillSaved(current.toString(), prefs.getString(repoKey + ":current", ""))) return;
+        if (!Watch.baselineStillSaved(previous.toString(), prefs.getString(repoKey + ":previous", ""))) return;
         if (!Watch.enabled(prefs)) return;
         String line = QuietNotice.oneLine(current, previous);
-        String mark = current.optLong("capturedAt", 0) + "|" + previous.optLong("capturedAt", 0) + "|" + line;
+        String mark = repoKey + "|" + current.optLong("capturedAt", 0) + "|" + previous.optLong("capturedAt", 0) + "|" + line;
         if (mark.equals(prefs.getString(MARK, ""))) return;
         if (!allowed(context)) return;
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -62,8 +77,16 @@ final class QuietPoster {
     /** App toggle is not enough: the system can still drop the shade line. */
     static boolean allowed(Context context) {
         if (context == null) return false;
+        try {
+            return systemAllowed(context);
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean systemAllowed(Context context) {
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager != null && !manager.areNotificationsEnabled()) return false;
+        if (manager == null || !manager.areNotificationsEnabled()) return false;
         if (Build.VERSION.SDK_INT >= 26 && manager != null) {
             android.app.NotificationChannel channel = manager.getNotificationChannel(CHANNEL);
             if (channel != null && channel.getImportance() == NotificationManager.IMPORTANCE_NONE) return false;
