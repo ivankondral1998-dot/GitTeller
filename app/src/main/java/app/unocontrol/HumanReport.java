@@ -243,9 +243,11 @@ final class HumanReport {
     }
     static String commitScope(JSONObject snapshot) {
         if (snapshot == null) return "основной ветки";
-        String defaultBranch=snapshot.optString("defaultBranch");
-        if (defaultBranch.isEmpty() || "null".equals(defaultBranch)) return "ветки, имя которой неизвестно";
-        return "ветки «"+defaultBranch+"»";
+        String branch = snapshot.optString("commitsBranch");
+        if (branch.isEmpty() && !snapshot.optBoolean("commitsStale", false))
+            branch = snapshot.optString("defaultBranch");
+        if (branch.isEmpty() || "null".equals(branch)) return "ветки, имя которой неизвестно";
+        return "ветки «"+branch+"»";
     }
 
     static String syncStatus(JSONObject current) {

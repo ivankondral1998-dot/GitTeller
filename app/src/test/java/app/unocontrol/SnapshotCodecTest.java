@@ -85,4 +85,8 @@ public class SnapshotCodecTest {
         assertEquals(0, clean.getJSONArray("issues").length());
         assertFalse(clean.getBoolean("issuesComplete"));
     }
+    @Test public void backupPreservesHistoryBranch() throws Exception {
+        JSONObject s = raw().put("commitsBranch", "release").put("commitsStale", true);
+        assertEquals("release", SnapshotCodec.sanitizeSnapshot(s, "demo/project").getString("commitsBranch"));
+    }
 }

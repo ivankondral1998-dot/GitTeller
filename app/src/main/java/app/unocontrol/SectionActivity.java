@@ -439,7 +439,7 @@ public final class SectionActivity extends Activity {
             if(happened.isEmpty()) happened="Запись без текста.";
             String bodyText="Что произошло: "+happened
                     +"\nГде: "+HumanReport.eventWhere(event)
-                    +"\nОткуда известно: "+event.optString("origin","LIVE")+", "+HumanReport.humanDate(event.optLong("at",0))
+                    +"\nОткуда известно: "+event.optString("origin","UNKNOWN")+", "+HumanReport.humanDate(event.optLong("at",0))
                     +". "+event.optString("basis")
                     +"\nЧто это значит: "+HumanReport.eventMeaning(event.optString("kind"))
                     +"\n"+HumanReport.unknownOnce(event.optString("unknown"));
@@ -518,8 +518,9 @@ public final class SectionActivity extends Activity {
     }
     private void commits(){
         if(current==null){note("Нет данных","Сначала обновите проект.");return;}
-        String branch=current.optString("defaultBranch","main");
-        note("Что здесь", "Ниже — только последние записи основной ветки «"+branch+"». Это не последнее событие всего проекта. Другие направления открываются отдельно.");
+        String scope = HumanReport.commitScope(current);
+        note("Что здесь", "Ниже — выборка записей " + scope + ". Это не последнее событие всего проекта. Другие направления открываются отдельно."
+                + (current.optBoolean("commitsStale", false) ? " Показана устаревшая история." : ""));
         note("Покрытие", "История изучена лишь частично.");
         JSONArray a=current.optJSONArray("commits");
         if(a==null||a.length()==0) note("Нет записей","Список основной ветки не загрузился или пуст. Это не значит, что в других направлениях пусто.");
@@ -538,7 +539,9 @@ public final class SectionActivity extends Activity {
         String message=x.optString("message","Без описания");
         note("Что произошло", HumanReport.commitSummary(message)+".");
         note("Что заявил автор", message.isEmpty()?"Описания нет.":message);
-        note("Что известно до отдельного запроса", "Запись есть в ветке «"+current.optString("defaultBranch","main")+"». Дата для человека: "+HumanReport.humanDate(x.optString("date"))+". Список файлов и проверки подгружаются ниже, если GitHub их отдаёт.");
+        note("Что известно до отдельного запроса", "Запись присутствует в сохранённой выборке " + HumanReport.commitScope(current)
+                + ". Это не подтверждение её текущего присутствия в ветке. Дата: " + HumanReport.humanDate(x.optString("date"))
+                + ". Список файлов и проверки подгружаются ниже, если GitHub их отдаёт.");
         note("Что остаётся неизвестным", "Заголовок не доказывает, что изменение работает. Если ниже нет списка файлов или проверок — этих доказательств нет.");
         note("Источник", sourceLine());
         technical("Заголовок\n"+message+"\nКогда сохранено (как прислал GitHub)\n"+x.optString("date","нет")+"\nУказатель\n"+x.optString("sha","нет"));

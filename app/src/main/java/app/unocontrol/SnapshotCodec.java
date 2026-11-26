@@ -33,6 +33,7 @@ final class SnapshotCodec {
         out.put("repo", expectedRepo);
         out.put("capturedAt", raw.optLong("capturedAt", 0));
         out.put("defaultBranch", raw.optString("defaultBranch"));
+        if (raw.has("commitsBranch")) out.put("commitsBranch", raw.optString("commitsBranch"));
         out.put("branchesComplete", raw.optBoolean("branchesComplete", false));
         // Missing fields in older archives mean unknown coverage, not an empty completed list.
         out.put("issuesComplete", raw.optBoolean("issuesComplete", false));

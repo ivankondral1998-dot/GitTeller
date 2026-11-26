@@ -235,7 +235,7 @@ final class GithubClient {
         if (!pullsEtag.isEmpty()) out.put("pullsEtag", pullsEtag).put("pullsEtagSinglePage", true);
         long nowMs = out.optLong("capturedAt", System.currentTimeMillis());
         if (branchesFetched) out.put("branchesFetchedAt", nowMs);
-        if (commitsFetched) out.put("commitsFetchedAt", nowMs);
+        if (commitsFetched) out.put("commitsFetchedAt", nowMs).put("commitsBranch", branch);
         if (issuesFetched) out.put("issuesFetchedAt", nowMs);
         if (pullsFetched) out.put("pullsFetchedAt", nowMs);
         out.put("branchesCached", branchesCached);
@@ -271,6 +271,14 @@ final class GithubClient {
         if (SnapshotCodec.isImported(previous)) return;
         keep(fresh, previous, "branches", "branchesFetched", "branchesComplete", "branchesStale", "ветки");
         keep(fresh, previous, "commits", "commitsFetched", "commitsComplete", "commitsStale", "история");
+        if (fresh.optBoolean("commitsStale", false)) {
+            // Old snapshots did not store the queried branch. Never infer it from
+            // the new metadata, or from a legacy snapshot already marked stale.
+            String historyBranch = previous.optString("commitsBranch");
+            if (historyBranch.isEmpty() && !previous.optBoolean("commitsStale", false))
+                historyBranch = previous.optString("defaultBranch");
+            fresh.put("commitsBranch", historyBranch);
+        }
         keep(fresh, previous, "issues", "issuesFetched", "issuesComplete", "issuesStale", "задачи");
         keep(fresh, previous, "pulls", "pullsFetched", "pullsComplete", "pullsStale", "предложения");
     }
@@ -337,12 +345,17 @@ final class GithubClient {
                             String etag, boolean[] cached, String[] tag) throws Exception {
         JSONArray all = new JSONArray();
         String url = start;
+        java.util.Set<String> visited = new java.util.HashSet<>();
         for (int page = 0; page < max; page++) {
+            if (!visited.add(url)) {
+                warnings.add(label + ": повторная страница, список неполный");
+                return all;
+            }
             Response response;
             try { response = get(url, page == 0 ? etag : null); }
             catch (Exception e) {
                 if (page == 0) throw e;
-                warnings.add(label + ": загрузка прервана");
+                warnings.add(label + ": загрузка прервана — " + safeMessage(e));
                 return all;
             }
             if (page == 0 && tag != null) tag[0] = etagIfCompletePage(response.etag, response.link);
@@ -352,7 +365,13 @@ final class GithubClient {
                 cached[0] = true;
                 return all;
             }
-            JSONArray current = jsonArray(response);
+            JSONArray current;
+            try { current = jsonArray(response); }
+            catch (Exception e) {
+                if (page == 0) throw e;
+                warnings.add(label + ": некорректный ответ следующей страницы");
+                return all;
+            }
             for (int j = 0; j < current.length(); j++) all.put(current.get(j));
             String next = nextLink(response.link);
             if (next == null) return all;
@@ -568,6 +587,7 @@ final class GithubClient {
     private Response get(String address, String etag) throws Exception {
         Exception last = null;
         for (int attempt = 0; attempt < 2; attempt++) {
+            checkCancelled();
             if (attempt > 0) {
                 try { Thread.sleep(600L); }
                 catch (InterruptedException ie) {
@@ -1000,8 +1020,8 @@ final class GithubClient {
                 || low.contains("request canceled") || low.contains("запрос отменён"))
             return "Запрос отменён или соединение прервалось. Старые данные сохранены.";
         s = s.replaceAll("(?i)bearer\\s+\\S+", "bearer [скрыто]");
-        s = s.replaceAll("ghp_[A-Za-z0-9]+", "[скрыто]");
-        s = s.replaceAll("github_pat_[A-Za-z0-9_]+", "[скрыто]");
+        s = s.replaceAll("(?i)gh[pousr]_[A-Za-z0-9]+", "[скрыто]");
+        s = s.replaceAll("(?i)github_pat_[A-Za-z0-9_]+", "[скрыто]");
         return s.length() > 240 ? s.substring(0, 240) : s;
     }
 

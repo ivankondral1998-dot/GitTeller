@@ -262,4 +262,32 @@ public class TruthTest {
         assertTrue(text.contains("1 с результатом success"));
         assertTrue(text.contains("1 с ошибкой"));
     }
+    @Test public void staleHistoryKeepsOriginalBranchWhenDefaultChanges() throws Exception {
+        JSONObject before = new JSONObject().put("repo", "demo/app").put("defaultBranch", "old")
+                .put("commits", new JSONArray().put(new JSONObject().put("message", "old history")));
+        JSONObject after = new JSONObject().put("repo", "demo/app").put("defaultBranch", "new")
+                .put("commitsFetched", false);
+        GithubClient.preserveSources(after, before);
+        assertEquals("old", after.getString("commitsBranch"));
+        assertEquals("ветки «old»", HumanReport.commitScope(after));
+        JSONObject next = new JSONObject().put("repo", "demo/app").put("defaultBranch", "another")
+                .put("commitsFetched", false);
+        GithubClient.preserveSources(next, after);
+        assertEquals("old", next.getString("commitsBranch"));
+    }
+
+    @Test public void staleLegacyHistoryDoesNotGuessItsBranch() throws Exception {
+        JSONObject before = new JSONObject().put("repo", "demo/app").put("defaultBranch", "old")
+                .put("commitsStale", true).put("commits", new JSONArray());
+        JSONObject after = new JSONObject().put("repo", "demo/app").put("defaultBranch", "new")
+                .put("commitsFetched", false);
+        GithubClient.preserveSources(after, before);
+        assertEquals("", after.getString("commitsBranch"));
+        assertFalse(HumanReport.commitScope(after).contains("new"));
+    }
+
+    @Test public void errorMessagesHideOtherGithubTokenPrefixes() {
+        String message = GithubClient.safeMessage(new Exception("gho_EXAMPLE ghs_EXAMPLE ghu_EXAMPLE ghr_EXAMPLE"));
+        assertFalse(message.contains("EXAMPLE"));
+    }
 }
