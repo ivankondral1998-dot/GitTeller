@@ -244,7 +244,7 @@ final class HumanReport {
     static String commitScope(JSONObject snapshot) {
         if (snapshot == null) return "основной ветки";
         String defaultBranch=snapshot.optString("defaultBranch");
-        if(defaultBranch.isEmpty())defaultBranch="main";
+        if (defaultBranch.isEmpty() || "null".equals(defaultBranch)) return "ветки, имя которой неизвестно";
         return "ветки «"+defaultBranch+"»";
     }
 
@@ -541,8 +541,9 @@ final class HumanReport {
         if (commits == null || commits.length() == 0) return " Последней записи основной ветки в снимке нет.";
         JSONObject c = commits.optJSONObject(0);
         if (c == null) return "";
-        String branch = current.optString("defaultBranch", "main");
-        return " Последняя запись основной ветки «" + branch + "»: " + commitSummary(c.optString("message"))
+        String scope = current.optBoolean("commitsStale", false)
+                ? "из устаревшей выборки истории" : commitScope(current);
+        return " Последняя запись " + scope + ": " + commitSummary(c.optString("message"))
                 + ". Дата: " + humanDate(c.optString("date"))
                 + ". Это заявление автора, не проверка, и не последняя запись всего проекта.";
     }

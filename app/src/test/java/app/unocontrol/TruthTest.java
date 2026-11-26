@@ -240,4 +240,26 @@ public class TruthTest {
         assertTrue(HumanReport.commitSummary("Merge branch 'test'").contains("сообщил"));
         assertFalse(HumanReport.state("open").contains("продолжается"));
     }
+    @Test public void malformedOrDuplicateRowsCannotProveListCompleteness() throws Exception {
+        JSONArray tasks = new JSONArray().put(new JSONObject().put("number", 2).put("state", "open"));
+        assertTrue(GithubClient.validRows(tasks, "issues"));
+        tasks.put(new JSONObject().put("number", 2).put("state", "closed"));
+        assertFalse(GithubClient.validRows(tasks, "issues"));
+        assertFalse(GithubClient.validRows(new JSONArray().put(new JSONObject().put("number", 0)), "pulls"));
+        assertFalse(GithubClient.validRows(new JSONArray().put(new JSONObject().put("name", "main")), "branches"));
+    }
+
+    @Test public void noDefaultBranchDoesNotInventMain() throws Exception {
+        assertFalse(HumanReport.commitScope(new JSONObject()).contains("main"));
+    }
+
+    @Test public void failedCommitStatusIsVisibleAlongsideSuccessfulCheckRun() throws Exception {
+        String checks = GithubClient.formatChecks(new JSONObject().put("check_runs",
+                new JSONArray().put(new JSONObject().put("conclusion", "success"))));
+        String statuses = GithubClient.formatStatuses(new JSONObject().put("statuses",
+                new JSONArray().put(new JSONObject().put("state", "failure"))));
+        String text = GithubClient.describeCi(checks, statuses, null);
+        assertTrue(text.contains("1 с результатом success"));
+        assertTrue(text.contains("1 с ошибкой"));
+    }
 }

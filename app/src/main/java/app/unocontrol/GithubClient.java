@@ -48,7 +48,7 @@ final class GithubClient {
     Result load(String repo) throws Exception { return load(repo, null); }
 
     Result load(String repo, JSONObject previous) throws Exception {
-        if (!repo.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || repo.contains(".."))
+        if (repo == null || !repo.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || repo.contains(".."))
             throw new IllegalArgumentException("Репозиторий укажите в формате владелец/проект.");
         boundRepo = repo;
         boundId = 0;
@@ -59,7 +59,9 @@ final class GithubClient {
             throw new IllegalStateException("GitHub вернул другой репозиторий.");
         boundRepo = actual;
         boundId = meta.optLong("id", 0);
-        String branch = meta.optString("default_branch", "main");
+        String branch = meta.optString("default_branch", "");
+        if ("null".equals(branch)) branch = "";
+        if (previous != null && !actual.equalsIgnoreCase(previous.optString("repo"))) previous = null;
 
         List<String> warnings = new ArrayList<>();
         String firstError = null;
@@ -92,7 +94,11 @@ final class GithubClient {
                 }
             } else {
                 branchComplete = !coverageBroken(warnings.subList(before, warnings.size()), "ветки");
-                outEtagBranches = tag[0] == null ? "" : tag[0];
+                if (!validRows(branches, "branches")) {
+                    branchComplete = false;
+                    warnings.add("ветки: некорректные или повторяющиеся записи, список неполный");
+                }
+                outEtagBranches = branchComplete && tag[0] != null ? tag[0] : "";
             }
         } catch (Exception e) {
             firstError = sourceError("ветки", e);
@@ -102,9 +108,13 @@ final class GithubClient {
 
         boolean commitsFetched = false;
         JSONArray commits = new JSONArray();
-        if (!halted) {
+        if (branch.isEmpty()) warnings.add("история: GitHub не указал основную ветку");
+        else if (!halted) {
             try {
-                commits = slimCommits(jsonArray(get(root + "/commits?sha=" + encodePathPart(branch) + "&per_page=12")));
+                JSONArray rawCommits = jsonArray(get(root + "/commits?sha=" + encodePathPart(branch) + "&per_page=12"));
+                if (!validRows(rawCommits, "commits"))
+                    throw new IllegalStateException("Некорректные записи истории GitHub.");
+                commits = slimCommits(rawCommits);
                 commitsFetched = true;
                 anyFresh = true;
             } catch (Exception e) {
@@ -141,7 +151,11 @@ final class GithubClient {
                     }
                 } else {
                     issuesComplete = !coverageBroken(warnings.subList(before, warnings.size()), "задачи");
-                    issuesEtag = tag[0] == null ? "" : tag[0];
+                    if (!validRows(issues, "issues")) {
+                        issuesComplete = false;
+                        warnings.add("задачи: некорректные или повторяющиеся записи, список неполный");
+                    }
+                    issuesEtag = issuesComplete && tag[0] != null ? tag[0] : "";
                 }
             } catch (Exception e) {
                 String message = sourceError("задачи", e);
@@ -177,7 +191,11 @@ final class GithubClient {
                     }
                 } else {
                     pullsComplete = !coverageBroken(warnings.subList(before, warnings.size()), "предложения");
-                    pullsEtag = tag[0] == null ? "" : tag[0];
+                    if (!validRows(pulls, "pulls")) {
+                        pullsComplete = false;
+                        warnings.add("предложения: некорректные или повторяющиеся записи, список неполный");
+                    }
+                    pullsEtag = pullsComplete && tag[0] != null ? tag[0] : "";
                 }
             } catch (Exception e) {
                 String message = sourceError("предложения", e);
@@ -295,7 +313,7 @@ final class GithubClient {
     /** ETag is trustworthy only for one complete page. A later page can change while page 1 stays the same. */
     private static String etagIfSafe(JSONObject previous, String array, String completeKey, String etagKey) {
         if (previous == null || SnapshotCodec.isImported(previous)) return null;
-        if (!previous.optBoolean(completeKey, false)) return null;
+        if (!previous.optBoolean(completeKey, false) || previous.optBoolean(array + "Stale", false)) return null;
         // Older snapshots may have cached the ETag of page one of a multi-page list.
         // The explicit single-page marker is mandatory before conditional requests.
         if (!previous.optBoolean(array + "EtagSinglePage", false)) return null;
@@ -329,7 +347,9 @@ final class GithubClient {
             }
             if (page == 0 && tag != null) tag[0] = etagIfCompletePage(response.etag, response.link);
             if (page == 0 && response.notModified) {
-                if (cached != null) cached[0] = true;
+                if (etag == null || etag.isEmpty() || cached == null)
+                    throw new IllegalStateException("Неожиданный ответ 304 без условного запроса.");
+                cached[0] = true;
                 return all;
             }
             JSONArray current = jsonArray(response);
@@ -418,6 +438,32 @@ final class GithubClient {
             }
         }
         return null;
+    }
+
+    /** Bad or duplicate identities cannot establish absence in a complete list. */
+    static boolean validRows(JSONArray raw, String field) {
+        if (raw == null) return false;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (int i = 0; i < raw.length(); i++) {
+            JSONObject row = raw.optJSONObject(i);
+            if (row == null) return false;
+            String identity;
+            if ("branches".equals(field)) {
+                JSONObject commit = row.optJSONObject("commit");
+                if (commit == null || !commit.optString("sha").matches("[0-9a-fA-F]{40}")) return false;
+                identity = row.optString("name");
+            } else if ("commits".equals(field)) {
+                identity = row.optString("sha").toLowerCase(Locale.ROOT);
+                if (!identity.matches("[0-9a-f]{40}")) return false;
+            } else {
+                if (row.optInt("number", -1) <= 0) return false;
+                identity = Integer.toString(row.optInt("number"));
+                String state = row.optString("state");
+                if (!"open".equals(state) && !"closed".equals(state)) return false;
+            }
+            if (identity.isEmpty() || "null".equals(identity) || !seen.add(identity)) return false;
+        }
+        return true;
     }
 
     private static JSONArray slimBranches(JSONArray raw) throws Exception {
@@ -698,8 +744,9 @@ final class GithubClient {
         } catch (Exception ignored) {
             checks = null;
         }
-        boolean checksUseful = checks != null && !checks.contains("Проверок GitHub в ответе нет");
-        if (!checksUseful && !halted) {
+        boolean checksUseful = checks != null && !CI_UNAVAILABLE.equals(checks) && !checks.contains("Проверок GitHub в ответе нет");
+        // Commit statuses and check runs are separate sources: one may fail while the other succeeds.
+        if (!halted) {
             try {
                 statuses = formatStatuses(jsonObject(get(root(repo) + "/commits/" + sha + "/status")));
             } catch (Exception ignored) {
@@ -718,7 +765,7 @@ final class GithubClient {
     }
 
     static String describeCi(String checks, String statuses, String actions) {
-        boolean checksUseful = checks != null && !checks.contains("Проверок GitHub в ответе нет");
+        boolean checksUseful = checks != null && !CI_UNAVAILABLE.equals(checks) && !checks.contains("Проверок GitHub в ответе нет");
         boolean statusUseful = statuses != null && !statuses.contains("получить не удалось");
         boolean actionUseful = actions != null && !actions.contains("в ответе нет");
         if (!checksUseful && !statusUseful && !actionUseful) {
@@ -838,7 +885,8 @@ final class GithubClient {
     static String formatChecks(JSONObject runs) {
         JSONArray list = runs == null ? null : runs.optJSONArray("check_runs");
         int total = runs == null ? 0 : runs.optInt("total_count", list == null ? 0 : list.length());
-        if (list == null || list.length() == 0) return "Проверок GitHub в ответе нет. " + HumanReport.NO_CHECK + ".";
+        if (list == null || (list.length() == 0 && total > 0)) return CI_UNAVAILABLE;
+        if (list.length() == 0) return "Проверок GitHub в ответе нет. " + HumanReport.NO_CHECK + ".";
         int success = 0, skippedOrNeutral = 0, bad = 0, other = 0, cancelled = 0, timedOut = 0;
         for (int i = 0; i < list.length(); i++) {
             JSONObject row = list.optJSONObject(i);
