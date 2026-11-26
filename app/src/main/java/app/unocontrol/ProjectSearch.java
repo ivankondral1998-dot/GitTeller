@@ -157,8 +157,8 @@ final class ProjectSearch {
             if (row == null) continue;
             int number = row.optInt("number", -1);
             String title = row.optString("title");
-            boolean match = contains(title, query) || contains(number < 0 ? "" : ("#" + number), query)
-                    || (exact != null && exact.intValue() == number);
+            boolean match = exact != null ? exact.intValue() == number : contains(title, query)
+                    || contains(number < 0 ? "" : ("#" + number), query);
             if (!match) continue;
             String key = number < 0 ? "" : Integer.toString(number);
             out.add(new Hit(group, clip(title.isEmpty() ? ("#" + key) : title),
@@ -262,5 +262,35 @@ final class ProjectSearch {
         if (value == null) return "";
         String clean = value.replace('\n', ' ').trim();
         return clean.length() <= 160 ? clean : clean.substring(0, 160) + "…";
+    }
+    /** Identity of an actual record, not its changing position in a snapshot. */
+    static String detailField(String page) {
+        if ("branch-detail".equals(page)) return "branches";
+        if ("commit-detail".equals(page)) return "commits";
+        if ("issue-detail".equals(page)) return "issues";
+        if ("pull-detail".equals(page)) return "pulls";
+        return null;
+    }
+
+    static String recordKey(String field, JSONObject row) {
+        if (row == null) return "";
+        if ("branches".equals(field)) return row.optString("name");
+        if ("commits".equals(field)) return row.optString("sha");
+        if ("issues".equals(field) || "pulls".equals(field)) {
+            int number = row.optInt("number", -1);
+            return number > 0 ? Integer.toString(number) : "";
+        }
+        return "";
+    }
+
+    static JSONObject findRecord(String field, JSONArray list, String key) {
+        if (list == null || key == null || key.isEmpty()) return null;
+        for (int i = 0; i < list.length(); i++) {
+            JSONObject row = list.optJSONObject(i);
+            String candidate = recordKey(field, row);
+            if ("commits".equals(field) ? key.equalsIgnoreCase(candidate) : key.equals(candidate))
+                return row;
+        }
+        return null;
     }
 }

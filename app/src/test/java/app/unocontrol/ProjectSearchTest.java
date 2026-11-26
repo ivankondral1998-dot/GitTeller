@@ -117,4 +117,22 @@ public class ProjectSearchTest {
         assertTrue(ProjectSearch.noMatch().contains("не доказательство"));
         assertFalse(ProjectSearch.noMatch().contains("на GitHub нет"));
     }
+    @Test public void hashNumberMatchesExactlyAndNotItsLongerPrefix() throws Exception {
+        JSONObject snap = snapshot().put("issues", new JSONArray()
+                .put(new JSONObject().put("number", 6).put("title", "six"))
+                .put(new JSONObject().put("number", 60).put("title", "sixty"))
+                .put(new JSONObject().put("number", 7).put("title", "mentions #6")));
+        ProjectSearch.Report report = ProjectSearch.find(snap, null, "#6", null);
+        assertEquals(1, group(report, "Задачи"));
+    }
+
+    @Test public void detailLookupFollowsIdentityNotArrayPosition() throws Exception {
+        JSONObject first = new JSONObject().put("number", 8).put("title", "eight");
+        JSONObject second = new JSONObject().put("number", 9).put("title", "nine");
+        String key = ProjectSearch.recordKey("issues", first);
+        JSONArray reordered = new JSONArray().put(second).put(first);
+        assertEquals("eight", ProjectSearch.findRecord("issues", reordered, key).optString("title"));
+        assertTrue(ProjectSearch.findRecord("issues", new JSONArray().put(second), key) == null);
+        assertTrue(ProjectSearch.findRecord("issues", reordered, "") == null);
+    }
 }

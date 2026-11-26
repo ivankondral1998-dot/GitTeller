@@ -37,19 +37,20 @@ final class Ads {
     private boolean alive = true;
 
     void attachBanner(Activity activity, FrameLayout slot, Runnable onVisibility) {
-        if (activity == null || slot == null) return;
+        if (!alive || activity == null || slot == null) return;
         try {
             if (banner != null) {
-                try { banner.destroy(); } catch (Throwable ignored) {}
+                BannerAdView old = banner;
                 banner = null;
+                try { old.destroy(); } catch (Throwable ignored) {}
             }
             BannerAdView view = new BannerAdView(activity);
             // Small fixed banner (320x50), not sticky (sticky takes up to 15% of screen).
             view.setAdSize(BannerAdSize.fixedSize(activity, 320, 50));
             view.setAdUnitId(AdUnits.BANNER);
             view.setBannerAdEventListener(new BannerAdEventListener() {
-                @Override public void onAdLoaded() { showSlot(activity, slot, true, onVisibility); }
-                @Override public void onAdFailedToLoad(AdRequestError error) { showSlot(activity, slot, false, onVisibility); }
+                @Override public void onAdLoaded() { bannerResult(activity, view, slot, true, onVisibility); }
+                @Override public void onAdFailedToLoad(AdRequestError error) { bannerResult(activity, view, slot, false, onVisibility); }
                 @Override public void onAdClicked() {}
                 @Override public void onImpression(ImpressionData data) {}
                 @Override public void onLeftApplication() {}
@@ -62,11 +63,22 @@ final class Ads {
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, h, Gravity.CENTER);
             slot.addView(view, lp);
-            view.loadAd(new AdRequest.Builder().build());
             banner = view;
+            view.loadAd(new AdRequest.Builder().build());
         } catch (Throwable ignored) {
+            BannerAdView failed = banner;
+            banner = null;
+            try { if (failed != null) failed.destroy(); } catch (Throwable ignoredAgain) {}
+            slot.removeAllViews();
             showSlot(activity, slot, false, onVisibility);
         }
+    }
+
+    private void bannerResult(Activity activity, BannerAdView source, FrameLayout slot, boolean visible, Runnable onVisibility) {
+        activity.runOnUiThread(() -> {
+            if (!alive || banner != source || activity.isFinishing() || activity.isDestroyed()) return;
+            showSlot(activity, slot, visible, onVisibility);
+        });
     }
 
     private static void showSlot(Activity activity, FrameLayout slot, boolean visible, Runnable onVisibility) {
@@ -119,7 +131,8 @@ final class Ads {
 
     /** Show only if due and loaded. onFinished runs once, whether or not an ad appeared. */
     boolean showInterstitialIfDue(Activity activity, SharedPreferences prefs, Runnable onFinished) {
-        if (!alive || activity == null || showing) return false;
+        if (!alive || activity == null) return false;
+        if (showing) return true; // Coalesce refresh requests until the first ad callback.
         long now = System.currentTimeMillis();
         long last = prefs == null ? 0L : prefs.getLong(KEY, 0L);
         if (!AdPolicy.due(now, last) || interstitial == null) {

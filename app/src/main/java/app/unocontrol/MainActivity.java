@@ -755,6 +755,10 @@ public final class MainActivity extends Activity {
         if (hit.index >= 0) intent.putExtra("idx", hit.index);
         if (hit.key != null && !hit.key.isEmpty()) intent.putExtra("key", hit.key);
         if (hit.marker != null && !hit.marker.isEmpty()) intent.putExtra("eventId", hit.marker);
+        if (ProjectSearch.detailField(hit.page) != null) {
+            if (hit.key == null || hit.key.isEmpty()) { toast("Запись не найдена"); return; }
+            intent.putExtra("detailRepo", repo);
+        }
         startActivityForResult(intent, REQUEST_SECTION);
     }
 
@@ -1016,7 +1020,11 @@ public final class MainActivity extends Activity {
 
     private void sync(){
         if(loading)return;
-        if (ads.showInterstitialIfDue(this, prefs, this::syncNow)) return;
+        final int epoch = syncEpoch;
+        final String selected = repo;
+        if (ads.showInterstitialIfDue(this, prefs, () -> {
+            if (epoch == syncEpoch && selected.equals(repo)) syncNow();
+        })) return;
         syncNow();
     }
 

@@ -43,8 +43,11 @@ public final class SectionActivity extends Activity {
     private String seenLook = "sand";
     private String seenMode = Palette.SYSTEM;
     private TokenVault vault;
-    private int detailEpoch;
-    private int compareEpoch;
+    private static final int REQUEST_CHILD_SECTION = 64;
+    private volatile int detailEpoch;
+    private volatile int compareEpoch;
+    private final Object requestLock = new Object();
+    private GithubClient detailClient, compareClient;
     private final Ads ads = new Ads();
     private ScrollView pageScroll;
     private boolean noticesAllowed;
@@ -53,15 +56,29 @@ public final class SectionActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs=getSharedPreferences("gitteller_v1",MODE_PRIVATE);
+        page=getIntent().getStringExtra("page");
+        if(page==null)page="index";
         repo=prefs.getString("repo","octocat/Hello-World");
+        if (ProjectSearch.detailField(page) != null) {
+            String bound = getIntent().getStringExtra("detailRepo");
+            if (bound == null || !bound.matches("[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}") || bound.contains("..")) {
+                bound = repo;
+                getIntent().putExtra("detailRepo", bound);
+            }
+            repo = bound;
+        }
         seenCurrent=prefs.getString(key(repo,"current"),"");
         seenLook=prefs.getString(Palette.PREF,"sand");
         seenMode=prefs.getString(Palette.DAY_NIGHT,Palette.SYSTEM);
         current=parse(seenCurrent);
         previous=parse(prefs.getString(key(repo,"previous"),""));
         vault=new TokenVault(this);
-        page=getIntent().getStringExtra("page");
-        if(page==null)page="index";
+        String detailField = ProjectSearch.detailField(page);
+        if (detailField != null && !getIntent().hasExtra("key")) {
+            JSONArray rows = current == null ? null : current.optJSONArray(detailField);
+            JSONObject row = rows == null ? null : rows.optJSONObject(getIntent().getIntExtra("idx", -1));
+            getIntent().putExtra("key", ProjectSearch.recordKey(detailField, row));
+        }
         if("access".equals(page) || "search".equals(page))
             getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         noticesAllowed = QuietPoster.allowed(this);
@@ -72,6 +89,7 @@ public final class SectionActivity extends Activity {
         if ("guide".equals(page) && prefs != null) prefs.edit().putBoolean("guide_seen", true).apply();
     }
     @Override protected void onDestroy() {
+        cancelReads();
         ads.destroy();
         super.onDestroy();
     }
@@ -93,7 +111,7 @@ public final class SectionActivity extends Activity {
             pendingNotice = false;
             if (QuietNotice.worthTelling(current, previous)) QuietPoster.postIfNew(this, current, previous);
         }
-        String selected=prefs.getString("repo",repo);
+        String selected=ProjectSearch.detailField(page) == null ? prefs.getString("repo",repo) : repo;
         String raw=prefs.getString(key(selected,"current"),"");
         String look=prefs.getString(Palette.PREF,"sand");
         String mode=prefs.getString(Palette.DAY_NIGHT,Palette.SYSTEM);
@@ -172,8 +190,53 @@ public final class SectionActivity extends Activity {
         sub.setEllipsize(TextUtils.TruncateAt.END);
         b.setContentDescription(title+". "+subtitle);b.setClickable(true);b.setFocusable(true);b.setOnClickListener(v->run.run());
     }
-    private void go(String name){Intent i=new Intent(this,SectionActivity.class);i.putExtra("page",name);startActivity(i);}
-    private void goItem(String name,int idx){Intent i=new Intent(this,SectionActivity.class);i.putExtra("page",name);i.putExtra("idx",idx);startActivity(i);}
+    private void openChild(Intent intent) {
+        startActivityForResult(intent, REQUEST_CHILD_SECTION);
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CHILD_SECTION && resultCode == RESULT_OK && data != null) {
+            setResult(resultCode, data);
+            finish();
+        }
+    }
+
+    private void go(String name){Intent i=new Intent(this,SectionActivity.class);i.putExtra("page",name);openChild(i);}
+    private void goItem(String name,int idx){
+        Intent i=new Intent(this,SectionActivity.class);
+        i.putExtra("page",name);
+        String field = ProjectSearch.detailField(name);
+        if (field != null) {
+            JSONArray rows = current == null ? null : current.optJSONArray(field);
+            JSONObject row = rows == null ? null : rows.optJSONObject(idx);
+            String stable = ProjectSearch.recordKey(field, row);
+            if (stable.isEmpty()) { toast("Запись не найдена"); return; }
+            i.putExtra("key",stable);
+            i.putExtra("detailRepo",repo);
+        } else i.putExtra("idx",idx);
+        openChild(i);
+    }
+
+    private void cancelReads() {
+        synchronized (requestLock) {
+            detailEpoch++;
+            compareEpoch++;
+            if (detailClient != null) detailClient.cancel();
+            if (compareClient != null) compareClient.cancel();
+            detailClient = null;
+            compareClient = null;
+        }
+    }
+
+    private boolean attachRead(GithubClient client, int epoch, boolean compare) {
+        synchronized (requestLock) {
+            if (epoch != (compare ? compareEpoch : detailEpoch)) return false;
+            if (compare) compareClient = client;
+            else detailClient = client;
+            return true;
+        }
+    }
     private String title() {
         switch(page){
             case "changes":return "Изменения";
@@ -205,6 +268,7 @@ public final class SectionActivity extends Activity {
         }
     }
     private void render(){
+        cancelReads();
         int keep = pageScroll == null ? 0 : pageScroll.getScrollY();
         LinearLayout root=col();root.setBackgroundColor(bg);
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
@@ -330,6 +394,7 @@ public final class SectionActivity extends Activity {
             try {
                 String token = vault.load(selected);
                 GithubClient client = new GithubClient(token == null ? "" : token);
+                if (!attachRead(client, epoch, true)) return;
                 text = "Что произошло: указатели направления различаются.\nОткуда известно: "+client.readCompare(selected, base, head)
                         +"\nЧто не проверено: тесты и готовность на Android.";
             } catch (Exception e) {
@@ -337,7 +402,7 @@ public final class SectionActivity extends Activity {
             }
             final String shown = text;
             runOnUiThread(() -> {
-                if (isFinishing() || epoch != compareEpoch) return;
+                if (isFinishing() || isDestroyed() || epoch != compareEpoch) return;
                 status.setText(shown);
             });
         }, "gitteller-compare").start();
@@ -389,11 +454,9 @@ public final class SectionActivity extends Activity {
         b.setPadding(dp(12),dp(8),dp(12),dp(8));
         body.addView(b,p);
         b.setOnClickListener(v->{
-            Intent i=new Intent(this, SectionActivity.class);
-            i.putExtra("page","changes");
-            i.putExtra("filter", id);
-            startActivity(i);
-            finish();
+            getIntent().putExtra("filter", id);
+            getIntent().removeExtra("eventId");
+            render();
         });
     }
     private static boolean matches(String filter, String kind) {
@@ -420,6 +483,7 @@ public final class SectionActivity extends Activity {
             try {
                 String token = vault.load(selected);
                 GithubClient client = new GithubClient(token == null ? "" : token);
+                if (!attachRead(client, epoch, false)) return;
                 org.json.JSONArray commits = client.readBranchCommits(selected, branch);
                 if (commits.length() == 0) text = HumanReport.NOT_ENOUGH + ". История этого направления пуста или не прочитана.";
                 else {
@@ -440,7 +504,7 @@ public final class SectionActivity extends Activity {
             }
             final String shown = text;
             runOnUiThread(() -> {
-                if (isFinishing() || epoch != detailEpoch) return;
+                if (isFinishing() || isDestroyed() || epoch != detailEpoch) return;
                 status.setText(shown);
             });
         }, "gitteller-branch").start();
@@ -545,6 +609,7 @@ public final class SectionActivity extends Activity {
             try {
                 String token = vault.load(selected);
                 GithubClient client = new GithubClient(token == null ? "" : token);
+                if (!attachRead(client, epoch, false)) return;
                 GithubClient.Extra extra = "commit".equals(kind) ? client.readCommit(selected, sha)
                         : "pull".equals(kind) ? client.readPull(selected, number)
                         : client.readIssue(selected, number);
@@ -554,25 +619,14 @@ public final class SectionActivity extends Activity {
             }
             final String shown = text;
             runOnUiThread(() -> {
-                if (isFinishing() || epoch != detailEpoch) return;
+                if (isFinishing() || isDestroyed() || epoch != detailEpoch) return;
                 status.setText(shown);
             });
         }, "gitteller-detail").start();
     }
     private JSONObject at(String field){
         JSONArray list=current==null?null:current.optJSONArray(field);
-        if(list==null) return null;
-        String key=getIntent().getStringExtra("key");
-        if(key!=null && !key.isEmpty()){
-            for(int i=0;i<list.length();i++){
-                JSONObject row=list.optJSONObject(i);
-                if(row==null) continue;
-                if(key.equals(row.optString("name")) || key.equalsIgnoreCase(row.optString("sha"))
-                        || key.equals(String.valueOf(row.optInt("number",-1)))) return row;
-            }
-            return null;
-        }
-        return list.optJSONObject(getIntent().getIntExtra("idx",-1));
+        return ProjectSearch.findRecord(field, list, getIntent().getStringExtra("key"));
     }
     private String sourceLine(){
         if(current==null) return "Источник ещё не получен.";
@@ -1006,7 +1060,11 @@ public final class SectionActivity extends Activity {
         if(hit.index>=0) i.putExtra("idx", hit.index);
         if(hit.key!=null && !hit.key.isEmpty()) i.putExtra("key", hit.key);
         if(hit.marker!=null && !hit.marker.isEmpty()) i.putExtra("eventId", hit.marker);
-        startActivity(i);
+        if(ProjectSearch.detailField(hit.page)!=null) {
+            if(hit.key==null || hit.key.isEmpty()) {toast("Запись не найдена");return;}
+            i.putExtra("detailRepo",repo);
+        }
+        openChild(i);
     }
     private void guide(){
         note("Что это","GitTeller смотрит, что люди и агенты сделали в одном проекте на GitHub. GitHub — место, где лежит работа над проектом. Приложение только читает. Оно ничего туда не пишет и не запускает.");
