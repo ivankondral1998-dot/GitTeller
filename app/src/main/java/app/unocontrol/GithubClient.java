@@ -65,7 +65,6 @@ final class GithubClient {
 
         List<String> warnings = new ArrayList<>();
         String firstError = null;
-        boolean anyFresh = false;
         boolean branchesCached = false, issuesCached = false, pullsCached = false;
         String outEtagBranches = "", issuesEtag = "", pullsEtag = "";
 
@@ -78,8 +77,6 @@ final class GithubClient {
             String[] tag = new String[1];
             String priorTag = etagIfSafe(previous, "branches", "branchesComplete", "branchesEtag");
             branches = pages(root + "/branches?per_page=100", BRANCH_PAGE_CAP, warnings, "ветки", priorTag, cached, tag);
-            branchesFetched = true;
-            anyFresh = true;
             if (cached[0]) {
                 JSONArray kept = previous == null ? null : previous.optJSONArray("branches");
                 if (kept != null) {
@@ -94,13 +91,14 @@ final class GithubClient {
                 }
             } else {
                 branchComplete = !coverageBroken(warnings.subList(before, warnings.size()), "ветки");
-                if (!validRows(branches, "branches")) {
-                    branchComplete = false;
-                    warnings.add("ветки: некорректные или повторяющиеся записи, список неполный");
-                }
+                if (!validRows(branches, "branches"))
+                    throw new IllegalStateException("Некорректные или повторяющиеся записи GitHub.");
                 outEtagBranches = branchComplete && tag[0] != null ? tag[0] : "";
             }
+            branchesFetched = true;
         } catch (Exception e) {
+            branchComplete = false;
+            outEtagBranches = "";
             firstError = sourceError("ветки", e);
             warnings.add(firstError);
             if (isHalt(e)) halted = true;
@@ -116,7 +114,6 @@ final class GithubClient {
                     throw new IllegalStateException("Некорректные записи истории GitHub.");
                 commits = slimCommits(rawCommits);
                 commitsFetched = true;
-                anyFresh = true;
             } catch (Exception e) {
                 String message = sourceError("история", e);
                 if (firstError == null) firstError = message;
@@ -135,8 +132,6 @@ final class GithubClient {
                 boolean[] cached = new boolean[1];
                 String[] tag = new String[1];
                 issues = pages(root + "/issues?state=all&per_page=100", ISSUE_PAGE_CAP, warnings, "задачи", priorTag, cached, tag);
-                issuesFetched = true;
-                anyFresh = true;
                 if (cached[0]) {
                     JSONArray kept = previous == null ? null : previous.optJSONArray("issues");
                     if (kept != null) {
@@ -151,13 +146,14 @@ final class GithubClient {
                     }
                 } else {
                     issuesComplete = !coverageBroken(warnings.subList(before, warnings.size()), "задачи");
-                    if (!validRows(issues, "issues")) {
-                        issuesComplete = false;
-                        warnings.add("задачи: некорректные или повторяющиеся записи, список неполный");
-                    }
+                    if (!validRows(issues, "issues"))
+                        throw new IllegalStateException("Некорректные или повторяющиеся записи GitHub.");
                     issuesEtag = issuesComplete && tag[0] != null ? tag[0] : "";
                 }
+                issuesFetched = true;
             } catch (Exception e) {
+                issuesComplete = false;
+                issuesEtag = "";
                 String message = sourceError("задачи", e);
                 if (firstError == null) firstError = message;
                 warnings.add(message);
@@ -175,8 +171,6 @@ final class GithubClient {
                 boolean[] cached = new boolean[1];
                 String[] tag = new String[1];
                 pulls = pages(root + "/pulls?state=all&per_page=100", PULL_PAGE_CAP, warnings, "предложения", priorTag, cached, tag);
-                pullsFetched = true;
-                anyFresh = true;
                 if (cached[0]) {
                     JSONArray kept = previous == null ? null : previous.optJSONArray("pulls");
                     if (kept != null) {
@@ -191,13 +185,14 @@ final class GithubClient {
                     }
                 } else {
                     pullsComplete = !coverageBroken(warnings.subList(before, warnings.size()), "предложения");
-                    if (!validRows(pulls, "pulls")) {
-                        pullsComplete = false;
-                        warnings.add("предложения: некорректные или повторяющиеся записи, список неполный");
-                    }
+                    if (!validRows(pulls, "pulls"))
+                        throw new IllegalStateException("Некорректные или повторяющиеся записи GitHub.");
                     pullsEtag = pullsComplete && tag[0] != null ? tag[0] : "";
                 }
+                pullsFetched = true;
             } catch (Exception e) {
+                pullsComplete = false;
+                pullsEtag = "";
                 String message = sourceError("предложения", e);
                 if (firstError == null) firstError = message;
                 warnings.add(message);
@@ -205,7 +200,7 @@ final class GithubClient {
         } else warnings.add("предложения: запрос не отправлялся, лимит GitHub ещё действует");
 
         checkCancelled();
-        if (!anyFresh) {
+        if (!branchesFetched && !commitsFetched && !issuesFetched && !pullsFetched) {
             throw new IllegalStateException(firstError == null
                     ? "GitHub не ответил. Старые данные сохранены." : firstError);
         }
