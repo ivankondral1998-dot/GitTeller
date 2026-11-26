@@ -81,9 +81,54 @@ final class Watch {
         jobs.schedule(job);
     }
 
-    static void run(Context context) {
+    /** Cancellation is serialized with snapshot publication. */
+    static final class RunToken {
+        private volatile boolean cancelled;
+        private GithubClient client;
+        boolean cancelled() { return cancelled; }
+        boolean attach(GithubClient next) {
+            synchronized (WRITE) {
+                if (cancelled) return false;
+                client = next;
+                return true;
+            }
+        }
+        void cancel() {
+            GithubClient active;
+            synchronized (WRITE) {
+                cancelled = true;
+                active = client;
+            }
+            if (active != null) active.cancel();
+        }
+    }
+
+    /** Caller holds WRITE. A false commit also changes SharedPreferences in memory;
+     * restore the old values on a best-effort basis and never announce success. */
+    static boolean saveSnapshot(SharedPreferences prefs, String currentKey, String previousKey,
+                                String feedKey, String errorKey, JSONObject fresh, JSONObject previous,
+                                JSONArray feed) {
+        String[] keys = {currentKey, previousKey, feedKey, errorKey};
+        String[] old = new String[keys.length];
+        for (int i = 0; i < keys.length; i++) old[i] = prefs.getString(keys[i], null);
+        SharedPreferences.Editor edit = prefs.edit()
+                .putString(currentKey, fresh.toString())
+                .putString(previousKey, previous == null ? "" : previous.toString())
+                .remove(errorKey);
+        if (feed != null) edit.putString(feedKey, feed.toString());
+        if (edit.commit()) return true;
+        SharedPreferences.Editor restore = prefs.edit();
+        for (int i = 0; i < keys.length; i++) {
+            if (old[i] == null) restore.remove(keys[i]);
+            else restore.putString(keys[i], old[i]);
+        }
+        restore.commit(); // Best effort, not proof that disk was restored.
+        return false;
+    }
+
+    static void run(Context context, RunToken run) {
         SharedPreferences prefs = context.getSharedPreferences("gitteller_v1", Context.MODE_PRIVATE);
-        if (!enabled(prefs)) return;
+        if (run.cancelled() || !enabled(prefs)) return;
         String repo = prefs.getString("repo", "octocat/Hello-World");
         String key = repo.toLowerCase(java.util.Locale.ROOT);
         String baseline = prefs.getString(key + ":current", "");
@@ -98,24 +143,26 @@ final class Watch {
             return;
         }
         try {
-            JSONObject fresh = new GithubClient(token).load(repo, current).snapshot;
+            GithubClient client = new GithubClient(token);
+            if (!run.attach(client)) return;
+            JSONObject fresh = client.load(repo, current).snapshot;
             synchronized (WRITE) {
                 String saved = prefs.getString(key + ":current", "");
                 if (saved == null) saved = "";
                 // The user may disable checks while a GitHub request is in flight.
-                if (!enabled(prefs) || !baselineStillSaved(baseline, saved)) return;
-                SharedPreferences.Editor edit = prefs.edit()
-                        .putString(key + ":previous", current.toString())
-                        .putString(key + ":current", fresh.toString())
-                        .remove(key + ":lastError");
+                if (run.cancelled() || !enabled(prefs)
+                        || !repo.equals(prefs.getString("repo", "octocat/Hello-World"))
+                        || !baselineStillSaved(baseline, saved)) return;
+                JSONArray nextFeed = null;
                 try {
                     JSONArray prior = parseArray(prefs.getString(key + ":feed", ""));
-                    edit.putString(key + ":feed", EventFeed.remember(prior, current, fresh).toString());
+                    nextFeed = EventFeed.remember(prior, current, fresh);
                 } catch (Exception ignored) {
-                    // A broken local feed must not discard the fresh snapshot.
+                    // Keep the existing feed if comparison fails.
                 }
                 // Never announce an event whose new snapshot was not saved.
-                if (edit.commit() && QuietNotice.worthTelling(fresh, current)) {
+                if (saveSnapshot(prefs, key + ":current", key + ":previous", key + ":feed",
+                        key + ":lastError", fresh, current, nextFeed) && QuietNotice.worthTelling(fresh, current)) {
                     QuietPoster.postIfNew(context, fresh, current);
                 }
             }

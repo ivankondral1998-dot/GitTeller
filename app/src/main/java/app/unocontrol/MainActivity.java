@@ -1024,6 +1024,14 @@ public final class MainActivity extends Activity {
         if(loading || isFinishing() || isDestroyed()) return;
         final int epoch=syncEpoch;
         final String selected=repo;
+        final String baseline;
+        final JSONObject baselineSnapshot;
+        synchronized (Watch.WRITE) {
+            String saved = prefs.getString(key(selected, "current"), "");
+            if (!Watch.baselineStillSaved(seenCurrent, saved)) readProject(selected);
+            baseline = seenCurrent;
+            baselineSnapshot = current;
+        }
         final String access;
         try {
             String loaded=vault.load(selected);
@@ -1041,23 +1049,35 @@ public final class MainActivity extends Activity {
             GithubClient client=new GithubClient(access);
             inflight=client;
             try{
-                JSONObject fresh=client.load(selected, current).snapshot;
+                JSONObject fresh=client.load(selected, baselineSnapshot).snapshot;
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
                     if(epoch!=syncEpoch || !selected.equals(repo)) return;
-                    previous=current;
-                    current=fresh;
-                    lastError=null;
+                    boolean saved = false;
+                    boolean stale;
                     synchronized (Watch.WRITE) {
-                        rememberFeed(previous, current);
-                        prefs.edit().putString(key(repo,"previous"),previous==null?"":previous.toString())
-                                .putString(key(repo,"current"),current.toString())
-                                .putString(key(repo,"feed"), feed.toString())
-                                .remove(key(repo,"lastError")).commit();
-                        seenCurrent = current == null ? "" : current.toString();
+                        stale = !Watch.baselineStillSaved(baseline, prefs.getString(key(selected, "current"), ""));
+                        if (!stale) {
+                            JSONArray nextFeed = parseArray(prefs.getString(key(selected, "feed"), ""));
+                            try {
+                                nextFeed = EventFeed.remember(nextFeed, baselineSnapshot, fresh);
+                            } catch (Exception ignored) {
+                                // Keep the existing feed if comparison fails.
+                            }
+                            saved = Watch.saveSnapshot(prefs, key(selected, "current"),
+                                    key(selected, "previous"), key(selected, "feed"), key(selected, "lastError"),
+                                    fresh, baselineSnapshot, nextFeed);
+                            if (saved) QuietPoster.postIfNew(this, fresh, baselineSnapshot);
+                        }
+                        readProject(selected);
                     }
-                    QuietPoster.postIfNew(this, current, previous);
-                    loading=false;draw();toast("Данные обновлены");
+                    loading=false;
+                    draw();
+                    if (stale) toast("Снимок изменился во время запроса. Показаны сохранённые данные; обновите повторно.");
+                    else if (!saved) new AlertDialog.Builder(this).setTitle("Снимок не сохранён")
+                            .setMessage("Android сообщил об ошибке записи. Сохранность данных на диске не подтверждена.")
+                            .setPositiveButton("Закрыть",(d,w)->{}).show();
+                    else toast("Данные обновлены");
                 });
             }catch(Exception e){
                 final String message=GithubClient.safeMessage(e);
@@ -1065,8 +1085,15 @@ public final class MainActivity extends Activity {
                     if(isFinishing()||isDestroyed())return;
                     if(epoch!=syncEpoch || !selected.equals(repo)) return;
                     loading=false;
-                    lastError=message;
-                    prefs.edit().putString(key(repo,"lastError"), message).apply();
+                    synchronized (Watch.WRITE) {
+                        if (!Watch.baselineStillSaved(baseline, prefs.getString(key(selected, "current"), ""))) {
+                            readProject(selected);
+                            draw();
+                            return;
+                        }
+                        lastError=message;
+                        prefs.edit().putString(key(repo,"lastError"), message).apply();
+                    }
                     draw();
                     new AlertDialog.Builder(this).setTitle("Сверка не выполнена")
                             .setMessage(message+"\n\nПредыдущие данные не изменены.")
@@ -1078,6 +1105,7 @@ public final class MainActivity extends Activity {
         });
         } catch (RejectedExecutionException ignored) {
             loading = false;
+            draw();
         }
     }
 
@@ -1132,6 +1160,7 @@ public final class MainActivity extends Activity {
                         saved = prefs.edit().putString(key(restoredRepo,"current"),finalFresh.toString())
                                 .putString(key(restoredRepo,"previous"),finalOld==null?"":finalOld.toString())
                                 .remove(key(restoredRepo,"feed"))
+                                .remove(key(restoredRepo,"lastError"))
                                 .putString("repo",restoredRepo).commit();
                     }
                     if(!saved){

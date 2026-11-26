@@ -32,12 +32,14 @@ final class GithubClient {
     private final String token;
     private volatile HttpURLConnection inflight;
     private volatile boolean halted;
+    private volatile boolean cancelled;
     private String boundRepo = "";
     private long boundId;
 
     GithubClient(String token) { this.token = token == null ? "" : token.trim(); }
 
     void cancel() {
+        cancelled = true;
         halted = true;
         HttpURLConnection c = inflight;
         if (c != null) c.disconnect();
@@ -184,6 +186,7 @@ final class GithubClient {
             }
         } else warnings.add("предложения: запрос не отправлялся, лимит GitHub ещё действует");
 
+        checkCancelled();
         if (!anyFresh) {
             throw new IllegalStateException(firstError == null
                     ? "GitHub не ответил. Старые данные сохранены." : firstError);
@@ -509,9 +512,14 @@ final class GithubClient {
         throw last == null ? new IllegalStateException("GitHub не ответил. Старые данные сохранены.") : last;
     }
 
+    private void checkCancelled() throws InterruptedException {
+        if (cancelled || Thread.currentThread().isInterrupted())
+            throw new InterruptedException("Запрос отменён.");
+    }
+
     private Response getOnce(String address, String etag) throws Exception {
+        checkCancelled();
         if (halted) throw new HttpFailure(429, "Лимит запросов GitHub исчерпан. Повторите позже. Старые данные сохранены.");
-        if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Запрос отменён.");
         if (!safeContinuation(address, boundRepo, boundId))
             throw new SecurityException("Недопустимый адрес GitHub API.");
         HttpURLConnection c = (HttpURLConnection) new URL(address).openConnection();
@@ -526,6 +534,7 @@ final class GithubClient {
         if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
         inflight = c;
         try {
+            checkCancelled();
             int status = c.getResponseCode();
             if (status == 304) return new Response("", null, c.getHeaderField("ETag"), true);
             if (status != 200) {
@@ -541,6 +550,7 @@ final class GithubClient {
             try (InputStream in = c.getInputStream()) {
                 byte[] buf = new byte[8192]; int n;
                 while ((n = in.read(buf)) != -1) {
+                    checkCancelled();
                     if (data.size() + n > 8_000_000) throw new IllegalStateException("Ответ GitHub слишком большой.");
                     data.write(buf, 0, n);
                 }
