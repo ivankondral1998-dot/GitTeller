@@ -62,19 +62,22 @@ final class ChangeSet {
     }
 
     private static int count(JSONObject previous, JSONObject current, String array, String flag, boolean pulls) {
-        if (previous == null || current == null) return 0;
+        if (previous == null || current == null
+                || SnapshotCodec.isImported(previous) || SnapshotCodec.isImported(current)
+                || !current.optString("repo").equalsIgnoreCase(previous.optString("repo"))) return 0;
         boolean full = previous.optBoolean(flag, false) && current.optBoolean(flag, false);
         JSONArray old = previous.optJSONArray(array);
         JSONArray now = current.optJSONArray(array);
         if (old == null || now == null) return 0;
         Map<Integer, JSONObject> prior = index(old);
+        Map<Integer, JSONObject> latest = index(now);
         int changed = 0;
-        for (int i = 0; i < now.length(); i++) {
-            JSONObject row = now.optJSONObject(i);
-            if (row == null) continue;
-            JSONObject was = prior.get(row.optInt("number"));
-            if ((was == null && full) || (was != null && differs(was, row, pulls))) changed++;
+        for (Map.Entry<Integer, JSONObject> entry : latest.entrySet()) {
+            JSONObject was = prior.get(entry.getKey());
+            if ((was == null && full) || (was != null && differs(was, entry.getValue(), pulls))) changed++;
         }
+        if (full) for (Integer number : prior.keySet())
+            if (!latest.containsKey(number)) changed++;
         return changed;
     }
 
@@ -85,6 +88,7 @@ final class ChangeSet {
             JSONObject row = now.optJSONObject(i);
             if (row == null) continue;
             int number = row.optInt("number");
+            if (number <= 0) continue;
             JSONObject was = prior.get(number);
             if (was == null) {
                 if (!complete) continue; // Unknown whether the record existed outside an earlier partial list.
@@ -130,13 +134,9 @@ final class ChangeSet {
             }
         }
         if (!complete) return; // Absence from a partial list cannot imply removal.
+        Map<Integer, JSONObject> latest = index(now);
         for (Integer number : prior.keySet()) {
-            boolean found = false;
-            for (int i = 0; i < now.length(); i++) {
-                JSONObject row = now.optJSONObject(i);
-                if (row != null && row.optInt("number") == number) { found = true; break; }
-            }
-            if (found || number == 0) continue;
+            if (latest.containsKey(number)) continue;
             out.put(event(kind + "_absent", kind + "#" + number,
                     ("issue".equals(kind) ? "Задачи #" : "Предложения #") + number + " нет в новом полном списке.",
                     "В прошлой полной выборке номер был, в новой полной выборке его нет. Это не доказательство удаления: GitHub мог не вернуть запись.",
@@ -194,7 +194,8 @@ final class ChangeSet {
         return touched(was, now);
     }
 
-    private static boolean merged(JSONObject row) {
+    static boolean merged(JSONObject row) {
+        if (row == null) return false;
         if (row.optBoolean("merged", false)) return true;
         String at = row.optString("merged_at");
         return !at.isEmpty() && !"null".equals(at);
@@ -211,7 +212,7 @@ final class ChangeSet {
         if (list == null) return map;
         for (int i = 0; i < list.length(); i++) {
             JSONObject row = list.optJSONObject(i);
-            if (row != null) map.put(row.optInt("number"), row);
+            if (row != null && row.optInt("number") > 0) map.put(row.optInt("number"), row);
         }
         return map;
     }
@@ -224,7 +225,7 @@ final class ChangeSet {
         e.put("basis", basis);
         e.put("unknown", "Тесты, работоспособность и готовность на телефоне.");
         if (url != null && url.startsWith("https://github.com/")) e.put("url", url);
-        e.put("origin", origin == null || origin.isEmpty() ? "LIVE" : origin);
+        e.put("origin", origin == null || origin.isEmpty() ? "UNKNOWN" : origin);
         return e;
     }
 
@@ -232,7 +233,7 @@ final class ChangeSet {
         String origin = current.optString("origin");
         if ("LIVE".equals(origin) || "CACHED".equals(origin) || "PARTIAL".equals(origin) || "IMPORTED".equals(origin))
             return origin;
-        return "LIVE";
+        return "UNKNOWN";
     }
 
     private static String branchUrl(String repo, String name) {

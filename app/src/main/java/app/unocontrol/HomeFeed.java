@@ -33,14 +33,21 @@ final class HomeFeed {
         addIssues(rows, snapshot.optJSONArray("issues"), nowMs);
         addPulls(rows, snapshot.optJSONArray("pulls"), nowMs);
         rows.sort((a, b) -> Long.compare(b.when, a.when));
-        if (rows.size() > limit) return new ArrayList<>(rows.subList(0, limit));
-        return rows;
+        if (rows.size() > limit) rows = new ArrayList<>(rows.subList(0, limit));
+        List<Row> labeled = new ArrayList<>();
+        for (Row row : rows) {
+            String field = "tasks".equals(row.page) ? "issues" : row.page;
+            String source = SnapshotCodec.isImported(snapshot) ? "импорт"
+                    : snapshot.optBoolean(field + "Stale", false) ? "старые данные" : "";
+            labeled.add(new Row(row.title, join(source, row.meta), row.page, row.when));
+        }
+        return labeled;
     }
 
     static String ago(long whenMs, long nowMs) {
         if (whenMs <= 0) return "";
         long delta = nowMs - whenMs;
-        if (delta < 0) delta = 0;
+        if (delta < 0) return "дата позже текущей";
         if (delta < 60_000L) return "только что";
         if (delta < 3_600_000L) return (delta / 60_000L) + " мин назад";
         if (delta < 86_400_000L) return (delta / 3_600_000L) + " ч назад";
@@ -94,7 +101,7 @@ final class HomeFeed {
             JSONObject row = pulls.optJSONObject(i);
             if (row == null) continue;
             boolean open = "open".equals(row.optString("state"));
-            boolean merged = row.optBoolean("merged", false);
+            boolean merged = ChangeSet.merged(row);
             if (!open && !merged) continue;
             String title = clip(row.optString("title").trim());
             if (title.isEmpty()) title = "Предложение без названия";

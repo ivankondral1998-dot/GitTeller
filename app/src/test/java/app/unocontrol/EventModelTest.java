@@ -144,7 +144,7 @@ public class EventModelTest {
         assertEquals(0, ChangeSet.between(old, now).length());
         JSONObject fullOld = snap(new JSONArray().put(issue(3, "Was", "open")), new JSONArray());
         JSONObject fullNow = snap(new JSONArray(), new JSONArray());
-        assertEquals(0, Summary.of(fullNow, fullOld).issueChanges);
+        assertEquals(1, Summary.of(fullNow, fullOld).issueChanges);
         assertTrue(kinds(ChangeSet.between(fullOld, fullNow)).contains("issue_absent"));
         fullOld.put("issuesComplete", false);
         assertEquals(0, ChangeSet.between(fullOld, fullNow).length());
@@ -293,5 +293,25 @@ public class EventModelTest {
         assertFalse(AtomicCipherFile.hasRecord(dest));
         dest.delete();
         dir.delete();
+    }
+    @Test public void absentRecordCountsAndCanTriggerQuietNotice() throws Exception {
+        JSONObject before = snap(new JSONArray().put(issue(5, "Task", "open")), new JSONArray());
+        JSONObject after = snap(new JSONArray(), new JSONArray());
+        assertEquals(1, ChangeSet.issueChanges(before, after));
+        assertTrue(QuietNotice.worthTelling(after, before));
+        assertTrue(kinds(ChangeSet.between(before, after)).contains("issue_absent"));
+    }
+
+    @Test public void countsRejectImportedOrOtherRepository() throws Exception {
+        JSONObject before = snap(new JSONArray(), new JSONArray());
+        JSONObject after = snap(new JSONArray().put(issue(5, "Task", "open")), new JSONArray());
+        assertEquals(0, ChangeSet.issueChanges(before, after.put("origin", "IMPORTED")));
+        assertEquals(0, ChangeSet.issueChanges(before, after.put("origin", "LIVE").put("repo", "other/repo")));
+    }
+
+    @Test public void missingOriginIsNotInvented() throws Exception {
+        JSONObject before = snap(new JSONArray(), new JSONArray());
+        JSONObject after = snap(new JSONArray().put(issue(5, "Task", "open")), new JSONArray());
+        assertEquals("UNKNOWN", ChangeSet.between(before, after).getJSONObject(0).getString("origin"));
     }
 }

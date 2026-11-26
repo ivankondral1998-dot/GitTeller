@@ -111,4 +111,21 @@ public class HomeFeedTest {
     private static JSONObject issue(int number, String at, String title) throws Exception {
         return new JSONObject().put("number", number).put("title", title).put("state", "open").put("updated_at", at);
     }
+    @Test public void staleAndImportedRowsAreExplicitAndFutureDateIsNotRecent() throws Exception {
+        JSONObject snap = new JSONObject().put("issuesStale", true)
+                .put("issues", new JSONArray().put(openIssue(1, "old", "2026-11-15T00:00:00Z")));
+        long now = HomeFeed.parseIso("2026-11-16T00:00:00Z");
+        assertTrue(HomeFeed.latest(snap, now, 5).get(0).meta.contains("старые данные"));
+        snap.put("origin", "IMPORTED");
+        assertTrue(HomeFeed.latest(snap, now, 5).get(0).meta.contains("импорт"));
+        assertFalse(HomeFeed.ago(now + 60_000L, now).contains("только что"));
+    }
+
+    @Test public void mergeTimestampAloneIsRecognized() throws Exception {
+        JSONObject pull = new JSONObject().put("number", 9).put("state", "closed")
+                .put("merged_at", "2026-11-15T00:00:00Z");
+        JSONObject snap = new JSONObject().put("pulls", new JSONArray().put(pull));
+        assertEquals(1, HomeFeed.latest(snap, HomeFeed.parseIso("2026-11-16T00:00:00Z"), 5).size());
+        assertTrue(HumanReport.pullListLabel(pull).contains("целевую ветку"));
+    }
 }

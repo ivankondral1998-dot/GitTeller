@@ -15,9 +15,9 @@ final class CommitExplainer {
         else if (low.matches("^(feat|feature)(\\([^)]*\\))?!?:.*"))
             intro = "Разработчик сообщил о новой возможности. ";
         else if (low.matches("^(test|tests)(\\([^)]*\\))?!?:.*"))
-            intro = "Разработчик изменил тесты. ";
+            intro = "Автор сообщил об изменении тестов. ";
         else if (low.matches("^(docs|doc)(\\([^)]*\\))?!?:.*"))
-            intro = "Разработчик обновил документацию. ";
+            intro = "Автор сообщил об обновлении документации. ";
         else intro = "В истории появился коммит. ";
         if (text.length()>140) text=text.substring(0,137)+"…";
         return intro+"Текст коммита: «"+text+"». Работа функции не проверена.";

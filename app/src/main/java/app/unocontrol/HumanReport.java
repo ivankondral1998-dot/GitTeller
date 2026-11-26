@@ -270,16 +270,16 @@ final class HumanReport {
     static String branchAssumption(String name) {
         if (name == null || name.isEmpty()) return "Название направления не получено.";
         if ("main".equals(name) || "master".equals(name))
-            return "Это имя основной ветки в GitHub. Оно не доказывает готовность проекта.";
+            return "Так часто называют основную ветку. Одно имя не доказывает, что она основная или что проект готов.";
         return "Предположение по названию: " + branchKind(name) + ". Это не установленный факт.";
     }
 
     static String pullListLabel(JSONObject pull) {
         if (pull == null) return "Состояние предложения неизвестно.";
-        if (pull.optBoolean("merged", false))
-            return "Внесено в проект по отметке GitHub. Это не проверка на устройстве.";
+        if (ChangeSet.merged(pull))
+            return "Внесено в целевую ветку по отметке GitHub. Это не проверка на устройстве.";
         if ("closed".equals(pull.optString("state")))
-            return "Закрыто, но GitHub не отмечает внесение в основную ветку.";
+            return "Закрыто, но слияние по доступным полям не подтверждено.";
         if ("open".equals(pull.optString("state")))
             return "Предложение ещё открыто. Результат не подтверждён.";
         return "Состояние предложения неизвестно.";
@@ -477,8 +477,11 @@ final class HumanReport {
         String author = first == null ? "" : first.optString("author").trim();
         if (author.isEmpty())
             return "Исполнитель не установлен. В снимке нет автора последней записи основной ветки. Это не значит, что кто-то работает прямо сейчас.";
-        return "Автор последней записи основной ветки в GitHub: " + author
-                + ". Это учётная запись, не доказательство, что человек или программа работает сейчас. Исполнитель задачи не установлен.";
+        String source = SnapshotCodec.isImported(current) ? "В импортированном файле указан автор: "
+                : current.optBoolean("commitsStale", false) ? "Автор в устаревшем снимке истории: "
+                : "Автор последней записи основной ветки в полученной выборке: ";
+        return source + author
+                + ". Это записанное имя, не доказательство, что человек или программа работает сейчас. Исполнитель задачи не установлен.";
     }
 
     static String unknownOnce(String raw) {
