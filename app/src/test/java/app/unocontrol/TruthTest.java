@@ -223,4 +223,21 @@ public class TruthTest {
         assertTrue(HumanReport.coverageLine(now).contains("проверены полностью"));
         assertTrue(HumanReport.coverageLine(now).contains("лишь частично"));
     }
+    @Test public void ciCountsDoNotClaimCompleteWhenSourcesOrRowsAreMissing() throws Exception {
+        JSONObject status = new JSONObject().put("total_count", 2).put("statuses",
+                new JSONArray().put(new JSONObject().put("state", "success")));
+        String statuses = GithubClient.formatStatuses(status);
+        assertTrue(statuses.contains("Список неполный"));
+        assertTrue(GithubClient.describeCi(null, statuses, null).contains("Полнота CI не подтверждена"));
+        JSONObject actions = new JSONObject().put("total_count", 2).put("workflow_runs",
+                new JSONArray().put(new JSONObject().put("status", "completed").put("conclusion", "success")));
+        assertTrue(GithubClient.formatActions(actions).contains("Список неполный"));
+    }
+
+    @Test public void commitSubjectsAndOpenStateAreNotVerifiedWork() {
+        assertTrue(HumanReport.commitSummary("test: checks").contains("сообщил"));
+        assertTrue(HumanReport.commitSummary("docs: update\n\nDetails").contains("сообщил"));
+        assertTrue(HumanReport.commitSummary("Merge branch 'test'").contains("сообщил"));
+        assertFalse(HumanReport.state("open").contains("продолжается"));
+    }
 }

@@ -108,7 +108,16 @@ final class Watch {
     static boolean saveSnapshot(SharedPreferences prefs, String currentKey, String previousKey,
                                 String feedKey, String errorKey, JSONObject fresh, JSONObject previous,
                                 JSONArray feed) {
-        String[] keys = {currentKey, previousKey, feedKey, errorKey};
+        return saveSnapshot(prefs, currentKey, previousKey, feedKey, errorKey, fresh, previous, feed, null);
+    }
+
+    /** Import can replace the active project and its snapshot in one preference transaction. */
+    static boolean saveSnapshot(SharedPreferences prefs, String currentKey, String previousKey,
+                                String feedKey, String errorKey, JSONObject fresh, JSONObject previous,
+                                JSONArray feed, String selectedRepo) {
+        String[] keys = selectedRepo == null
+                ? new String[]{currentKey, previousKey, feedKey, errorKey}
+                : new String[]{currentKey, previousKey, feedKey, errorKey, "repo"};
         String[] old = new String[keys.length];
         for (int i = 0; i < keys.length; i++) old[i] = prefs.getString(keys[i], null);
         SharedPreferences.Editor edit = prefs.edit()
@@ -116,6 +125,7 @@ final class Watch {
                 .putString(previousKey, previous == null ? "" : previous.toString())
                 .remove(errorKey);
         if (feed != null) edit.putString(feedKey, feed.toString());
+        if (selectedRepo != null) edit.putString("repo", selectedRepo);
         if (edit.commit()) return true;
         SharedPreferences.Editor restore = prefs.edit();
         for (int i = 0; i < keys.length; i++) {

@@ -220,16 +220,18 @@ final class HumanReport {
     }
     static String commitSummary(String raw) {
         String t = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
-        if (t.matches("^(docs|doc)(\\([^)]*\\))?!?:.*")) return "Обновлены документы или инструкции проекта";
+        int newline = t.indexOf('\n');
+        if (newline >= 0) t = t.substring(0, newline).trim();
+        if (t.matches("^(docs|doc)(\\([^)]*\\))?!?:.*")) return "Автор сообщил об обновлении документов или инструкций";
         if (t.matches("^(fix|hotfix|bugfix)(\\([^)]*\\))?!?:.*")) return "Разработчик сообщил об исправлении";
         if (t.matches("^(feat|feature)(\\([^)]*\\))?!?:.*")) return "Разработчик сообщил о новой функции";
-        if (t.matches("^(test|tests)(\\([^)]*\\))?!?:.*")) return "Изменены тесты или проверки";
-        if (t.matches("^(refactor)(\\([^)]*\\))?!?:.*")) return "Изменена внутренняя организация кода";
-        if (t.startsWith("merge")) return "Объединена история разработки";
+        if (t.matches("^(test|tests)(\\([^)]*\\))?!?:.*")) return "Автор сообщил об изменении тестов или проверок";
+        if (t.matches("^(refactor)(\\([^)]*\\))?!?:.*")) return "Автор сообщил об изменении внутренней организации кода";
+        if (t.matches("^merge(?:\\s|:).*")) return "Автор сообщил о слиянии истории разработки";
         return "В истории проекта появилась запись";
     }
     static String state(String s) {
-        if ("open".equals(s)) return "Открыто: работа или обсуждение продолжается";
+        if ("open".equals(s)) return "Открыто в GitHub: выполнение не подтверждено";
         if ("closed".equals(s)) return "Закрыто в GitHub: результат не проверен";
         return "Состояние неизвестно";
     }
@@ -279,7 +281,7 @@ final class HumanReport {
         if (ChangeSet.merged(pull))
             return "Внесено в целевую ветку по отметке GitHub. Это не проверка на устройстве.";
         if ("closed".equals(pull.optString("state")))
-            return "Закрыто, но слияние по доступным полям не подтверждено.";
+            return "Закрыто, но GitHub не отмечает слияние в доступных полях.";
         if ("open".equals(pull.optString("state")))
             return "Предложение ещё открыто. Результат не подтверждён.";
         return "Состояние предложения неизвестно.";

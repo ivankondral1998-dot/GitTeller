@@ -66,4 +66,23 @@ public class SnapshotCodecTest {
             assertTrue(expected.getMessage().contains("веток"));
         }
     }
+    @Test public void incompleteOrMissingBackupRowsCannotKeepFullCoverage() throws Exception {
+        JSONObject s = raw().put("origin", "LIVE").put("pullsComplete", true);
+        JSONObject clean = SnapshotCodec.sanitizeSnapshot(s, "demo/project");
+        assertFalse(clean.getBoolean("pullsComplete"));
+        assertEquals("PARTIAL", clean.getString("origin"));
+        JSONArray issues = new JSONArray();
+        for (int i = 1; i <= 401; i++) issues.put(new JSONObject().put("number", i));
+        s.put("issues", issues);
+        clean = SnapshotCodec.sanitizeSnapshot(s, "demo/project");
+        assertEquals(400, clean.getJSONArray("issues").length());
+        assertFalse(clean.getBoolean("issuesComplete"));
+    }
+
+    @Test public void malformedIssueDoesNotKeepFullCoverage() throws Exception {
+        JSONObject s = raw().put("issues", new JSONArray().put(new JSONObject().put("number", 0)));
+        JSONObject clean = SnapshotCodec.sanitizeSnapshot(s, "demo/project");
+        assertEquals(0, clean.getJSONArray("issues").length());
+        assertFalse(clean.getBoolean("issuesComplete"));
+    }
 }

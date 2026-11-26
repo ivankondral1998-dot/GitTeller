@@ -46,7 +46,11 @@ final class SnapshotCodec {
         copyTime(raw, out, "issuesFetchedAt");
         copyTime(raw, out, "pullsFetchedAt");
         copyTime(raw, out, "commitsFetchedAt");
-        if (raw.has("commitsFetched")) out.put("commitsFetched", raw.optBoolean("commitsFetched", false));
+        for (String field : new String[]{"branches", "issues", "pulls", "commits"}) {
+            if (raw.has(field + "Fetched")) out.put(field + "Fetched", raw.optBoolean(field + "Fetched", false));
+        }
+        out.put("commitsComplete", false);
+        out.put("historyPartial", true);
         out.put("branchesStale", raw.optBoolean("branchesStale", false));
         out.put("issuesStale", raw.optBoolean("issuesStale", false));
         out.put("pullsStale", raw.optBoolean("pullsStale", false));
@@ -69,6 +73,7 @@ final class SnapshotCodec {
                 } else {
                     JSONObject row = rawArr.optJSONObject(i);
                     if (row == null) continue;
+                    if (("issues".equals(k) || "pulls".equals(k)) && row.optInt("number", -1) <= 0) continue;
                     JSONObject item = new JSONObject();
                     String[] names = "commits".equals(k) ? new String[]{"sha", "message", "date", "author"}
                             : new String[]{"number", "title", "state", "updated_at", "labels"};
@@ -92,6 +97,11 @@ final class SnapshotCodec {
                 }
             }
             out.put(k, clean);
+            if (("issues".equals(k) || "pulls".equals(k))
+                    && (rawArr == null || clean.length() != rawArr.length())) {
+                out.put(k + "Complete", false);
+                if (!isImported(raw) && "LIVE".equals(out.optString("origin"))) out.put("origin", "PARTIAL");
+            }
         }
         return out;
     }

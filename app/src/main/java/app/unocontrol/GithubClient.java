@@ -731,6 +731,8 @@ final class GithubClient {
         if (statusUseful) b.append(statuses).append("\n");
         if (actionUseful) b.append(actions).append("\n");
         b.append("Пропущенные, нейтральные и отсутствующие проверки не означают успех.");
+        if (checks == null || statuses == null || actions == null)
+            b.append(" Другие источники могли не запрашиваться или быть недоступны. Полнота CI не подтверждена.");
         return b.toString().trim();
     }
 
@@ -802,8 +804,11 @@ final class GithubClient {
             else if ("pending".equals(state)) pending++;
             else other++;
         }
+        String coverage = status.optInt("total_count", list.length()) > list.length()
+                ? " Список неполный." : "";
         return "Статусы коммита: " + ok + " успешных, " + bad + " с ошибкой, " + pending
-                + " ещё идут, " + other + " прочих. Пропущенное и нейтральное не считаются успехом. Это не проверка на телефоне.";
+                + " ещё идут, " + other + " прочих." + coverage
+                + " Пропущенное и нейтральное не считаются успехом. Это не проверка на телефоне.";
     }
 
     static String formatActions(JSONObject payload) {
@@ -822,10 +827,12 @@ final class GithubClient {
             else if (!"completed".equals(status)) pending++;
             else other++;
         }
+        String coverage = payload.optInt("total_count", list.length()) > list.length()
+                ? " Список неполный." : "";
         return "GitHub Actions для этого коммита: " + success + " с результатом success, " + bad
                 + " с ошибкой, " + pending + " ещё идут, " + skipped
                 + " пропущенных или нейтральных, " + other
-                + " прочих. Пропуск и нейтральный итог не считаются успехом. Это не проверка на телефоне.";
+                + " прочих." + coverage + " Пропуск и нейтральный итог не считаются успехом. Это не проверка на телефоне.";
     }
 
     static String formatChecks(JSONObject runs) {

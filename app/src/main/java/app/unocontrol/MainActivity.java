@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
     private JSONObject current, previous;
     private String repo = DEFAULT_REPO;
     private TokenVault vault;
-    private int syncEpoch;
+    private volatile int syncEpoch;
     private volatile GithubClient inflight;
     private boolean loading;
     private String lastError;
@@ -1057,6 +1057,7 @@ public final class MainActivity extends Activity {
             GithubClient client=new GithubClient(access);
             inflight=client;
             try{
+                if (epoch != syncEpoch) return;
                 JSONObject fresh=client.load(selected, baselineSnapshot).snapshot;
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
@@ -1165,15 +1166,14 @@ public final class MainActivity extends Activity {
                     if(loading){toast("Дождитесь завершения синхронизации");return;}
                     boolean saved;
                     synchronized (Watch.WRITE) {
-                        saved = prefs.edit().putString(key(restoredRepo,"current"),finalFresh.toString())
-                                .putString(key(restoredRepo,"previous"),finalOld==null?"":finalOld.toString())
-                                .remove(key(restoredRepo,"feed"))
-                                .remove(key(restoredRepo,"lastError"))
-                                .putString("repo",restoredRepo).commit();
+                        saved = Watch.saveSnapshot(prefs, key(restoredRepo,"current"),
+                                key(restoredRepo,"previous"), key(restoredRepo,"feed"), key(restoredRepo,"lastError"),
+                                finalFresh, finalOld, new JSONArray(), restoredRepo);
                     }
                     if(!saved){
                         toast("Не удалось сохранить архив");return;
                     }
+                    abandonSync();
                     repo=restoredRepo;current=finalFresh;previous=finalOld;feed=new JSONArray();
                     seenCurrent=finalFresh.toString();
                     lastError=null;
