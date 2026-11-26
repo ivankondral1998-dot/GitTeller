@@ -81,4 +81,19 @@ public class GithubStatusTest {
         assertFalse(GithubClient.safeContinuation(
                 "https://api.github.com/repositories/1/issues?page=2", "octocat/Hello-World", 1296269));
     }
+
+    @Test public void continuationRejectsTraversalAndUnverifiedNumericAlias() {
+        String base = "https://api.github.com/repos/a/b";
+        assertFalse(GithubClient.safeContinuation(base + "/../other/issues", "a/b", 0));
+        assertFalse(GithubClient.safeContinuation(base + "/%2e%2e/other/issues", "a/b", 0));
+        assertFalse(GithubClient.safeContinuation(base + "/issues#ignored", "a/b", 0));
+        assertFalse(GithubClient.safeContinuation("https://api.github.com/repositories/77/issues?page=2", "a/b", 0));
+    }
+
+    @Test public void paginationCannotSwitchEndpoint() {
+        String first = "https://api.github.com/repos/a/b/issues?per_page=100";
+        assertTrue(GithubClient.samePageEndpoint("https://api.github.com/repositories/77/issues?page=2", first, "a/b", 77));
+        assertFalse(GithubClient.samePageEndpoint("https://api.github.com/repositories/78/issues?page=2", first, "a/b", 77));
+        assertFalse(GithubClient.samePageEndpoint("https://api.github.com/repos/a/b/pulls?page=2", first, "a/b", 77));
+    }
 }

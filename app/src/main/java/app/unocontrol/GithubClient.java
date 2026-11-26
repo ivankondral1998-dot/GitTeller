@@ -265,6 +265,8 @@ final class GithubClient {
         fresh.put(arrayKey, old);
         fresh.put(staleKey, true);
         fresh.put(completeKey, false);
+        long oldTime = previous.optLong(arrayKey + "FetchedAt", 0);
+        if (oldTime > 0) fresh.put(arrayKey + "FetchedAt", oldTime);
         JSONArray warnings = fresh.optJSONArray("warnings");
         if (warnings == null) {
             warnings = new JSONArray();
@@ -334,8 +336,7 @@ final class GithubClient {
             for (int j = 0; j < current.length(); j++) all.put(current.get(j));
             String next = nextLink(response.link);
             if (next == null) return all;
-            adoptRepositoryId(next);
-            if (!safeContinuation(next, boundRepo, boundId)) {
+            if (!safePageContinuation(next, start)) {
                 warnings.add(label + ": небезопасная ссылка продолжения отклонена");
                 return all;
             }
@@ -347,33 +348,65 @@ final class GithubClient {
 
     static boolean safeContinuation(String next, String repo, long repoId) {
         if (next == null) return false;
-        int q = next.indexOf('?');
-        String path = q >= 0 ? next.substring(0, q) : next;
-        String lower = path.toLowerCase(Locale.ROOT);
-        if (!lower.startsWith("https://api.github.com/")) return false;
-        String repoLower = repo == null ? "" : repo.toLowerCase(Locale.ROOT);
-        if (!repoLower.isEmpty()) {
-            String base = "https://api.github.com/repos/" + repoLower;
-            if (lower.equals(base) || lower.startsWith(base + "/")) return true;
-        }
-        if (repoId > 0) {
-            String base = "https://api.github.com/repositories/" + repoId;
-            if (lower.equals(base) || lower.startsWith(base + "/")) return true;
+        try {
+            java.net.URI uri = new java.net.URI(next);
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                    || !"api.github.com".equalsIgnoreCase(uri.getHost())
+                    || uri.getRawUserInfo() != null || uri.getPort() != -1
+                    || uri.getRawFragment() != null) return false;
+            String path = uri.getRawPath();
+            // All GitTeller API paths use plain ASCII segments; encoded branch names
+            // are passed in the query. Reject alternate path encodings and traversal.
+            if (path == null || path.indexOf('%') >= 0 || path.indexOf('\\') >= 0
+                    || path.contains("//")) return false;
+            for (String segment : path.split("/"))
+                if (".".equals(segment) || "..".equals(segment)) return false;
+            String lower = path.toLowerCase(Locale.ROOT);
+            String repoLower = repo == null ? "" : repo.toLowerCase(Locale.ROOT);
+            if (!repoLower.isEmpty()) {
+                String base = "/repos/" + repoLower;
+                if (lower.equals(base) || lower.startsWith(base + "/")) return true;
+            }
+            if (repoId > 0) {
+                String base = "/repositories/" + repoId;
+                if (lower.equals(base) || lower.startsWith(base + "/")) return true;
+            }
+        } catch (java.net.URISyntaxException ignored) {
+            // Malformed links are not requests.
         }
         return false;
     }
 
-    private void adoptRepositoryId(String next) {
-        if (boundId != 0 || next == null) return;
-        String prefix = "https://api.github.com/repositories/";
-        String lower = next.toLowerCase(Locale.ROOT);
-        if (!lower.startsWith(prefix)) return;
-        int start = prefix.length();
-        int end = start;
-        while (end < lower.length() && Character.isDigit(lower.charAt(end))) end++;
-        if (end == start) return;
-        try { boundId = Long.parseLong(lower.substring(start, end)); }
-        catch (NumberFormatException ignored) { boundId = 0; }
+    /** Numeric pagination aliases are trusted only after reading the selected repo's metadata. */
+    private boolean safePageContinuation(String next, String first) {
+        if (next == null) return false;
+        if (boundId == 0 && next.toLowerCase(Locale.ROOT).startsWith("https://api.github.com/repositories/")) {
+            try {
+                JSONObject meta = jsonObject(get(root(boundRepo)));
+                if (boundRepo.equalsIgnoreCase(meta.optString("full_name", "")))
+                    boundId = meta.optLong("id", 0);
+            } catch (Exception ignored) {
+                return false;
+            }
+        }
+        return samePageEndpoint(next, first, boundRepo, boundId);
+    }
+
+    static boolean samePageEndpoint(String next, String first, String repo, long repoId) {
+        if (!safeContinuation(next, repo, repoId) || !safeContinuation(first, repo, repoId)) return false;
+        try {
+            String firstPath = new java.net.URI(first).getRawPath().toLowerCase(Locale.ROOT);
+            String nextPath = new java.net.URI(next).getRawPath().toLowerCase(Locale.ROOT);
+            String named = "/repos/" + repo.toLowerCase(Locale.ROOT);
+            String numeric = "/repositories/" + repoId;
+            String expected = firstPath.startsWith(named + "/") ? firstPath.substring(named.length())
+                    : firstPath.startsWith(numeric + "/") ? firstPath.substring(numeric.length()) : "";
+            String actual = nextPath.startsWith(named + "/") ? nextPath.substring(named.length())
+                    : nextPath.startsWith(numeric + "/") ? nextPath.substring(numeric.length()) : "";
+            return !expected.isEmpty() && expected.equals(actual);
+        } catch (java.net.URISyntaxException ignored) {
+            return false;
+        }
     }
 
     static String nextLink(String link) {
@@ -605,8 +638,8 @@ final class GithubClient {
             Response page = get(base + "/files?per_page=100");
             files = jsonArray(page);
             String next = nextLink(page.link);
-            adoptRepositoryId(next);
-            if (next != null && safeContinuation(next, boundRepo, boundId)) {
+            filesCut = next != null;
+            if (next != null && safePageContinuation(next, base + "/files?per_page=100")) {
                 Response more = get(next);
                 JSONArray extra = jsonArray(more);
                 for (int i = 0; i < extra.length(); i++) files.put(extra.get(i));
@@ -628,8 +661,7 @@ final class GithubClient {
         JSONObject commit = jsonObject(commitResponse);
         boolean filesCut = nextLink(commitResponse.link) != null;
         String next = nextLink(commitResponse.link);
-        adoptRepositoryId(next);
-        if (next != null && safeContinuation(next, boundRepo, boundId)) {
+        if (next != null && safePageContinuation(next, root(repo) + "/commits/" + sha + "?per_page=100")) {
             try {
                 Response more = get(next);
                 JSONObject extra = jsonObject(more);
@@ -836,7 +868,9 @@ final class GithubClient {
 
     private static String fileNames(JSONArray files, boolean cut) {
         if (files == null) return HumanReport.NOT_ENOUGH + ": файлы не загружены.";
-        if (files.length() == 0) return "В ответе GitHub нет изменённых файлов.";
+        if (files.length() == 0) return cut
+                ? "В полученной части ответа GitHub нет файлов; список неполный."
+                : "В ответе GitHub нет изменённых файлов.";
         StringBuilder b = new StringBuilder("Файлы в ответе: ");
         int n = Math.min(files.length(), 12);
         for (int i = 0; i < n; i++) {
